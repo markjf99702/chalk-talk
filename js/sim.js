@@ -99,6 +99,7 @@ export function prepare(call, seed = 1) {
   S.strongList.forEach((p, n) => { S.keys['S' + (n + 1)] = p; p.num = n + 1; p.side = f; p.key = 'S' + (n + 1); });
   S.weakList.forEach((p, n) => { S.keys['W' + (n + 1)] = p; p.num = n + 1; p.side = -f; p.key = 'W' + (n + 1); });
   S.te = sg => elig.find(p => p.cls === 'te' && Math.sign(p.x) === sg && p.y > -1 && Math.abs(p.x) < 6);
+  S.ends = { [1]: S.te(1), [-1]: S.te(-1) }; // a tight end on the line at the snap, each side
   buildDefense(S);
   assignOffense(S);
   S.pre = S.P.map(p => ({ x: p.x, y: p.y }));
@@ -474,6 +475,7 @@ function step(S) {
   for (const d of S.D) defense(S, d);
   engage(S);
   integrate(S);
+  hole(S);
   contact(S);
 }
 
@@ -1163,6 +1165,32 @@ function pairMove(S, b, d) {
   b.u = nu;
   d.x = b.x + nu[0] * 0.95; d.y = b.y + nu[1] * 0.95;
   d.vx = b.vx; d.vy = b.vy;
+}
+
+// ---- the hole
+
+// The first time the ball carrier on a run gets to the line, which gap he goes through, from where the blockers are at
+// that moment: A inside the guard, B inside the tackle, C outside the tackle (inside a tight end on the line), D outside
+// the tight end, anything wider outside. Words only: it moves nobody and draws no dice.
+function hole(S) {
+  const c = S.carrier;
+  if (S.holeNoted || S.play.type !== 'run' || S.caught || !c || c === S.QB || c.y < 0) return;
+  S.holeNoted = true;
+  const at = l => S.OL.find(o => o.label === l).x;
+  const C = at('C'), sd = Math.sign(c.x - C) || S.s, d = Math.abs(c.x - C);
+  const g = Math.abs(at(sd > 0 ? 'RG' : 'LG') - C), t = Math.abs(at(sd > 0 ? 'RT' : 'LT') - C);
+  const te = S.ends[sd], e = te ? Math.abs(te.x - C) : null;
+  const gap = d < g ? 'A' : d < t ? 'B' : e !== null ? (d < e ? 'C' : d < e + 2.5 ? 'D' : null) : d < t + 2.5 ? 'C' : null;
+  const side = sd === S.s ? 'strong' : 'weak';
+  // Away from where the play was aimed is a cutback (the draw is aimed up the middle, so it has none), said once.
+  const back = S.play.scheme !== 'draw' && sd * S.aimX < 0;
+  const who = cap(name(S, c));
+  let text;
+  if (back && !S.cutNoted) text = gap ? `${who} cuts back into the ${gap} gap on the ${side} side.` : `${who} cuts it back outside on the ${side} side.`;
+  else if (gap) text = `${who} hits the ${gap} gap on the ${side} side.`;
+  else text = S.play.scheme === 'reach' && !back ? `${who} gets to the outside on the ${side} side.` : `${who} bounces it outside on the ${side} side.`;
+  if (back) S.cutNoted = true;
+  ev(S, 'hole', text, { who: c.i, gap: gap || 'outside', side });
 }
 
 // ---- tackles, sacks, the end of the play

@@ -185,6 +185,29 @@ test('the words match the board: zones by strong and weak side, a run in every d
   assert.ok(qbDown > 0, 'no quarterback went down before the handoff, so that check proved nothing');
 });
 
+test('a run names the hole: one line, when the ball carrier gets to the line after the handoff', () => {
+  let seed = 104729, named = 0;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
+    const r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    const holes = r.events.filter(e => e.kind === 'hole');
+    const hand = r.events.find(e => e.kind === 'hand');
+    // The first picture, while the play is live, with a ball carrier other than the quarterback at or past the line.
+    const at = r.frames.find(f => f.t <= r.result.t + 1e-9 && f.c >= 0 && r.players[f.c].cls !== 'qb' && f.xy[2 * f.c + 1] >= 0);
+    if (!at) { assert.equal(holes.length, 0, `${what}: "${holes[0]?.text}", but nobody got to the line`); continue; }
+    assert.ok(hand && hand.t <= at.t + 1e-9, `${what}: at the line before the handoff`);
+    assert.equal(holes.length, 1, `${what}: ${holes.length} lines about the hole: ${holes.map(e => e.text).join(' / ')}`);
+    const h = holes[0];
+    assert.equal(h.t, +at.t.toFixed(2), `${what}: the hole is named at ${h.t}s, the carrier got to the line at ${at.t.toFixed(2)}s`);
+    assert.equal(h.who, at.c, `${what}: the hole line is about somebody else`);
+    assert.match(h.text, /^The running back (hits the [ABCD] gap|cuts back into the [ABCD] gap|cuts it back outside|bounces it outside|gets to the outside) on the (strong|weak) side\.$/, `${what}: "${h.text}"`);
+    if (r.events.some(e => e.kind === 'cut' && e.t <= h.t)) assert.doesNotMatch(h.text, /cuts/, `${what}: says he cut back twice`);
+    named++;
+  }
+  assert.ok(named > 100, `only ${named} runs got to the line`);
+});
+
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
   const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
   for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {
