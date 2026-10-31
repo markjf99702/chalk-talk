@@ -226,11 +226,43 @@ button:disabled { cursor: default; }
   box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .5);
   font-size: 14px;
 }
+/* at the end of the board away from the player it's about (see placeWho()), clear of the matchup line */
+.who.top { top: 30px; bottom: auto; }
+.flipped .who { bottom: 30px; }
+.flipped .who.top { top: 8px; bottom: auto; }
 .who p { margin: 0; }
 .who-pos { font-family: var(--cond); font-weight: 700; font-size: 18px; }
 .who-job { margin-top: 4px !important; }
 .who-about { margin-top: 6px !important; color: var(--muted); }
-.who-x { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; border: 0; background: transparent; font-size: 22px; line-height: 1; color: var(--muted); }
+/* 44 px to tap, drawn where the 32 px one was */
+.who-x { position: absolute; top: -2px; right: -2px; width: 44px; height: 44px; border: 0; background: transparent; font-size: 22px; line-height: 1; color: var(--muted); }
+.who-more { display: none; }
+/* On a narrow board, a compact card: who he is and his job on this play, with what the position is in general a tap
+   away. It takes at most about half the board, and a tap on it that misses its buttons goes through to the board. */
+.narrow .who { display: flex; flex-direction: column; max-height: 45%; padding: 8px 40px 0 12px; font-size: 13.5px; line-height: 1.4; pointer-events: none; }
+/* the bottom padding inside the part that scrolls, so the toggle's bigger hit area doesn't make it scroll */
+.narrow .who-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 8px; }
+.narrow .who button, .narrow .who-body.scrolls { pointer-events: auto; }
+.narrow .who-pos { font-size: 16px; line-height: 1.25; }
+.narrow .who-job { display: inline; }
+/* right after his job, with a hit area bigger than the words */
+.narrow .who-more {
+  display: inline;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.narrow .who-more::before { content: ''; position: absolute; inset: -8px -6px; }
+.narrow .who-more::after { content: ' ▾'; }
+.narrow .who-more[aria-expanded="true"]::after { content: ' ▴'; }
+.narrow .who:not(.more) .who-about { display: none; }
+.narrow .who-about { margin-top: 4px !important; }
 
 .transport {
   display: flex;

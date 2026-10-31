@@ -78,12 +78,12 @@ assert.match(await page.textContent('#whoPos'), /Free safety/, 'tapping the free
 assert.equal(await page.textContent('#caption'), '', 'the first hint goes once a player is tapped');
 assert.match(await page.textContent('#whoJob'), /hidden until the snap/, 'a defender\'s job is hidden before the snap');
 
-// Snap a play: it runs, and the result card explains it. Their call is out: the chart marks it, and the card says
-// what the tapped defender is doing.
+// Snap a play: it runs, and the result card explains it. Their call is out: the chart marks it. On a phone the
+// tapped player's card closes, so the play can be seen (on a bigger board it says what he's doing: see below).
 await page.click('#snap');
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 1, 'the chart marks their coverage once it is out');
-assert.match(await page.textContent('#whoJob'), /^On this play:/, 'the card shows his job once the play is snapped');
-await page.click('#whoClose');
+assert.equal(await page.isVisible('#who'), false, 'on a phone the card closes at the snap');
+assert.equal(await page.evaluate(() => window.chalkTalk.board.selected), -1, 'and nobody is picked out');
 // Part way through, the scrubber is part way along too.
 const mid = await page.waitForFunction(() => {
   const { state, board } = window.chalkTalk, s = document.getElementById('scrub');
@@ -283,6 +283,74 @@ for (const side of ['O', 'D']) {
   assert.deepEqual(seen.later, [seen.b], 'the older one goes after 2.2 seconds, and the newer one is still up');
   assert.deepEqual(seen.again, seen.both, 'the same moment shows the same caption');
   await p.close();
+}
+
+// The player's card on a phone: who he is and his job, at the end of the board away from him so it doesn't hide him,
+// before the snap and during the play. What the position is in general is a tap away, and a tap on the card that
+// misses its buttons goes through to the board.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
+  const spot = label => p.evaluate(label => {
+    const { board, state } = window.chalkTalk;
+    const i = state.play.players.findIndex(q => q.label === label);
+    const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
+    return { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y), r: board.radius() };
+  }, label);
+  const card = () => p.evaluate(() => {
+    const b = document.getElementById('who').getBoundingClientRect(), cv = document.getElementById('board').getBoundingClientRect();
+    return { l: b.left, r: b.right, t: b.top, b: b.bottom, share: b.height / cv.height, shown: !document.getElementById('who').hidden };
+  });
+  for (const t of [0, 1.6]) {
+    if (t) await p.evaluate(t => { const s = document.getElementById('scrub'), { board } = window.chalkTalk; s.value = String(t / board.duration() * 1000); s.dispatchEvent(new Event('input')); }, t);
+    for (const label of ['QB', 'LT', 'FS']) {
+      if (await p.isVisible('#who')) await p.click('#whoClose'); // the last card could be over him
+      const at = await spot(label);
+      await p.mouse.click(at.x, at.y);
+      const c = await card();
+      assert.match(await p.textContent('#whoPos'), new RegExp(`^${label} ·`), `tapping the ${label} at ${t} s opens his card`);
+      assert.ok(!(at.x > c.l && at.x < c.r && at.y + at.r > c.t && at.y - at.r < c.b), `the ${label}'s card covers him at ${t} s`);
+      assert.ok(c.share < 0.46, `the ${label}'s card takes ${Math.round(c.share * 100)}% of the board`);
+    }
+  }
+  assert.equal(await p.isVisible('#whoAbout'), false, 'what the position is in general waits to be asked for');
+  await p.click('#whoMore');
+  assert.equal(await p.isVisible('#whoAbout'), true, 'More about him shows what the position is');
+  assert.equal(await p.getAttribute('#whoMore', 'aria-expanded'), 'true');
+  await p.click('#whoMore');
+  // A tap on the card where there's no player under it closes it, the way a tap on the empty field does.
+  const empty = await p.evaluate(() => {
+    const { board, state } = window.chalkTalk, cv = board.cv.getBoundingClientRect(), c = document.getElementById('who').getBoundingClientRect();
+    const spots = state.play.players.map(q => { const at = board.pos(board.t, q.i); return [cv.left + board.sx(at.x), cv.top + board.sy(at.y)]; });
+    for (let y = c.top + 10; y < c.bottom - 10; y += 4) for (let x = c.left + 10; x < c.right - 60; x += 4) {
+      const el = document.elementFromPoint(x, y);
+      if (el.closest('button')) continue;
+      if (spots.every(([sx, sy]) => Math.hypot(sx - x, sy - y) > 30)) return { x, y };
+    }
+  });
+  assert.ok(empty, 'no empty field under the card to tap');
+  await p.mouse.click(empty.x, empty.y);
+  assert.equal(await p.isVisible('#who'), false, 'a tap on the card over empty field goes through and closes it');
+  await p.close();
+}
+// On a bigger board the card stays through the snap and says what the player is doing, once their call is out.
+{
+  const wide = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const p = await wide.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.evaluate(() => { const { board, state } = window.chalkTalk; const i = state.play.players.findIndex(q => q.label === 'FS'); const r = board.cv.getBoundingClientRect(), q = board.pos(0, i); window.fsAt = { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) }; });
+  const at = await p.evaluate(() => window.fsAt);
+  await p.mouse.click(at.x, at.y);
+  assert.match(await p.textContent('#whoJob'), /hidden until the snap/, 'a defender\'s job is hidden before the snap');
+  await p.click('#snap');
+  assert.match(await p.textContent('#whoJob'), /^On this play:/, 'the card shows his job once the play is snapped');
+  assert.equal(await p.isVisible('#whoMore'), false, 'a bigger board shows the whole card');
+  assert.equal(await p.isVisible('#whoAbout'), true);
+  await wide.close();
 }
 
 // Fits a phone: nothing scrolls sideways.

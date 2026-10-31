@@ -123,7 +123,7 @@ function syncBoard() {
 }
 
 let raf = 0, last = 0;
-function draw() { board.t = state.t; board.render(); }
+function draw() { board.t = state.t; board.render(); placeWho(); }
 
 function play() {
   if (!state.play) return;
@@ -137,7 +137,8 @@ function play() {
   renderMatchup();
   syncTransport();
   if (snapped) { // the other side's call is out now: the tapped player's job, and which row of the chart it is
-    if (board.selected >= 0) showWho(board.selected);
+    // On a narrow board the card would hide part of the play, so it closes; a bigger board has room to keep it.
+    if (board.selected >= 0 && narrow()) { board.selected = -1; hideWho(); } else if (board.selected >= 0) showWho(board.selected);
     syncChart();
   }
   last = performance.now();
@@ -198,8 +199,10 @@ function caption() {
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
 function setCaption(lines) {
   const el = $('caption');
+  lines = [].concat(lines).filter(Boolean);
+  if (el.children.length === lines.length && el.textContent === lines.join('')) return; // the same words: leave them be
   el.textContent = '';
-  for (const text of [].concat(lines).filter(Boolean)) {
+  for (const text of lines) {
     const span = document.createElement('span');
     span.textContent = text;
     el.append(span);
@@ -245,17 +248,55 @@ $('board').addEventListener('pointerup', e => {
   draw();
 });
 $('whoClose').addEventListener('click', () => { board.selected = -1; hideWho(); draw(); });
+// On a narrow board the card leaves out what the position is in general until it's asked for, and keeps it open for
+// the next player once it has been.
+let moreAbout = false;
+$('whoMore').addEventListener('click', () => { moreAbout = !moreAbout; syncMore(); placeWho(); });
 
 function showWho(i) {
   const p = state.play.players[i];
   const [title, about] = POSITIONS[p.info] || POSITIONS[p.label] || [p.label, ''];
   const hiddenJob = p.team !== state.side && hidden();
+  const fresh = $('who').hidden || $('who').dataset.i !== String(i);
+  $('who').dataset.i = i;
   $('whoPos').textContent = `${p.label} · ${title}`;
   $('whoJob').textContent = hiddenJob ? 'His job on this play is hidden until the snap. Read the alignment: where he stands gives some of it away.' : `On this play: ${state.play.jobs[i]}`;
   $('whoAbout').textContent = about;
+  $('whoMore').textContent = `More about the ${p.label}`;
+  $('whoMore').hidden = !about;
   $('who').hidden = false;
+  syncMore();
+  placeWho(fresh);
 }
 function hideWho() { $('who').hidden = true; }
+function syncMore() {
+  $('who').classList.toggle('more', moreAbout);
+  $('whoMore').setAttribute('aria-expanded', String(moreAbout));
+  // Taps on the card go through to the board, unless there's more in it to scroll to.
+  const body = $('whoBody');
+  body.classList.toggle('scrolls', body.scrollHeight > body.clientHeight + 1);
+}
+
+// The card goes at the end of the board away from the player it's about, so it doesn't hide him, and while the play
+// runs it moves if he runs under it.
+function placeWho(fresh) {
+  const who = $('who');
+  if (who.hidden || board.selected < 0 || !state.play) return;
+  const at = board.pos(board.t, board.selected);
+  const x = board.sx(at.x), y = board.sy(at.y), reach = board.radius() * 2.4 + 4; // his ring and his label
+  if (fresh) who.classList.toggle('top', y > board.h / 2);
+  const cv = board.cv.getBoundingClientRect();
+  const covered = () => {
+    const c = who.getBoundingClientRect();
+    const w = Math.min(c.right - cv.left, x + reach) - Math.max(c.left - cv.left, x - reach);
+    const h = Math.min(c.bottom - cv.top, y + reach) - Math.max(c.top - cv.top, y - reach);
+    return w > 0 && h > 0 ? h : 0;
+  };
+  const before = covered();
+  if (!before) return;
+  who.classList.toggle('top');
+  if (covered() > before) who.classList.toggle('top');
+}
 
 // ---------------------------------------------------------------- choosers
 
@@ -690,7 +731,11 @@ syncTransport();
 if (link === 'ok') setTimeout(play, 500);
 if (link === 'bad') badLink();
 
-new ResizeObserver(() => { board.resize(); draw(); }).observe($('board'));
+// A board under about 620 px wide (a phone, or the two-column layout on a small laptop) gets the compact player card.
+function narrow() { return $('board').parentElement.classList.contains('narrow'); }
+const fit = () => { board.resize(); $('board').parentElement.classList.toggle('narrow', board.w < 620); if (!$('who').hidden) syncMore(); draw(); };
+fit();
+new ResizeObserver(fit).observe($('board'));
 const recolor = () => { board.readColors(); draw(); };
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', recolor);
 new MutationObserver(recolor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
