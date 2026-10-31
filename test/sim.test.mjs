@@ -5,6 +5,10 @@ import { simulate, prepare } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
+// The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
+// incompletion, a pass broken up, an interception or a throwaway.
+const ENDINGS = new Set(['tackle', 'oob', 'long', 'sack', 'inc', 'pbu', 'int', 'away']);
+const ended = r => r.events.some(e => ENDINGS.has(e.kind));
 
 test('every call against every defense runs to a finish', () => {
   let seed = 1;
@@ -19,11 +23,21 @@ test('every call against every defense runs to a finish', () => {
     for (const f of r.frames) for (const v of f.xy) assert.ok(Number.isFinite(v), `${what}: a position went bad`);
     assert.equal(r.jobs.filter(Boolean).length, 22, `${what}: everyone has a job to describe`);
     for (let k = 1; k < r.events.length; k++) assert.ok(r.events[k].t >= r.events[k - 1].t, `${what} seed ${seed - 1}: the play-by-play goes back in time at "${r.events[k].text}"`);
+    assert.ok(ended(r), `${what} seed ${seed - 1}: the play-by-play never says how the play ended`);
     if (r.result.carrier >= 0) { // the board's last picture puts the ball carrier where the headline does
       const y = r.frames.at(-1).xy[2 * r.result.carrier + 1];
       assert.ok(r.result.long ? y >= r.result.yards - 0.5 : Math.abs(y - r.result.yards) <= 0.5, `${what} seed ${seed - 1}: the play ends with the carrier at ${y.toFixed(2)}, the result says ${r.result.yards}`);
     }
   }
+});
+
+test('a play still going when the board\'s clock runs out ends with a tackle or says the board stopped counting', () => {
+  // Outside Zone from the I against the Under in Cover 3: the back breaks five tackles and is still running at 10 seconds.
+  const r = simulate({ formation: 'iform', play: 'oz', front: 'under', coverage: 'c3', pressure: 'four', flip: true }, 404);
+  assert.ok(ended(r), `the play ends on "${r.events.at(-1).text}"`);
+  const last = r.events.at(-1);
+  if (last.kind === 'long') assert.equal(r.result.long, true);
+  else assert.equal(last.kind, 'tackle');
 });
 
 test('the same seed replays the same play', () => {

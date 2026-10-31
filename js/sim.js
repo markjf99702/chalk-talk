@@ -405,9 +405,10 @@ export function simulate(call, seed = 1) {
   const S = prepare(call, seed);
   const frames = [];
   record(S, frames);
-  while (!S.over && S.t < MAX_T + 1) {
+  while (!S.over) {
     step(S);
     record(S, frames);
+    if (!S.result && !(S.t < MAX_T + 1)) timeUp(S);
     if (S.t >= S.endAt) S.over = true;
   }
   if (!S.result) finish(S, 'time');
@@ -1145,7 +1146,7 @@ function contact(S) {
   const c = S.carrier, t = S.t, R = S.R;
   if (!c || S.dead) return;
   if (Math.abs(c.x) > SIDELINE) { ev(S, 'oob', `${cap(name(S, c))} is forced out of bounds.`); return finish(S, 'oob'); }
-  if (c.y > 60) { ev(S, 'td', `${cap(name(S, c))} is gone: nobody left to catch him.`); return finish(S, 'long'); }
+  if (c.y > 60) return stillRunning(S, c);
   const qbHeld = c === S.QB && S.play.type === 'pass' && !S.caught;
   // Near the sideline, a defender on his inside shoulder runs him out.
   if (Math.abs(c.x) > SIDELINE - 1.3 && !qbHeld && S.D.some(d => d.eng < 0 && dist(d, c) < 1.7 && Math.abs(d.x) < Math.abs(c.x) + 0.3) && R.chance(0.25)) {
@@ -1182,12 +1183,30 @@ function contact(S) {
   if (qbHeld && t > 6) throwAway(S, S.QB);
 }
 
+// The board stops counting at 60 yards, and at its clock: the carrier is still going, and the result says it's 60-plus.
+function stillRunning(S, c) {
+  ev(S, 'long', `${cap(name(S, c))} is still running at ${Math.round(c.y)} yards: the board stops counting here.`);
+  return finish(S, 'long');
+}
+
+// Out of time with the ball still live: the nearest defender close enough makes the tackle, or the carrier runs on.
+function timeUp(S) {
+  const c = S.carrier;
+  if (!c || (c === S.QB && S.play.type === 'pass' && !S.caught)) return finish(S, 'time');
+  let near = null, nd = 3;
+  for (const d of S.D) { const dd = dist(d, c); if (dd < nd) { nd = dd; near = d; } }
+  if (!near) return stillRunning(S, c);
+  ev(S, 'tackle', `${cap(name(S, near))} makes the tackle.`, { who: near.i });
+  finish(S, S.caught ? 'catch' : 'run', near);
+}
+
 // hit: where a tackled carrier was when he was hit; he goes down from there to the spot over the next few frames.
 function finish(S, kind, by, hit) {
   if (S.result) return;
   const c = S.carrier;
-  // The ball carrier stops where the ball is spotted, and his tackler goes down with him.
-  if (c) {
+  // The ball carrier stops where the ball is spotted, and his tackler goes down with him; one still running runs on.
+  const long = kind === 'long';
+  if (c && !long) {
     S.down = { c, from: hit || { x: c.x, y: c.y }, to: { x: c.x, y: c.y }, k: 0, by: by && by !== c ? by : null };
     if (S.down.by) S.down.off = { x: by.x - S.down.from.x, y: by.y - S.down.from.y };
   }
@@ -1196,6 +1215,7 @@ function finish(S, kind, by, hit) {
   if (kind === 'time' && S.play.type === 'pass' && !S.caught) { kind = 'sack'; }
   if (kind === 'oob' || kind === 'long' || kind === 'time') kind = S.caught ? 'catch' : S.play.type === 'run' ? 'run' : kind;
   S.result = { kind, yards: Math.round(yards * 2) / 2, by: by ? by.i : -1, carrier: c ? c.i : -1, target: S.target ? S.target.i : -1, t: S.t };
+  if (long) S.result.long = true;
   S.dead = true;
   S.endAt = S.t + 0.7;
   if (S.ball.state === 'held' && c) S.ball.holder = c.i;

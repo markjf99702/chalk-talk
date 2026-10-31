@@ -376,7 +376,9 @@ function headline(res) {
     case 'int': return 'Intercepted';
     case 'throwaway': return 'Thrown away';
     case 'sack': return n ? `Sacked for a loss of ${yd(n)}` : 'Sacked at the line';
-    default: return gained(res) > 0 ? `Gain of ${yd(n)}` : gained(res) < 0 ? `Loss of ${yd(n)}` : 'No gain';
+    default:
+      if (res.long) return `Gain of ${Math.min(n, 60)}+ yards`; // still running when the board stopped counting
+      return gained(res) > 0 ? `Gain of ${yd(n)}` : gained(res) < 0 ? `Loss of ${yd(n)}` : 'No gain';
   }
 }
 
