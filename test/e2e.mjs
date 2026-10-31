@@ -713,6 +713,28 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// A reload (or a phone dropping the tab while it's in the background) keeps the play you were on: before the snap the
+// same hidden call, and after it the same play, finished. A new visit gets a fresh look.
+{
+  const p = await phone();
+  const now = () => p.evaluate(() => { const { state } = window.chalkTalk; return { seed: state.seed, def: { ...state.def }, phase: state.phase, matchup: document.getElementById('matchup').textContent }; });
+  const before = await now();
+  await p.reload();
+  assert.deepEqual(await now(), before, 'a reload before the snap changed the play or gave their call away');
+  await p.click('#snap');
+  await p.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+  const head = await p.textContent('#resHead'), done = await now();
+  await p.reload();
+  assert.deepEqual(await now(), done, 'a reload after the play lost it');
+  assert.equal(await p.isVisible('#result'), true, 'the result card is back after a reload');
+  assert.equal(await p.textContent('#resHead'), head);
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.t), await p.evaluate(() => window.chalkTalk.board.duration()), 'the board shows the end of the play');
+  const fresh = await p.context().newPage();
+  await fresh.goto(base);
+  assert.notEqual(await fresh.evaluate(() => window.chalkTalk.state.seed), done.seed, 'a new visit kept the last one\'s play');
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 

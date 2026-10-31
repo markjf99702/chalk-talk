@@ -33,13 +33,17 @@ const state = {
   t: 0,
 };
 
+// A kept call that this version can play, tidied up, or null.
+const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip } : null);
+const okDef = d => (d && FRONTS.some(f => f.id === d.front) && COVERAGES.some(c => c.id === d.coverage) ? { front: d.front, coverage: d.coverage, pressure: d.pressure === 'blitz' ? 'blitz' : 'four' } : null);
+
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (s) {
       if (s.side === 'O' || s.side === 'D') state.side = s.side;
-      if (s.off && FORMATIONS.some(f => f.id === s.off.formation) && PLAYS.some(p => p.id === s.off.play)) state.off = { formation: s.off.formation, play: s.off.play, flip: !!s.off.flip };
-      if (s.def && FRONTS.some(f => f.id === s.def.front) && COVERAGES.some(c => c.id === s.def.coverage)) state.def = { front: s.def.front, coverage: s.def.coverage, pressure: s.def.pressure === 'blitz' ? 'blitz' : 'four' };
+      state.off = okOff(s.off) || state.off;
+      state.def = okDef(s.def) || state.def;
       if (typeof s.auto === 'boolean') state.auto = s.auto;
       if (typeof s.labels === 'boolean') state.labels = s.labels;
       if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
@@ -60,6 +64,25 @@ function keepOwn() {
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, auto: ownAuto, labels: state.labels, speed: state.speed })); } catch { /* fine */ }
+}
+
+// The play on the board, kept for this tab only: a reload, or a phone dropping the tab while it's in the background,
+// comes back to it (the same snap and the same call from the other coach, finished if it had been snapped), while a new
+// visit gets a fresh look.
+const PLAY_KEY = 'chalk-talk.v1.play';
+function keepPlay() {
+  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
+}
+// The kept play, if it's for the calls you have now (after a shared play, say, it isn't).
+function keptPlay() {
+  try {
+    const k = JSON.parse(sessionStorage.getItem(PLAY_KEY) || 'null'), off = okOff(k?.off), def = okDef(k?.def);
+    const same = (a, b) => Object.keys(b).every(f => a[f] === b[f]);
+    if (!off || !def || k.side !== state.side || k.auto !== state.auto || !Number.isInteger(k.seed) || k.seed < 0) return null;
+    if ((!state.auto || state.side === 'O') && !same(off, own.off)) return null;
+    if ((!state.auto || state.side === 'D') && !same(def, own.def)) return null;
+    return { off, def, seed: k.seed, seen: !!k.seen, snapped: !!k.snapped };
+  } catch { return null; }
 }
 
 const call = () => ({ ...state.off, ...state.def });
@@ -114,6 +137,7 @@ function lineUp() {
   renderMatchup();
   setCaption(firstHint ? FIRST_HINT : '');
   draw();
+  keepPlay();
 }
 
 // Before the first snap of a visit, the empty caption says what to do first, until a player is tapped or the play is
@@ -148,6 +172,7 @@ function play() {
   if (snapped && state.auto) say(`They called: ${theirSummary()}.`); else if (!snapped) say('');
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
+  if (snapped) keepPlay();
   $('why').hidden = true;
   syncBoard();
   syncTheirs();
@@ -183,6 +208,7 @@ function finish() {
   showResult();
   showWhy();
   sayResult();
+  keepPlay();
 }
 
 // What a screen reader hears of what the eye gets from the board: the other coach's call at the snap, how the play came
@@ -853,13 +879,18 @@ function techDiagram() {
 
 load();
 const link = fromLink();
+const kept = link ? null : keptPlay();
 if (link === 'ok') firstHint = false; // a shared play runs on its own
-if (link !== 'ok' && state.auto) rollTheirs();
+if (kept) { // back after a reload: no new look from the other coach
+  Object.assign(state, { off: kept.off, def: kept.def, seed: kept.seed, seen: kept.seen });
+  firstHint = !kept.snapped;
+} else if (link !== 'ok' && state.auto) rollTheirs();
 renderChoosers();
 playbook();
 clearChart();
 lineUp();
 syncTransport();
+if (kept?.snapped) { state.t = board.duration(); $('scrub').value = '1000'; finish(); draw(); }
 if (link === 'ok') setTimeout(play, 500);
 if (link && link !== 'ok') badLink(link);
 
