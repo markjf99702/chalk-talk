@@ -18,6 +18,7 @@ test('every call against every defense runs to a finish', () => {
     assert.ok(r.frames.length > 5 && r.frames.length < 240, `${what}: ${r.frames.length} frames`);
     for (const f of r.frames) for (const v of f.xy) assert.ok(Number.isFinite(v), `${what}: a position went bad`);
     assert.equal(r.jobs.filter(Boolean).length, 22, `${what}: everyone has a job to describe`);
+    for (let k = 1; k < r.events.length; k++) assert.ok(r.events[k].t >= r.events[k - 1].t, `${what} seed ${seed - 1}: the play-by-play goes back in time at "${r.events[k].text}"`);
   }
 });
 

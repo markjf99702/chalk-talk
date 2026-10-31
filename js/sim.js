@@ -1168,8 +1168,12 @@ function finish(S, kind, by) {
   S.dead = true;
   S.endAt = S.t + 0.7;
   if (S.ball.state === 'held' && c) S.ball.holder = c.i;
-  // keep the shed blocks that mattered: the tackler's, and any rusher who got the passer
-  if (S.sheds && by) for (const sh of S.sheds) if (sh.d === by.i) S.events.splice(S.events.length - 1, 0, { t: +sh.t.toFixed(2), kind: 'shed', text: `${cap(name(S, S.P[sh.d]))} gets off ${name(S, S.P[sh.b])}'s block.`, who: sh.d });
+  // keep the shed blocks that mattered: the tackler's, and any rusher who got the passer, each in its place in time
+  if (S.sheds && by) for (const sh of S.sheds) if (sh.d === by.i) {
+    const e = { t: +sh.t.toFixed(2), kind: 'shed', text: `${cap(name(S, S.P[sh.d]))} gets off ${name(S, S.P[sh.b])}'s block.`, who: sh.d };
+    const at = S.events.findIndex(x => x.t >= e.t);
+    S.events.splice(at < 0 ? S.events.length : at, 0, e);
+  }
 }
 
 // ---------------------------------------------------------------- words
