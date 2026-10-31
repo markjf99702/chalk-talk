@@ -256,6 +256,7 @@ function syncTransport() {
   $('play').setAttribute('aria-label', name);
   if (pre) $('scrub').value = '0';
   for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-checked', String(+b.dataset.speed === state.speed));
+  rove(document.querySelector('.seg'));
   $('labels').setAttribute('aria-pressed', String(state.labels));
 }
 
@@ -350,13 +351,15 @@ function chips(host, label, items, current, pick, opts = {}) {
   h.className = 'pick-label';
   h.textContent = label;
   wrap.append(h);
-  const groups = opts.groups || [{ name: '', items }];
-  for (const g of groups) {
-    if (g.name) { const gl = document.createElement('p'); gl.className = 'group-label'; gl.textContent = g.name; wrap.append(gl); }
+  // One radio group, even where it's in rows with their own names (the plays: runs, then passes), so the arrow keys go
+  // all the way through it.
+  const group = document.createElement('div');
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', label);
+  for (const g of opts.groups || [{ name: '', items }]) {
+    if (g.name) { const gl = document.createElement('div'); gl.className = 'group-label'; gl.textContent = g.name; group.append(gl); }
     const row = document.createElement('div');
     row.className = 'chips';
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', g.name || label);
     for (const it of g.items) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -369,10 +372,32 @@ function chips(host, label, items, current, pick, opts = {}) {
       b.addEventListener('click', () => pick(it.id));
       row.append(b);
     }
-    wrap.append(row);
+    group.append(row);
   }
+  wrap.append(group);
+  rove(group);
   if (opts.blurb) { const p = document.createElement('p'); p.className = 'blurb'; p.textContent = opts.blurb; wrap.append(p); }
   host.append(wrap);
+}
+
+// The arrow keys in a radio group, the way the WAI-ARIA Authoring Practices' radio group pattern has them: Right or Down
+// picks the next one and Left or Up the one before, wrapping round at the ends; Home and End pick the first and the last.
+// Tab stops once in each group, at the one that's picked (rove()).
+document.addEventListener('keydown', e => {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last' }[e.key];
+  const radio = e.target.closest?.('[role="radio"]');
+  if (!step || !radio || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  const all = [...radio.closest('[role="radiogroup"]').querySelectorAll('[role="radio"]')].filter(b => !b.disabled);
+  const next = step === 'first' ? all[0] : step === 'last' ? all.at(-1) : all[(all.indexOf(radio) + step + all.length) % all.length];
+  if (!next || next === radio) return;
+  next.focus();
+  next.click();
+});
+function rove(group) {
+  const all = [...group.querySelectorAll('[role="radio"]')].filter(b => !b.disabled);
+  const on = all.find(b => b.getAttribute('aria-checked') === 'true') || all[0];
+  for (const b of all) b.tabIndex = b === on ? 0 : -1;
 }
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
@@ -430,6 +455,7 @@ function renderChoosers() {
   $('auto').checked = state.auto;
   if (!state.auto) (state.side === 'O' ? defenseChooser : offenseChooser)(theirs, false);
   for (const b of document.querySelectorAll('[data-side]')) b.setAttribute('aria-checked', String(b.dataset.side === state.side));
+  rove(document.querySelector('.side-pick'));
   $('newLook').hidden = $('theirsLook').hidden = !state.auto;
   syncTheirs();
 }

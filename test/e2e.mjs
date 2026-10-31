@@ -649,6 +649,39 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Arrow keys in every radio group, the way the WAI-ARIA Authoring Practices' radio group has them: Right or Down picks
+// the next one and Left or Up the one before, wrapping at the ends, Home and End the first and the last, and each group
+// is one stop for Tab, at the one that's picked. Play is one group across the runs and the passes.
+{
+  const p = await phone();
+  const at = () => p.evaluate(() => {
+    const el = document.activeElement, { state } = window.chalkTalk;
+    return { on: el.dataset.key || (el.dataset.side ? `side:${el.dataset.side}` : `speed:${el.dataset.speed}`), play: state.off.play, side: state.side, speed: state.speed };
+  });
+  await p.getByRole('radio', { name: 'Smash' }).focus();
+  const plays = [];
+  for (const key of ['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowLeft', 'End', 'ArrowDown', 'ArrowUp', 'Home']) {
+    await p.keyboard.press(key);
+    const now = await at();
+    assert.equal(now.on, `Play:${now.play}`, `after ${key} the focus is on ${now.on} with ${now.play} picked`);
+    plays.push(now.play);
+  }
+  assert.deepEqual(plays, ['flood', 'smash', 'verts', 'draw', 'screen', 'iz', 'screen', 'iz'], 'arrow keys through the plays');
+  const stops = await p.evaluate(() => [...document.querySelectorAll('#mineBody [role="radio"]')].filter(b => b.tabIndex === 0).map(b => b.dataset.key));
+  assert.deepEqual(stops, ['Formation:trips', 'Strong side:R', 'Play:iz'], 'one Tab stop for each group, at the one picked');
+  await p.focus('[data-side="O"]');
+  await p.keyboard.press('ArrowRight');
+  assert.deepEqual(await at().then(({ on, side }) => ({ on, side })), { on: 'side:D', side: 'D' }, 'arrow keys pick the side');
+  await p.keyboard.press('ArrowRight');
+  assert.equal((await at()).side, 'O', 'the side pick wraps around');
+  assert.deepEqual(await p.$$eval('[data-side]', b => b.map(x => x.tabIndex)), [0, -1]);
+  await p.focus('[data-speed="1"]');
+  await p.keyboard.press('ArrowLeft');
+  assert.deepEqual(await at().then(({ on, speed }) => ({ on, speed })), { on: 'speed:0.5', speed: 0.5 }, 'arrow keys pick the speed');
+  assert.deepEqual(await p.$$eval('[data-speed]', b => b.map(x => x.tabIndex)), [0, -1]);
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
