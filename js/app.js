@@ -255,7 +255,7 @@ $('why').addEventListener('click', () => {
 });
 
 function snap() {
-  if (state.phase !== 'pre') { // run it again: same calls, a new roll of the dice
+  if (state.phase !== 'pre') { // Snap again: same calls, a new roll of the dice
     state.seed = newSeed();
     lineUp();
   }
