@@ -248,7 +248,7 @@ export const POSITIONS = {
   S34: ['Sam linebacker', 'In a 3-4, the strong-side outside linebacker: stands up on the edge outside the tight end, sets the edge on runs and drops into coverage on passes.'],
   CB: ['Cornerback', 'Covers the wide receivers, man-to-man or in a zone, deep or short depending on the call.'],
   NB: ['Nickel back', 'A fifth defensive back who comes on for a linebacker to cover a slot receiver.'],
-  FS: ['Free safety', 'Usually the deepest defender, the last line. In one-high coverages he guards the deep middle.'],
+  FS: ['Free safety', 'Usually the deepest defender, the last line. When he\'s the only safety deep (Cover 1 and Cover 3) he guards the deep middle.'],
   SS: ['Strong safety', 'Lines up on the strong side, closer to the line. Helps against the run and covers tight ends and slots.'],
 };
 

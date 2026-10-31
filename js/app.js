@@ -931,6 +931,7 @@ function playbook() {
     ['Press', 'A corner lined up a yard or so off the receiver, right in his face, to jam him at the snap and stay on him. Corners press in man coverage.'],
     ['Leverage', 'Which side of a receiver a defender lines up on. With outside leverage he\'s a step outside him, so the receiver\'s easy way is inside; with inside leverage it\'s the other way round.'],
     ['Over the top', 'Deeper than a receiver, between him and the end zone: where a deep safety helps.'],
+    ['Three-step and five-step drop', 'How far the quarterback drops back before he throws, counted in steps. From the shotgun he\'s already back, so a three-step drop does what five steps do under center; a quick drop gets the ball out for short routes.'],
     ['Check-down', 'The short, safe throw when everything downfield is covered, usually to the back a few yards past the line.'],
     ['Flat', 'The short area out by the sideline, up to about 10 yards past the line.'],
     ['Curl-flat', 'From about the slot out to the sideline, up to about 12 yards deep. The defender there sinks under a curl route first, then widens to the flat.'],
