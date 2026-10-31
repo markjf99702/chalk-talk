@@ -204,6 +204,8 @@ await page2.evaluate(() => { location.hash = '#p=O.trips.nosuch.0.nickel.c2.four
 await page2.waitForFunction(() => location.hash === '', null, { timeout: 5000 }).catch(() => assert.fail('a bad link stays in the address'));
 assert.equal(await page2.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
 assert.equal(await page2.evaluate(() => window.chalkTalk.state.off.play), 'power', 'a bad link changes the play');
+await page2.click('#snap');
+assert.doesNotMatch(await page2.textContent('#theirsHint'), /That link/, 'the word about the bad link stays after the next snap');
 // Opening links doesn't turn off "Let the other coach pick" for next time, even once you change a call.
 await page2.getByRole('radio', { name: 'Cover 2' }).click();
 assert.equal(await page2.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), true, 'opening a link turned off "Let the other coach pick" for good');

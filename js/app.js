@@ -116,6 +116,7 @@ function draw() { board.t = state.t; board.render(); }
 function play() {
   if (!state.play) return;
   const snapped = state.phase === 'pre';
+  if (snapped) linkNote = ''; // a word about a link that couldn't open lasts until the next play
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   $('why').hidden = true;
