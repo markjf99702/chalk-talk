@@ -196,7 +196,7 @@ function tick(now) {
   state.t = Math.min(board.duration(), state.t + dt * state.speed);
   caption();
   draw();
-  $('scrub').value = String(Math.round(state.t / board.duration() * 1000));
+  syncScrub();
   if (state.t >= board.duration()) { finish(); return; }
   if (state.phase === 'playing') raf = requestAnimationFrame(tick);
 }
@@ -298,10 +298,23 @@ function syncTransport() {
   const [glyph, name] = { playing: ['❚❚', 'Pause'], done: ['↺', 'Watch it again'] }[state.phase] || ['▶', 'Play'];
   $('play').innerHTML = `<span aria-hidden="true">${glyph}</span>`;
   $('play').setAttribute('aria-label', name);
-  if (pre) $('scrub').value = '0';
+  syncScrub();
   for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-checked', String(+b.dataset.speed === state.speed));
   rove(document.querySelector('.seg'));
   $('labels').setAttribute('aria-pressed', String(state.labels));
+}
+
+// The scrubber counts the play's frames, twenty to the second, so an arrow key steps one frame and the far end is the
+// last. What a screen reader hears is the time and what's going on: "1.9 of 4.1 seconds: The quarterback throws to the H
+// on a corner route", and at the end the headline.
+function syncScrub() {
+  const s = $('scrub'), F = state.play?.frames;
+  if (!F) return;
+  const dt = F.length > 1 ? F[1].t - F[0].t : 0.05;
+  s.max = String(F.length - 1);
+  s.value = String(Math.min(F.length - 1, Math.round(state.t / dt)));
+  const now = state.phase === 'pre' ? '' : state.phase === 'done' ? headline(state.play.result) : $('caption').lastElementChild?.textContent;
+  s.setAttribute('aria-valuetext', `${state.t.toFixed(1)} of ${board.duration().toFixed(1)} seconds${now ? `: ${now}` : ''}`);
 }
 
 $('snap').addEventListener('click', snap);
@@ -312,7 +325,8 @@ $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() :
 $('scrub').addEventListener('input', e => {
   if (!state.play) return;
   cancelAnimationFrame(raf);
-  state.t = (+e.target.value / 1000) * board.duration();
+  const F = state.play.frames;
+  state.t = F[Math.max(0, Math.min(F.length - 1, Math.round(+e.target.value)))].t;
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
   caption(); draw(); syncTransport();
   if (state.phase === 'done') { showResult(); showWhy(); sayResult(); } else $('why').hidden = true;
@@ -984,7 +998,7 @@ playbook();
 clearChart();
 lineUp();
 syncTransport();
-if (kept?.snapped) { state.t = board.duration(); $('scrub').value = '1000'; finish(); draw(); }
+if (kept?.snapped) { state.t = board.duration(); finish(); draw(); }
 if (link === 'ok') setTimeout(play, 500);
 if (link && link !== 'ok') badLink(link);
 

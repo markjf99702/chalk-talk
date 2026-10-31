@@ -114,7 +114,7 @@ assert.equal((await page.textContent('#why')).replace(/\s+/g, ' ').trim(), `${aw
 // The scrubber reaches the whole play: halfway is halfway, and the far end is the end of the play.
 const scrub = to => page.evaluate(to => {
   const s = document.getElementById('scrub'), { state, board } = window.chalkTalk;
-  s.value = String(to === 'max' ? s.max : to * s.max);
+  s.value = String(to === 'max' ? s.max : Math.round(to * s.max));
   s.dispatchEvent(new Event('input'));
   return { t: state.t, duration: board.duration(), phase: state.phase, result: !document.getElementById('result').hidden, why: !document.getElementById('why').hidden };
 }, to);
@@ -259,7 +259,7 @@ for (const side of ['O', 'D']) {
   for (const t of [0, 1.6]) {
     const seen = await p.evaluate(t => {
       const { state, board } = window.chalkTalk, s = document.getElementById('scrub');
-      if (t) { s.disabled = false; s.value = String(Math.round(t / board.duration() * 1000)); s.dispatchEvent(new Event('input')); }
+      if (t) { s.disabled = false; s.value = String(Math.round(t / board.duration() * +s.max)); s.dispatchEvent(new Event('input')); }
       const cv = board.cv.getBoundingClientRect();
       // A player's mark and his label, which sits on one side of it or the other (see Board.players()).
       const r = board.radius(), fs = Math.max(8.5, Math.min(12, r * 1.15)), tall = r + fs * 1.15;
@@ -335,7 +335,7 @@ for (const side of ['O', 'D']) {
     }
     lineUp();
     const at = t => {
-      s.disabled = false; s.value = String(t / board.duration() * 1000); s.dispatchEvent(new Event('input'));
+      s.disabled = false; s.value = String(Math.round(t / board.duration() * +s.max)); s.dispatchEvent(new Event('input'));
       return [...document.querySelectorAll('#caption span')].map(x => x.textContent);
     };
     // A line still up when the next one comes stays put, so a screen reader doesn't read it out again.
@@ -373,7 +373,7 @@ for (const side of ['O', 'D']) {
     return { l: b.left, r: b.right, t: b.top, b: b.bottom, share: b.height / cv.height, shown: !document.getElementById('who').hidden };
   });
   for (const t of [0, 1.6]) {
-    if (t) await p.evaluate(t => { const s = document.getElementById('scrub'), { board } = window.chalkTalk; s.value = String(t / board.duration() * 1000); s.dispatchEvent(new Event('input')); }, t);
+    if (t) await p.evaluate(t => { const s = document.getElementById('scrub'), { board } = window.chalkTalk; s.value = String(Math.round(t / board.duration() * +s.max)); s.dispatchEvent(new Event('input')); }, t);
     for (const label of ['QB', 'LT', 'FS']) {
       if (await p.isVisible('#who')) await p.click('#whoClose'); // the last card could be over him
       const at = await spot(label);
@@ -459,7 +459,7 @@ for (const side of ['O', 'D']) {
     const { state, board, pause } = window.chalkTalk, s = document.getElementById('scrub');
     pause();
     const ev = state.play.events.find(e => e.kind !== 'shed');
-    s.value = String(Math.round((ev.t + 0.05) / board.duration() * 1000)); s.dispatchEvent(new Event('input'));
+    s.value = String(Math.round((ev.t + 0.05) / board.duration() * +s.max)); s.dispatchEvent(new Event('input'));
     const i = state.play.players.findIndex(q => q.label === 'QB');
     const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
     return { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) };
@@ -588,6 +588,38 @@ const phone = async () => {
   return p;
 };
 const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+// The scrubber counts the play's frames, so an arrow key steps one frame (a twentieth of a second) and the far end is
+// the end of the play; a screen reader hears the time and what's happening ("1.9 of 4.1 seconds: The quarterback
+// throws..."), not "one thousand".
+{
+  const p = await phone();
+  await p.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); });
+  const now = () => p.evaluate(() => {
+    const s = document.getElementById('scrub'), { state } = window.chalkTalk;
+    return { value: +s.value, max: +s.max, frames: state.play.frames.length, t: state.t, dt: state.play.frames[1].t, text: s.getAttribute('aria-valuetext'), phase: state.phase };
+  });
+  await p.focus('#scrub');
+  await p.keyboard.press('Home');
+  const start = await now();
+  await p.keyboard.press('ArrowRight');
+  const step = await now();
+  assert.equal(start.max, start.frames - 1, 'the scrubber counts frames');
+  assert.deepEqual([start.value, start.t, step.value], [0, 0, 1]);
+  assert.ok(Math.abs(step.t - step.dt) < 1e-6, `an arrow press moved the play ${step.t.toFixed(3)} s`);
+  assert.match(step.text ?? '', /^0\.\d of \d+\.\d seconds$/, 'the scrubber says the time');
+  const thrown = await p.evaluate(() => {
+    const s = document.getElementById('scrub'), { state } = window.chalkTalk, e = state.play.events.find(x => x.kind !== 'shed');
+    s.value = String(state.play.frames.findIndex(f => f.t >= e.t)); s.dispatchEvent(new Event('input'));
+    return { text: s.getAttribute('aria-valuetext'), line: e.text };
+  });
+  assert.ok(thrown.text.endsWith(`: ${thrown.line}`), `"${thrown.text}" doesn't say "${thrown.line}"`);
+  await p.keyboard.press('End');
+  const end = await now();
+  assert.equal(end.phase, 'done', 'End on the scrubber finishes the play');
+  assert.ok(end.text.endsWith(`: ${await p.textContent('#resHead')}`), `at the end the scrubber says "${end.text}"`);
+  await p.context().close();
+}
 
 // A blitzer's arrow is told apart by its shape as well as its colour (WCAG 2.2, 1.4.1 Use of Color): a thicker line and
 // a double head, against one head on every other rusher's.

@@ -40,7 +40,7 @@ const hold = (page, t) => page.evaluate(async t => {
   pause();
   await new Promise(r => requestAnimationFrame(r));
   const scrub = document.getElementById('scrub');
-  scrub.value = String(Math.round(t / board.duration() * 1000));
+  scrub.value = String(Math.round(t / board.duration() * +scrub.max));
   scrub.dispatchEvent(new Event('input'));
 }, t);
 
@@ -56,7 +56,6 @@ const hold = (page, t) => page.evaluate(async t => {
   await page.evaluate(() => {
     const { state, board, finish } = window.chalkTalk;
     state.t = board.t = board.duration(); board.render();
-    document.getElementById('scrub').value = '1000';
     finish();
   });
   await page.evaluate(() => { const r = document.getElementById('result'); window.scrollTo(0, r.getBoundingClientRect().top + scrollY - document.querySelector('.stage').offsetHeight - 8); });
