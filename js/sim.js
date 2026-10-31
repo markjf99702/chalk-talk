@@ -433,6 +433,12 @@ function step(S) {
   if (S.dead) {
     for (const pl of S.P) { pl.tx = pl.x + pl.vx * 0.3; pl.ty = pl.y + pl.vy * 0.3; pl.ts = 0; pl.eng = -1; }
     integrate(S);
+    const D = S.down;
+    if (D) { // down over four frames, then still
+      const k = Math.min(1, ++D.k / 4), c = D.c;
+      c.x = D.from.x + (D.to.x - D.from.x) * k; c.y = D.from.y + (D.to.y - D.from.y) * k; c.vx = 0; c.vy = 0;
+      if (D.by) { D.by.x = c.x + D.off.x; D.by.y = c.y + D.off.y; D.by.vx = 0; D.by.vy = 0; }
+    }
     const b = S.ball;
     if (b.state === 'held') { const h = S.P[b.holder]; b.x = h.x + 0.15; b.y = h.y + 0.1; b.z = 0.8; } else b.z = Math.max(0, b.z - 0.6);
     return;
@@ -1163,9 +1169,10 @@ function contact(S) {
     if (R.chance(pt)) {
       if (qbHeld) { ev(S, 'sack', `${cap(name(S, d))} sacks the quarterback.`, { who: d.i }); return finish(S, 'sack', d); }
       const fall = clamp(c.vy * 0.16 * (head > 0.3 ? 0.5 : 1), -0.5, 1.8);
-      c.y += fall;
+      const hit = { x: c.x, y: c.y };
+      c.y += fall; // where he goes down, and where the ball is spotted
       ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i });
-      return finish(S, c === S.QB && S.play.type === 'run' ? 'run' : S.caught ? 'catch' : 'run', d);
+      return finish(S, c === S.QB && S.play.type === 'run' ? 'run' : S.caught ? 'catch' : 'run', d, hit);
     }
     d.missUntil = t + 0.8;
     c.vx *= 0.75; c.vy *= 0.75;
@@ -1175,9 +1182,15 @@ function contact(S) {
   if (qbHeld && t > 6) throwAway(S, S.QB);
 }
 
-function finish(S, kind, by) {
+// hit: where a tackled carrier was when he was hit; he goes down from there to the spot over the next few frames.
+function finish(S, kind, by, hit) {
   if (S.result) return;
   const c = S.carrier;
+  // The ball carrier stops where the ball is spotted, and his tackler goes down with him.
+  if (c) {
+    S.down = { c, from: hit || { x: c.x, y: c.y }, to: { x: c.x, y: c.y }, k: 0, by: by && by !== c ? by : null };
+    if (S.down.by) S.down.off = { x: by.x - S.down.from.x, y: by.y - S.down.from.y };
+  }
   let yards = 0;
   if (kind === 'run' || kind === 'catch' || kind === 'oob' || kind === 'long' || kind === 'sack' || kind === 'time') yards = c ? c.y : 0;
   if (kind === 'time' && S.play.type === 'pass' && !S.caught) { kind = 'sack'; }
@@ -1186,6 +1199,7 @@ function finish(S, kind, by) {
   S.dead = true;
   S.endAt = S.t + 0.7;
   if (S.ball.state === 'held' && c) S.ball.holder = c.i;
+  if (S.down) { c.x = S.down.from.x; c.y = S.down.from.y; }
   // keep the shed blocks that mattered: the tackler's, and any rusher who got the passer, each in its place in time
   if (S.sheds && by) for (const sh of S.sheds) if (sh.d === by.i) {
     const e = { t: +sh.t.toFixed(2), kind: 'shed', text: `${cap(name(S, S.P[sh.d]))} gets off ${name(S, S.P[sh.b])}'s block.`, who: sh.d };
