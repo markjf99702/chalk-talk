@@ -26,6 +26,7 @@ const state = {
   labels: true,
   speed: 1,
   seed: newSeed(),
+  linked: false, // showing a shared play: both calls, until the first change
   play: null,
   phase: 'pre', // pre, playing, paused, done
   t: 0,
@@ -43,9 +44,12 @@ function load() {
       if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
     }
   } catch { /* storage unavailable: start fresh */ }
+  ownAuto = state.auto;
 }
+// The person's own "Let the other coach pick". A shared link shows both calls without changing it: only the switch does.
+let ownAuto = true;
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: state.off, def: state.def, auto: state.auto, labels: state.labels, speed: state.speed })); } catch { /* fine */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: state.off, def: state.def, auto: ownAuto, labels: state.labels, speed: state.speed })); } catch { /* fine */ }
 }
 
 const call = () => ({ ...state.off, ...state.def });
@@ -282,6 +286,8 @@ function defenseChooser(host, readonly) {
 }
 
 function afterChange() {
+  state.linked = false;
+  linkNote = '';
   save();
   state.seed = newSeed();
   renderChoosers();
@@ -313,7 +319,12 @@ function theirSummary() {
 
 function syncTheirs() {
   const hint = $('theirsHint');
-  if (!state.auto) { hint.textContent = 'You\'re calling both sides. Turn on "Let the other coach pick" to be surprised.'; return; }
+  if (linkNote) { hint.textContent = linkNote; return; }
+  if (!state.auto) {
+    hint.textContent = state.linked ? 'A shared play: both calls are shown. Turn on "Let the other coach pick" to call your own.'
+      : 'You\'re calling both sides. Turn on "Let the other coach pick" to be surprised.';
+    return;
+  }
   if (state.phase === 'pre') hint.textContent = state.side === 'O'
     ? 'Hidden until the snap. Read their alignment on the board: how many safeties are deep, how many defenders are in the box.'
     : 'Hidden until the snap. You can see their formation; the play is a surprise.';
@@ -336,7 +347,7 @@ for (const b of document.querySelectorAll('[data-side]')) b.addEventListener('cl
   afterChange();
 });
 $('auto').addEventListener('change', e => {
-  state.auto = e.target.checked;
+  state.auto = ownAuto = e.target.checked;
   if (state.auto) rollTheirs();
   afterChange();
 });
@@ -382,7 +393,7 @@ function showResult() {
   const ul = $('reads');
   ul.textContent = '';
   for (const r of reads) { const li = document.createElement('li'); li.textContent = r; ul.append(li); }
-  $('shareMsg').textContent = '';
+  resetShare();
   $('result').hidden = false;
   syncTheirs();
 }
@@ -411,26 +422,63 @@ function nm(P, i) {
   return names[p.label] || `the ${p.label}`;
 }
 
+const SHARE_LABEL = $('share').textContent;
+let shareTimer = 0;
+function resetShare() {
+  clearTimeout(shareTimer);
+  $('share').textContent = SHARE_LABEL;
+  $('shareMsg').textContent = '';
+  $('shareUrl').hidden = true;
+}
 $('share').addEventListener('click', async () => {
   const c = call();
   const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed].join('.');
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
-  try { await navigator.clipboard.writeText(url); $('shareMsg').textContent = 'Link copied. Whoever opens it sees this exact play.'; }
-  catch { $('shareMsg').textContent = url; }
+  resetShare();
+  try {
+    await navigator.clipboard.writeText(url);
+    $('share').textContent = 'Link copied';
+    $('shareMsg').textContent = 'Whoever opens it sees this exact play.';
+    shareTimer = setTimeout(resetShare, 2000);
+  } catch { // no clipboard here (an address that isn't https, or the browser said no): the link, ready to copy
+    $('shareMsg').textContent = 'Couldn\'t copy it here. Copy this link:';
+    const box = $('shareUrl');
+    box.value = url;
+    box.hidden = false;
+    box.focus();
+    box.select();
+  }
 });
 
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed): 'ok' once it's set up,
+// 'bad' for one this version can't open (the address is cleared either way), '' when there's none.
+let linkNote = '';
 function fromLink() {
-  const m = location.hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)/);
-  if (!m) return false;
+  const hash = location.hash;
+  if (!hash.startsWith('#p=')) return '';
+  history.replaceState(null, '', location.pathname + location.search);
+  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)/);
+  if (!m) return 'bad';
   const [, side, formation, playId, flip, front, coverage, pressure, seed] = m;
-  if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return false;
-  Object.assign(state, { side, auto: false, seed: +seed >>> 0 });
+  if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'bad';
+  Object.assign(state, { side, auto: false, linked: true, seed: +seed >>> 0 });
   state.off = { formation, play: playId, flip: flip === '1' };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four' };
-  history.replaceState(null, '', location.pathname + location.search);
-  return true;
+  linkNote = '';
+  return 'ok';
 }
+function badLink() {
+  linkNote = 'That link is for a play this version doesn\'t have.';
+  syncTheirs();
+  if (state.phase === 'pre') $('caption').textContent = linkNote;
+}
+// Another play link opened in a tab that's already open.
+addEventListener('hashchange', () => {
+  const link = fromLink();
+  if (link === 'ok') { renderChoosers(); clearChart(); lineUp(); play(); }
+  else if (link === 'bad') badLink();
+});
 
 // ---------------------------------------------------------------- the chart: this call against everything
 
@@ -583,14 +631,15 @@ function techDiagram() {
 // ---------------------------------------------------------------- start
 
 load();
-const linked = fromLink();
-if (!linked && state.auto) rollTheirs();
+const link = fromLink();
+if (link !== 'ok' && state.auto) rollTheirs();
 renderChoosers();
 playbook();
 clearChart();
 lineUp();
 syncTransport();
-if (linked) setTimeout(play, 500);
+if (link === 'ok') setTimeout(play, 500);
+if (link === 'bad') badLink();
 
 new ResizeObserver(() => { board.resize(); draw(); }).observe($('board'));
 const recolor = () => { board.readColors(); draw(); };

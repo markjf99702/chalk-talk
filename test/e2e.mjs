@@ -155,21 +155,43 @@ assert.ok(close, 'no 3.5-yard run in 3,000 snaps of Inside Zone');
 assert.equal(close.head, 'Gain of 4 yards', `seed ${close.seed}`);
 assert.equal(close.kicker, 'A win for the offense', `"Gain of 4 yards" under "${close.kicker}" (seed ${close.seed})`);
 
-// A shared link opens the exact same play.
+// A shared link opens the exact same play. Copying it says so on the button.
 await page.click('[data-side="O"]');
 await page.click('#snap');
 await page.waitForSelector('#result:not([hidden])', { timeout: 15000 });
 const head = await page.textContent('#resHead');
 await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
 await page.click('#share');
-await page.waitForFunction(() => document.getElementById('shareMsg').textContent.length > 0);
-const link = await page.evaluate(async () => { try { return await navigator.clipboard.readText(); } catch { return document.getElementById('shareMsg').textContent; } });
+await page.waitForFunction(() => document.getElementById('share').textContent === 'Link copied' || !document.getElementById('shareUrl').hidden);
+const link = await page.evaluate(async () => { const box = document.getElementById('shareUrl'); return box.hidden ? navigator.clipboard.readText() : box.value; });
 assert.match(link, /#p=O\./, 'the share link has the play in it');
+// Where there's no clipboard to copy it to, the link is there to copy by hand, picked out ready.
+await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }));
+await page.click('#share');
+assert.equal(await page.textContent('#shareMsg'), 'Couldn\'t copy it here. Copy this link:');
+assert.deepEqual(await page.evaluate(() => { const box = document.activeElement; return { id: box.id, value: box.value, picked: box.selectionStart === 0 && box.selectionEnd === box.value.length }; }),
+  { id: 'shareUrl', value: link, picked: true }, 'the link is focused and selected, ready to copy');
+
 const page2 = await ctx.newPage();
 page2.on('pageerror', e => problems.push(e.message));
+page2.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
 await page2.goto(base + link.slice(link.indexOf('#')));
 await page2.waitForSelector('#result:not([hidden])', { timeout: 15000 });
 assert.equal(await page2.textContent('#resHead'), head, 'the shared link replays the same result');
+assert.match(await page2.textContent('#theirsHint'), /^A shared play: both calls are shown/, 'it says it is a shared play');
+// Another link opened in the same tab plays that one.
+await page2.evaluate(() => { location.hash = '#p=D.iform.power.1.34.c1.blitz.777'; });
+await page2.waitForFunction(() => { const { state } = window.chalkTalk; return state.side === 'D' && state.off.play === 'power' && state.seed === 777 && state.phase !== 'pre'; }, null, { timeout: 5000 })
+  .catch(() => assert.fail('a second link opened in the same tab did nothing'));
+assert.equal(await page2.evaluate(() => location.hash), '', 'the link leaves the address once it is open');
+// A link this version can't open says so, clears itself from the address, and leaves the play alone.
+await page2.evaluate(() => { location.hash = '#p=O.trips.nosuch.0.nickel.c2.four.15'; });
+await page2.waitForFunction(() => location.hash === '', null, { timeout: 5000 }).catch(() => assert.fail('a bad link stays in the address'));
+assert.equal(await page2.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
+assert.equal(await page2.evaluate(() => window.chalkTalk.state.off.play), 'power', 'a bad link changes the play');
+// Opening links doesn't turn off "Let the other coach pick" for next time, even once you change a call.
+await page2.getByRole('radio', { name: 'Cover 2' }).click();
+assert.equal(await page2.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), true, 'opening a link turned off "Let the other coach pick" for good');
 await page2.close();
 
 // Fits a phone: nothing scrolls sideways.

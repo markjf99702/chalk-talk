@@ -328,6 +328,8 @@ button:disabled { cursor: default; }
 .ghost:disabled { opacity: .5; }
 .share-msg { margin: 8px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .share-msg:empty { display: none; }
+/* 16px, so a phone doesn't zoom in when it's focused */
+.share-url { display: block; width: 100%; margin-top: 6px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); font-size: 16px; }
 
 .chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .bars { display: grid; gap: 7px; margin-top: 12px; }
