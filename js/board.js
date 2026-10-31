@@ -190,9 +190,20 @@ export class Board {
         else if (to) { const end = { x: from.x + (to.x - from.x) * 0.45, y: from.y + (to.y - from.y) * 0.45 }; this.poly([from, end]); this.blockMark(from, end); }
         else { const end = { x: from.x, y: from.y + 0.75 }; this.poly([from, end]); this.blockMark(from, end); }
       } else if (o.kind === 'rush') {
-        if (o.blitz) ctx.strokeStyle = ctx.fillStyle = this.colors.hot;
-        this.poly(o.pts.slice(0, 2));
-        this.arrow(o.pts[0], o.pts[1]);
+        // A blitzer's arrow: the bright colour, and a shape of its own as well, so it isn't told apart by colour alone
+        // (WCAG 2.2, 1.4.1 Use of Color): a thicker line and a second head set back along it.
+        const [a, to] = o.pts, big = o.blitz ? 1.2 : 1;
+        // A blitzer's arrow stops at the front of the offensive line, where its heads can be seen, rather than going on
+        // under the blockers' marks into his gap.
+        const front = -0.6 + this.radius() / this.k + 0.25;
+        const b = o.blitz && a.y > front + 1.2 && to.y < front ? { x: a.x + (to.x - a.x) * (a.y - front) / (a.y - to.y), y: front } : to;
+        if (o.blitz) { ctx.strokeStyle = ctx.fillStyle = this.colors.hot; ctx.lineWidth = lw * 1.6; }
+        this.poly([a, b]);
+        this.arrow(a, b, big);
+        if (o.blitz) { // the second head a head's length back (about 0.8 yards on a bigger board), so the two read as two
+          const back = Math.max(0.8, this.head(big) / this.k), len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          this.arrow(a, { x: b.x - (b.x - a.x) / len * back, y: b.y - (b.y - a.y) / len * back }, big);
+        }
       } else if (o.kind === 'man') {
         const to = P[o.to];
         ctx.setLineDash([1, 5]); ctx.lineWidth = lw * 1.1;
@@ -217,10 +228,13 @@ export class Board {
     ctx.stroke();
   }
 
-  arrow(a, b) {
+  // An arrowhead's length in pixels, times big.
+  head(big = 1) { return Math.max(6, Math.min(10, this.k * 0.6)) * big; }
+
+  arrow(a, b, big = 1) {
     const { ctx } = this;
     const ax = this.sx(a.x), ay = this.sy(a.y), bx = this.sx(b.x), by = this.sy(b.y);
-    const ang = Math.atan2(by - ay, bx - ax), s = Math.max(6, Math.min(10, this.k * 0.6));
+    const ang = Math.atan2(by - ay, bx - ax), s = this.head(big);
     ctx.beginPath();
     ctx.moveTo(bx, by);
     ctx.lineTo(bx - s * Math.cos(ang - 0.45), by - s * Math.sin(ang - 0.45));

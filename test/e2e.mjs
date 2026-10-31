@@ -589,6 +589,38 @@ const phone = async () => {
 };
 const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 
+// A blitzer's arrow is told apart by its shape as well as its colour (WCAG 2.2, 1.4.1 Use of Color): a thicker line and
+// a double head, against one head on every other rusher's.
+{
+  const p = await phone();
+  const marks = await p.evaluate(() => {
+    const { state, board, lineUp } = window.chalkTalk;
+    document.querySelector('[data-side="D"]').click();
+    Object.assign(state.off, { formation: 'doubles', play: 'verts', flip: false });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz' });
+    lineUp();
+    const drawn = [], ctx = board.ctx, poly = board.poly, arrow = board.arrow;
+    board.poly = function (pts) { drawn.push({ kind: 'line', w: ctx.lineWidth, pts: pts.length }); return poly.call(this, pts); };
+    board.arrow = function (a, b) { drawn.push({ kind: 'head', w: ctx.lineWidth }); return arrow.call(this, a, b); };
+    const out = [];
+    for (const o of state.play.overlay.filter(q => q.kind === 'rush')) {
+      drawn.length = 0;
+      board.play = { ...state.play, overlay: [o] };
+      board.assignments(1);
+      out.push({ blitz: o.blitz, lines: drawn.filter(d => d.kind === 'line').map(d => d.w), heads: drawn.filter(d => d.kind === 'head').length });
+    }
+    board.play = state.play; board.poly = poly; board.arrow = arrow;
+    const pb = [...document.querySelectorAll('.pb dt')].find(dt => dt.textContent === 'Arrows from the defense').nextElementSibling.textContent;
+    return { out, pb };
+  });
+  const blitz = marks.out.filter(m => m.blitz), rush = marks.out.filter(m => !m.blitz);
+  assert.ok(blitz.length >= 1 && rush.length >= 4, `${blitz.length} blitzers and ${rush.length} rushers`);
+  assert.ok(blitz.every(m => m.heads === 2) && rush.every(m => m.heads === 1), `arrowheads: ${JSON.stringify(marks.out)}`);
+  assert.ok(Math.min(...blitz.flatMap(m => m.lines)) >= 1.5 * Math.max(...rush.flatMap(m => m.lines)), `line widths: ${JSON.stringify(marks.out)}`);
+  assert.match(marks.pb, /thicker, with a double head/);
+  await p.context().close();
+}
+
 // Changing the call in the middle of a play lines the new one up from the start: none of the old play's clock is left
 // over, so the new call isn't drawn faded as if it had been snapped.
 {

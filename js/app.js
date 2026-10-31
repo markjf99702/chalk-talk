@@ -923,7 +923,7 @@ function playbook() {
     ['A line with a bar across the end', 'A block.'],
     ['Dashed line to a bubble', 'A zone drop: the defender goes to that area.'],
     ['Dotted line to a receiver', 'Man-to-man coverage on that receiver.'],
-    ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn in the bright colour.'],
+    ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn thicker, with a double head, in the bright colour.'],
     ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.'],
   ]));
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
