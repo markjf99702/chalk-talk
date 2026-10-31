@@ -179,19 +179,21 @@ function snap() {
   play();
 }
 
+// The last two things that happened in the last 2.2 seconds, the older one above and fainter, so two that happen close
+// together both stay up long enough to read. It follows the clock alone, so scrubbing and pausing show the same words.
 function caption() {
-  const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && e.kind !== 'shed');
-  const e = evs[evs.length - 1];
-  setCaption(e && state.t - e.t < 2.2 ? e.text : '');
+  const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && e.kind !== 'shed');
+  setCaption(evs.slice(-2).map(e => e.text));
 }
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
-function setCaption(text) {
+function setCaption(lines) {
   const el = $('caption');
   el.textContent = '';
-  if (!text) return;
-  const span = document.createElement('span');
-  span.textContent = text;
-  el.append(span);
+  for (const text of [].concat(lines).filter(Boolean)) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    el.append(span);
+  }
 }
 
 // ---------------------------------------------------------------- transport

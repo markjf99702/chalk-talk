@@ -246,6 +246,38 @@ for (const side of ['O', 'D']) {
   await p.close();
 }
 
+// Two things that happen close together both stay up long enough to read: the caption shows the last two from the
+// last 2.2 seconds, the older one above. It follows the clock, so scrubbing back and forth shows the same words.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const seen = await p.evaluate(() => {
+    const { state, board, simulate, lineUp } = window.chalkTalk, s = document.getElementById('scrub');
+    Object.assign(state, { side: 'O', auto: false });
+    Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false });
+    Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four' });
+    let a, b;
+    for (let seed = 1; seed < 500 && !b; seed++) {
+      const r = simulate({ ...state.off, ...state.def }, seed), evs = r.events.filter(e => e.kind !== 'shed');
+      // two lines between 0.2 and 1 second apart, and nothing else until after the first has gone, mid-play
+      const k = evs.findIndex((e, n) => n && e.t - evs[n - 1].t > 0.2 && e.t - evs[n - 1].t < 1 && !(evs[n + 1]?.t < evs[n - 1].t + 2.4) && evs[n - 1].t + 2.4 < r.frames.at(-1).t);
+      if (k > 0) { state.seed = seed; [a, b] = [evs[k - 1], evs[k]]; }
+    }
+    lineUp();
+    const at = t => {
+      s.disabled = false; s.value = String(t / board.duration() * 1000); s.dispatchEvent(new Event('input'));
+      return [...document.querySelectorAll('#caption span')].map(x => x.textContent);
+    };
+    return { a: a.text, b: b.text, both: at(b.t + 0.1), before: at((a.t + b.t) / 2), later: at(a.t + 2.3), again: at(b.t + 0.1) };
+  });
+  assert.deepEqual(seen.both, [seen.a, seen.b], 'the caption shows the last two, the older one first');
+  assert.ok(seen.before.at(-1) === seen.a && !seen.before.includes(seen.b), 'scrubbing back shows only what had happened by then');
+  assert.deepEqual(seen.later, [seen.b], 'the older one goes after 2.2 seconds, and the newer one is still up');
+  assert.deepEqual(seen.again, seen.both, 'the same moment shows the same caption');
+  await p.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 

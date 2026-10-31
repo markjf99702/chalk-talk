@@ -185,6 +185,8 @@ button:disabled { cursor: default; }
   background: color-mix(in srgb, var(--board) 75%, transparent);
   text-shadow: 0 0 6px var(--board), 0 0 3px var(--board), 0 0 1px var(--board);
 }
+/* the older of two, fading */
+.caption span:not(:last-child) { font-size: .88em; opacity: .55; margin-bottom: 2px; }
 .flipped .matchup { top: auto; bottom: 6px; }
 .flipped .caption, .flipped .why { top: auto; bottom: 28px; }
 .why {

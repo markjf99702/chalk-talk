@@ -34,15 +34,14 @@ async function open(viewport, deviceScaleFactor, colorScheme = 'dark', hash = PL
   await page.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   return page;
 }
-// Hold the play at a moment, with the caption and the scrubber that go with it.
+// Hold the play at a moment the way the page shows it when you scrub there: the board, the caption and the scrubber.
 const hold = (page, t) => page.evaluate(async t => {
-  const { state, board, pause } = window.chalkTalk;
+  const { board, pause } = window.chalkTalk;
   pause();
   await new Promise(r => requestAnimationFrame(r));
-  state.t = t; board.t = t; board.render();
-  document.getElementById('scrub').value = String(Math.round(t / board.duration() * 1000));
-  const evs = state.play.events.filter(e => e.t <= t);
-  document.getElementById('caption').textContent = evs.length ? evs[evs.length - 1].text : '';
+  const scrub = document.getElementById('scrub');
+  scrub.value = String(Math.round(t / board.duration() * 1000));
+  scrub.dispatchEvent(new Event('input'));
 }, t);
 
 // Phone screenshots for the README.
