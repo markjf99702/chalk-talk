@@ -88,6 +88,9 @@ export function prepare(call, seed = 1) {
   S.RB = S.O.find(p => p.cls === 'rb');
   S.FB = S.O.find(p => p.cls === 'fb');
   S.OL = S.O.filter(p => p.cls === 'ol');
+  // The line is named from where each man stands, so with the strength on the left the left tackle is still on the
+  // left. (The formation mirrors; the names don't.)
+  S.OL.slice().sort((a, b) => a.x - b.x).forEach((o, k) => { o.label = o.info = ['LT', 'LG', 'C', 'RG', 'RT'][k]; });
   const elig = S.O.filter(p => p.cls === 'wr' || p.cls === 'te');
   const side = sg => elig.filter(p => Math.sign(p.x) === sg).sort((a, b) => Math.abs(b.x) - Math.abs(a.x));
   S.strongList = side(f);

@@ -63,6 +63,21 @@ test('formations are legal: seven on the line, eleven a side, nobody offside', (
   }
 });
 
+test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
+  for (const fm of FORMATIONS) for (const flip of [false, true]) for (const front of ['over', '34']) {
+    const S = prepare({ formation: fm.id, play: 'power', front, coverage: 'c3', pressure: 'four', flip }, 7);
+    const what = `${fm.id} vs ${front}, strong side ${flip ? 'left' : 'right'}`;
+    const line = S.OL.slice().sort((a, b) => a.x - b.x).map(o => o.label);
+    assert.deepEqual(line, ['LT', 'LG', 'C', 'RG', 'RT'], `${what}: the line reads ${line.join(' ')} from left to right`);
+    const lt = S.OL.find(o => o.label === 'LT'), rt = S.OL.find(o => o.label === 'RT');
+    assert.ok(lt.x < 0 && rt.x > 0, `${what}: the left tackle is at ${lt.x}, the right tackle at ${rt.x}`);
+    for (const o of S.OL) assert.equal(o.info, o.label, `${what}: the ${o.label}'s card is the ${o.info}'s`);
+    const pull = S.O.filter(p => p.job.scheme === 'pull');
+    assert.equal(pull.length, 1, `${what}: ${pull.length} men pull`);
+    assert.ok(pull[0].x0 * S.aimX < 0, `${what}: the ${pull[0].label} at ${pull[0].x0} pulls, on the play side (aim ${S.aimX})`);
+  }
+});
+
 test('before the snap, no two defenders stand on the same spot', () => {
   for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
     const S = prepare({ formation: fm.id, play: 'smash', front: fr.id, coverage: cv.id, pressure, flip }, 7);
