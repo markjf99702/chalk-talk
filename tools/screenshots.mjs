@@ -34,12 +34,13 @@ async function open(viewport, deviceScaleFactor, colorScheme = 'dark', hash = PL
   await page.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   return page;
 }
-// Hold the play at a moment, with the caption that goes with it.
+// Hold the play at a moment, with the caption and the scrubber that go with it.
 const hold = (page, t) => page.evaluate(async t => {
   const { state, board, pause } = window.chalkTalk;
   pause();
   await new Promise(r => requestAnimationFrame(r));
   state.t = t; board.t = t; board.render();
+  document.getElementById('scrub').value = String(Math.round(t / board.duration() * 1000));
   const evs = state.play.events.filter(e => e.t <= t);
   document.getElementById('caption').textContent = evs.length ? evs[evs.length - 1].text : '';
 }, t);
@@ -47,13 +48,18 @@ const hold = (page, t) => page.evaluate(async t => {
 // Phone screenshots for the README.
 {
   const page = await open({ width: 390, height: 844 }, 2);
-  await hold(page, 0);
-  await page.evaluate(() => { window.chalkTalk.state.phase = 'pre'; document.getElementById('caption').textContent = ''; });
+  // before the snap, with the Snap button
+  await page.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
   await page.screenshot({ path: join(root, 'docs/phone-call.png') });
   await hold(page, 2.2);
   await page.screenshot({ path: join(root, 'docs/phone-play.png') });
-  await page.evaluate(() => { const { state } = window.chalkTalk; state.t = state.play.frames.at(-1).t; window.chalkTalk.finish(); });
-  await hold(page, await page.evaluate(() => window.chalkTalk.state.t));
+  // the end of the play as the page shows it: the headline on the board where the caption was, and the result card
+  await page.evaluate(() => {
+    const { state, board, finish } = window.chalkTalk;
+    state.t = board.t = board.duration(); board.render();
+    document.getElementById('scrub').value = '1000';
+    finish();
+  });
   await page.evaluate(() => { const r = document.getElementById('result'); window.scrollTo(0, r.getBoundingClientRect().top + scrollY - document.querySelector('.stage').offsetHeight - 8); });
   await page.screenshot({ path: join(root, 'docs/phone-result.png') });
   await page.context().close();
