@@ -478,6 +478,19 @@ button:disabled { cursor: default; }
   .snap { padding: 8px 12px; }
 }
 
+/* Forced colours (Windows High Contrast) replace every background, and with them the only sign of what's picked: the
+   picked chip, side, speed and the labels toggle take the system's highlight colours, and Snap keeps an outline. */
+@media (forced-colors: active) {
+  .side-pick button[aria-checked="true"], .seg button[aria-checked="true"], .chip[aria-checked="true"], .tool.toggle[aria-pressed="true"] {
+    background: SelectedItem;
+    color: SelectedItemText;
+    border: 1px solid SelectedItem;
+    forced-color-adjust: none;
+  }
+  .chip[aria-checked="true"] small { color: SelectedItemText; }
+  .snap { border: 2px solid ButtonText; }
+}
+
 /* A phone turned sideways: the board stays put on the left, as big as the window allows (and a little over half its
    width), with Snap and the scrubber under it, while the calls and the playbook scroll beside it. */
 @media (orientation: landscape) and (max-height: 520px) and (min-width: 640px) and (max-width: 959px) {

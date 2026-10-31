@@ -949,6 +949,26 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// In forced colours (Windows High Contrast), which replace every background, what's picked still shows: a picked chip,
+// side and speed, and the labels toggle when it's on, against the ones that aren't (WCAG 2.2, 1.4.11).
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, forcedColors: 'active' });
+  const p = await c.newPage();
+  await p.goto(base);
+  const seen = await p.evaluate(() => {
+    // the colour you see behind it: its own background, or the first one behind it that isn't see-through
+    const bg = el => { for (let e = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/^rgba\(.*, 0\)$|transparent/.test(c)) return c; } return 'none'; };
+    const pair = sel => { const on = document.querySelector(`${sel}[aria-checked="true"]`), off = document.querySelector(`${sel}[aria-checked="false"]`); return [bg(on), bg(off)]; };
+    const labels = document.getElementById('labels'), pressed = bg(labels);
+    labels.click(); const released = bg(labels); labels.click();
+    return { forced: matchMedia('(forced-colors: active)').matches, chip: pair('#mineBody .chip'), side: pair('[data-side]'), speed: pair('[data-speed]'), labels: [pressed, released], snap: getComputedStyle(document.getElementById('snap')).borderTopWidth };
+  });
+  assert.ok(seen.forced, 'forced colours are on');
+  for (const k of ['chip', 'side', 'speed', 'labels']) assert.notEqual(seen[k][0], seen[k][1], `in forced colours a picked ${k} looks like one that isn't (${seen[k][0]})`);
+  assert.notEqual(seen.snap, '0px', 'in forced colours Snap has no outline');
+  await c.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
