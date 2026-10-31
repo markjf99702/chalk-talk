@@ -120,7 +120,7 @@ test('on the screen the linemen let the rushers go, and in man coverage the back
 });
 
 test('the rush read tells the truth: only blitzers are drawn as blitzers, and only rushers nobody blocked came unblocked', () => {
-  let seed = 500, picked = 0;
+  let seed = 500, came = 0;
   for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const pl of PLAYS.filter(p => p.type === 'pass')) {
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
     const r = simulate(call, seed++);
@@ -135,10 +135,26 @@ test('the rush read tells the truth: only blitzers are drawn as blitzers, and on
     assert.ok(Array.isArray(r.cameFree), `${what}: no list of the rushers who came free`);
     assert.equal(r.protection.filter(i => r.players[i].cls === 'ol').length, 5, `${what}: the protection is missing a lineman`);
     for (const i of r.protection) assert.ok(r.players[i].team === 'O' && r.players[i].cls !== 'qb' && r.players[i].cls !== 'wr', `${what}: the ${r.players[i].label} is counted in the protection`);
-    for (const i of r.cameFree) assert.ok(r.free.includes(i) && !blocked(i), `${what}: the ${r.players[i].label} is said to have come unblocked, but he was blocked`);
-    for (const i of r.free) if (!r.cameFree.includes(i)) { assert.ok(blocked(i), `${what}: the ${r.players[i].label} came free but isn't named`); picked++; }
+    for (const i of r.cameFree) { assert.ok(r.free.includes(i) && !blocked(i), `${what}: the ${r.players[i].label} is said to have come unblocked, but he was blocked`); came++; }
+    for (const i of r.free) if (!r.cameFree.includes(i)) assert.ok(blocked(i), `${what}: the ${r.players[i].label} came free but isn't named`);
   }
-  assert.ok(picked > 0, 'no unassigned rusher was ever picked up, so the check above proved nothing');
+  // The protection leaves a rusher free only when there's nobody left to take him (Cover 0, the screen), so he comes
+  // unblocked: these have to have happened for the checks above to mean anything.
+  assert.ok(came > 0, 'no rusher ever came unblocked, so the check above proved nothing');
+});
+
+test('pass protection picks up every rusher it has the men for: a rusher goes free only when they outnumber the blockers', () => {
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.id !== 'screen')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip }, 5);
+    const what = `${fm.id} ${pl.id} vs ${fr.id} ${cv.id} ${pressure}${flip ? ', strong side left' : ''}`;
+    const rushers = S.D.filter(d => d.job.kind === 'rush');
+    const free = S.freeRushers.map(d => d.label).join(', ');
+    const lines = () => S.O.filter(o => o.job.kind === 'pro' || o.job.kind === 'fake').map(o => `${o.label}->${o.job.target?.label ?? 'helps'}`).join(' ');
+    if (pressure === 'four' && cv.id !== 'c0') assert.equal(rushers.length, 4, `${what}: ${rushers.length} rushers on a four-man rush`);
+    if (rushers.length <= S.protection.length) assert.equal(free, '', `${what}: ${rushers.length} rushers against ${S.protection.length} in protection, and the ${free} is left free (${lines()})`);
+    else assert.ok(S.freeRushers.length <= rushers.length - S.protection.length, `${what}: ${S.freeRushers.length} free with ${rushers.length} rushing against ${S.protection.length} (${lines()})`);
+    for (const o of S.O) if (o.job.target && o.job.kind === 'pro') assert.equal(S.O.filter(q => q.job.kind === 'pro' && q.job.target === o.job.target).length, 1, `${what}: two men have the ${o.job.target.label}`);
+  }
 });
 
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {

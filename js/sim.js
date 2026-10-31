@@ -291,7 +291,6 @@ function assignOffense(S) {
     const rel = S.OL.filter(o => o.x * sd >= -0.1).sort((a, b) => a.x * sd - b.x * sd);
     rel.forEach((o, k) => { o.job = { kind: 'screenOL', at: { x: sd * (3.6 + k * 2.2), y: -0.2 + k * 0.8 }, go: 1.0 + k * 0.08 }; });
   }
-  S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
   const drops = {
     quick: under ? [{ x: 0, y: -3.6 }] : [{ x: 0, y: -5.9 }],
     five: under ? [{ x: 0, y: -7.3 }] : [{ x: 0, y: -7.3 }],
@@ -308,24 +307,36 @@ function assignOffense(S) {
     rb.job = { kind: 'fake', then: 'pro', aim: 1.7 * p };
   }
   passPro(S);
+  // His reads, from what's left after the protection: a back who stays in to block isn't one.
+  S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
   S.hold = { quick: 2.4, five: 3.6, pa: 3.9, screen: 2.6 }[play.drop];
 }
 
-// Pass protection: the line takes the rushers nearest them, the backs take who's left, anyone extra is free.
+// Pass protection: every rusher is somebody's if there are the men for it. The line takes the rushers nearest them,
+// sliding when it has a man to spare: a guard takes the end so the tackle can widen to the man outside him. A back who
+// stays in, or checks for a blitzer before his route, takes anyone left that he can reach, and stays in to block him.
+// A rusher goes free only when they outnumber the men who can get to him. A lineman with nobody helps whoever needs it.
+const FREE = 6; // what leaving a rusher free costs the line, against the yards each block asks a lineman to cover
 function passPro(S) {
   const rushers = S.D.filter(d => d.job.kind === 'rush');
   const ol = S.OL.filter(o => o.job.kind === 'pro');
-  const pick = assign(ol, rushers, (o, d) => {
+  const pick = assign(rushers, ol, (d, o) => {
     const dx = Math.abs(o.x - d.x);
-    if (dx > 4.2 || (d.edge && Math.abs(d.x) - Math.abs(o.x) > 2.6)) return Infinity;
+    if (dx > 4.2 || (d.edge && Math.abs(d.x) - Math.abs(o.x) > 3)) return Infinity;
     return dx + (d.dl ? 0 : 0.8) + Math.max(0, d.y - 2) * 0.3;
-  }, () => 2.4);
+  }, () => FREE);
   const taken = new Set();
-  ol.forEach((o, k) => { if (pick[k] >= 0) { o.job.target = rushers[pick[k]]; taken.add(rushers[pick[k]]); } });
-  const backs = S.O.filter(p => p.cls !== 'ol' && p.cls !== 'qb' && (p.job.kind === 'pro' || (p.job.kind === 'route' && p.job.delay)));
+  rushers.forEach((d, k) => { if (pick[k] >= 0) { ol[pick[k]].job.target = d; taken.add(d); } });
+  const backs = S.O.filter(p => p.cls !== 'ol' && p.cls !== 'qb' && (p.job.kind === 'pro' || p.job.kind === 'fake' || (p.job.kind === 'route' && p.job.delay && p.job.route !== 'screen')));
   const left = rushers.filter(d => !taken.has(d));
-  const pb = assign(backs, left, (b, d) => (Math.abs(b.x - d.x) > 9 ? Infinity : Math.abs(b.x - d.x)), () => 1);
-  backs.forEach((b, k) => { if (pb[k] >= 0) { b.job.target = left[pb[k]]; taken.add(left[pb[k]]); } });
+  const pb = assign(backs, left, (b, d) => (Math.abs(b.x - d.x) > 9 ? Infinity : Math.abs(b.x - d.x)), () => 10);
+  backs.forEach((b, k) => {
+    if (pb[k] < 0) return;
+    const d = left[pb[k]];
+    taken.add(d);
+    if (b.job.kind === 'route') { b.job = { kind: 'pro', target: d, stayed: b.job.route }; b.path = null; } // he sees his man coming and stays in
+    else b.job.target = d;
+  });
   S.freeRushers = rushers.filter(d => !taken.has(d));
   for (const o of S.OL) {
     const depth = { quick: 0.6, five: 1.4, pa: 1.2, screen: 1.4 }[S.play.drop] ?? 1.2;
@@ -768,7 +779,7 @@ function windowFor(S, r) {
 function fake(S, pl) {
   const t = S.t;
   if (t < (S.fakeEnd || 0.7) + 0.2) { pl.tx = S.aimX ?? 1.7 * S.p; pl.ty = -1.8; pl.ts = pl.top * 0.7; return; }
-  pl.job = { kind: 'pro' };
+  pl.job = { kind: 'pro', target: pl.job.target }; // then blocks the man the protection gave him, if it gave him one
   pl.set = { x: pl.x, y: pl.y - 0.5 };
 }
 
@@ -1275,9 +1286,10 @@ function describeJob(S, pl) {
     if (j.kind === 'carry') return S.play.scheme === 'draw' ? 'Sets up like he is pass-blocking, takes the late handoff, and runs up the middle where the rushers left.' : `Takes the handoff aiming ${S.play.scheme === 'reach' ? 'for the edge' : 'just outside the play-side guard'}, and reads the blocks for a lane.`;
     if (j.kind === 'route' || j.kind === 'fake') {
       const r = ROUTES[j.route];
-      if (j.kind === 'fake') return 'Fakes taking the handoff, then stays in to pass-block.';
+      if (j.kind === 'fake') return `Fakes taking the handoff, then stays in to ${j.target ? 'block ' + name(S, j.target) : 'pass-block'}.`;
       return S.play.type === 'run' ? 'Runs a go route to take his defender away from the run.' : r.desc;
     }
+    if (j.kind === 'pro' && j.stayed) return `Checks for a blitzer before he slips out, and ${name(S, j.target)} is coming: he stays in and blocks him.`;
     if (j.kind === 'pro') return j.target ? `Pass-blocks ${name(S, j.target)}.` : 'Pass-blocks, helping whoever needs it.';
     if (j.kind === 'screenOL') return 'Pass-blocks for a second, lets his man go, then runs out in front of the screen to block.';
     if (j.kind === 'stalk') return j.target ? `Blocks ${name(S, j.target)} to keep him off the run.` : 'Blocks downfield.';
