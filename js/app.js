@@ -237,14 +237,19 @@ $('scrub').addEventListener('input', e => {
 for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { state.speed = +b.dataset.speed; save(); syncTransport(); });
 $('labels').addEventListener('click', () => { state.labels = !state.labels; board.labels = state.labels; save(); syncTransport(); draw(); });
 
-// Tap a player to see who he is and what he's doing.
+// Tap a player to see who he is and what he's doing. On a crowded line a fingertip covers two or three players, so a tap
+// where the picked player is goes to the next one there: tap again until it's the one you meant. A tap on empty field
+// (or the card's ×) closes the card.
 let down = null;
 $('board').addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
 $('board').addEventListener('pointerup', e => {
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;
   const r = $('board').getBoundingClientRect();
-  const i = board.hit(e.clientX - r.left, e.clientY - r.top);
-  if (i < 0 || i === board.selected) { board.selected = -1; hideWho(); } else { board.selected = i; showWho(i); dropHint(); }
+  const near = board.hit(e.clientX - r.left, e.clientY - r.top);
+  if (!near.length) { board.selected = -1; hideWho(); } else {
+    const i = near[(near.indexOf(board.selected) + 1) % near.length];
+    board.selected = i; showWho(i); dropHint();
+  }
   draw();
 });
 $('whoClose').addEventListener('click', () => { board.selected = -1; hideWho(); draw(); });

@@ -326,16 +326,14 @@ export class Board {
     ctx.fill();
   }
 
-  // Which player is under a point on the canvas (CSS pixels), or -1.
+  // Every player a fingertip at this point on the canvas (CSS pixels) could mean, nearest first.
   hit(px, py) {
-    if (!this.play) return -1;
-    let best = -1, bd = Math.max(16, this.radius() * 2.2);
-    for (const p of this.play.players) {
+    if (!this.play) return [];
+    const reach = Math.max(16, this.radius() * 2.2);
+    return this.play.players.map(p => {
       const { x, y } = this.pos(this.t, p.i);
-      const d = Math.hypot(this.sx(x) - px, this.sy(y) - py);
-      if (d < bd) { bd = d; best = p.i; }
-    }
-    return best;
+      return { i: p.i, d: Math.hypot(this.sx(x) - px, this.sy(y) - py) };
+    }).filter(c => c.d < reach).sort((a, b) => a.d - b.d).map(c => c.i);
   }
 }
 

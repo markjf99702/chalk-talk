@@ -336,6 +336,39 @@ for (const side of ['O', 'D']) {
   assert.equal(await p.isVisible('#who'), false, 'a tap on the card over empty field goes through and closes it');
   await p.close();
 }
+// On a crowded line a fingertip covers two or three players: tapping the same spot again picks the next one there,
+// nearest first, instead of closing the card. A tap that lands a little off a lineman reaches him in two taps, or three
+// where two others are nearer still (under center the quarterback is 4.5 px behind the center on a phone).
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base + '#p=O.iform.power.0.over.c3.four.15');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
+  const spots = await p.evaluate(() => {
+    const { board, state } = window.chalkTalk, r = board.cv.getBoundingClientRect();
+    return state.play.players.filter(q => ['ol', 'dl', 'de'].includes(q.cls)).map(q => { const at = board.pos(0, q.i); return { i: q.i, label: q.label, x: r.left + board.sx(at.x), y: r.top + board.sy(at.y) }; });
+  });
+  assert.ok(spots.length >= 8, 'the linemen');
+  const picked = () => p.evaluate(() => window.chalkTalk.board.selected);
+  const c = spots.find(q => q.label === 'C');
+  await p.mouse.click(c.x, c.y);
+  const first = await picked();
+  await p.mouse.click(c.x, c.y);
+  const second = await picked();
+  assert.ok(second >= 0 && second !== first && await p.isVisible('#who'), 'tapping the same spot on the line again picks a neighbour and keeps the card open');
+  const missed = [];
+  for (const q of spots) for (let k = 0; k < 8; k++) {
+    const x = q.x + 6 * Math.cos(k * Math.PI / 4), y = q.y + 6 * Math.sin(k * Math.PI / 4);
+    await p.evaluate(() => { window.chalkTalk.board.selected = -1; document.getElementById('who').hidden = true; });
+    await p.mouse.click(x, y);
+    for (let n = 1; n < 3 && await picked() !== q.i; n++) await p.mouse.click(x, y);
+    if (await picked() !== q.i) missed.push(`${q.label} from ${k * 45}°`);
+  }
+  assert.deepEqual(missed, [], 'linemen not picked in three taps 6 px off them');
+  await p.close();
+}
+
 // On a bigger board the card stays through the snap and says what the player is doing, once their call is out.
 {
   const wide = await browser.newContext({ viewport: { width: 1280, height: 800 } });
