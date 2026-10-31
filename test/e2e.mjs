@@ -89,20 +89,35 @@ assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result ha
 assert.ok(await page.$$eval('#story li', li => li.length) >= 1, 'the play-by-play has at least one line');
 assert.ok((await page.textContent('#note')).trim().length > 40, 'the coach\'s note is there');
 assert.match(await page.textContent('#theirsHint'), /They called/, 'their call is shown after the snap');
+// The board shows the headline, and a button down to the explanation.
+assert.ok(await page.isVisible('#why'), 'the board points to the explanation when the play ends');
+assert.equal((await page.textContent('#why')).replace(/\s+/g, ' ').trim(), `${await page.textContent('#resHead')} · Why ↓`);
 
 // The scrubber reaches the whole play: halfway is halfway, and the far end is the end of the play.
 const scrub = to => page.evaluate(to => {
   const s = document.getElementById('scrub'), { state, board } = window.chalkTalk;
   s.value = String(to === 'max' ? s.max : to * s.max);
   s.dispatchEvent(new Event('input'));
-  return { t: state.t, duration: board.duration(), phase: state.phase, result: !document.getElementById('result').hidden };
+  return { t: state.t, duration: board.duration(), phase: state.phase, result: !document.getElementById('result').hidden, why: !document.getElementById('why').hidden };
 }, to);
 const half = await scrub(0.5);
 assert.ok(Math.abs(half.t - half.duration / 2) < 0.1, `halfway along the scrubber shows ${half.t.toFixed(2)} s of a ${half.duration.toFixed(2)} s play`);
+assert.equal(half.why, false, 'the button to the explanation goes away when you scrub back into the play');
 const end = await scrub('max');
 assert.equal(end.t, end.duration, 'the far end of the scrubber is the end of the play');
 assert.equal(end.phase, 'done', 'the far end of the scrubber finishes the play');
 assert.ok(end.result, 'the result shows at the far end of the scrubber');
+assert.ok(end.why, 'the button to the explanation comes back at the far end of the scrubber');
+
+// Tapping it brings the explanation up just under the board, which stays at the top of a phone.
+await page.click('#why');
+await until(async () => {
+  const [a, b] = [await page.evaluate(() => scrollY), await new Promise(r => setTimeout(r, 150)).then(() => page.evaluate(() => scrollY))];
+  return a > 0 && a === b;
+}, 5000, 'the page did not scroll to the explanation');
+const where = await page.evaluate(() => ({ top: document.getElementById('result').getBoundingClientRect().top, under: document.querySelector('.stage').getBoundingClientRect().bottom, height: innerHeight }));
+assert.ok(where.top >= where.under && where.top < where.height - 100, `the explanation's top is at ${Math.round(where.top)} px, with the board ending at ${Math.round(where.under)} px of ${where.height}`);
+await page.evaluate(() => scrollTo(0, 0));
 
 // Tap a player: his card says who he is and what he did. (At the snap: the board follows the ball, so after a long
 // gain the quarterback can be off the board.)

@@ -81,6 +81,7 @@ function lineUp() {
   board.t = 0;
   board.selected = -1;
   hideWho();
+  $('why').hidden = true;
   $('result').hidden = true;
   syncBoard();
   syncTransport();
@@ -106,6 +107,7 @@ function play() {
   const snapped = state.phase === 'pre';
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
+  $('why').hidden = true;
   syncBoard();
   syncTheirs();
   renderMatchup();
@@ -137,7 +139,23 @@ function finish() {
   cancelAnimationFrame(raf);
   syncTransport();
   showResult();
+  showWhy();
 }
+
+// At the end of the play, the headline and a way down to the explanation, where the caption was.
+function showWhy() {
+  $('caption').textContent = '';
+  $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">↓</span></span>`;
+  $('why').hidden = false;
+}
+// The result card, just under the board where the board stays at the top of a phone, or near the top.
+$('why').addEventListener('click', () => {
+  const stage = document.querySelector('.stage');
+  const under = innerWidth < 960 && getComputedStyle(stage).position === 'sticky' ? stage.offsetHeight + 8 : 12;
+  const top = $('result').getBoundingClientRect().top + scrollY - under;
+  scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  $('resHead').focus({ preventScroll: true });
+});
 
 function snap() {
   if (state.phase !== 'pre') { // run it again: same calls, a new roll of the dice
@@ -176,7 +194,7 @@ $('scrub').addEventListener('input', e => {
   state.t = (+e.target.value / 1000) * board.duration();
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
   draw(); caption(); syncTransport();
-  if (state.phase === 'done') showResult();
+  if (state.phase === 'done') { showResult(); showWhy(); } else $('why').hidden = true;
 });
 for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { state.speed = +b.dataset.speed; save(); syncTransport(); });
 $('labels').addEventListener('click', () => { state.labels = !state.labels; board.labels = state.labels; save(); syncTransport(); draw(); });

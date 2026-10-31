@@ -40,6 +40,7 @@
         <canvas id="board" aria-label="The field, with the offense drawn as circles and the defense as Xs"></canvas>
         <p class="matchup" id="matchup"></p>
         <p class="caption" id="caption" aria-live="polite"></p>
+        <button type="button" class="why" id="why" hidden></button>
         <div class="who" id="who" hidden>
           <button type="button" class="who-x" id="whoClose" aria-label="Close">×</button>
           <p class="who-pos" id="whoPos"></p>
@@ -76,7 +77,7 @@
 
       <section class="card result" id="result" hidden>
         <p class="kicker" id="resKicker"></p>
-        <h2 class="headline" id="resHead"></h2>
+        <h2 class="headline" id="resHead" tabindex="-1"></h2>
         <p class="vs" id="resVs"></p>
         <ol class="story" id="story"></ol>
         <div class="note">

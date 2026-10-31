@@ -173,6 +173,27 @@ button:disabled { cursor: default; }
   font-size: clamp(15px, 2.6vw, 19px);
 }
 .caption:not(:empty) span, .caption:not(:empty) { text-shadow: 0 0 6px var(--board), 0 0 3px var(--board), 0 0 1px var(--board); }
+.why {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 16px);
+  min-height: 40px;
+  padding: 4px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 6px 18px -10px rgba(0, 0, 0, .55);
+  font-family: var(--hand);
+  font-size: clamp(16px, 2.6vw, 19px);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.why-go { color: var(--accent); }
 
 .who {
   position: absolute;
