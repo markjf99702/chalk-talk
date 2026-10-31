@@ -493,6 +493,32 @@ for (const width of [320, 360, 375]) {
   assert.ok(tech.gaps.every(g => g >= 12), `the diagram's 5, 7 and 6 are ${tech.gaps} apart`);
 }
 
+// The words a learner meets, each explained where he can find it: what the personnel digits mean, what the strong side
+// is (on a balanced formation, the side you call), and a playbook section for the rest, the zones as the cards name them.
+{
+  const said = await page.evaluate(async () => {
+    const blurb = name => [...document.querySelectorAll('#mineBody .pick')].find(p => p.querySelector('.pick-label').textContent === name)?.querySelector('.blurb')?.textContent;
+    const chip = name => [...document.querySelectorAll('#mineBody .chip')].find(b => b.textContent.startsWith(name));
+    const out = {};
+    for (const f of ['Gun Trips', 'Gun Doubles', 'I-Form', 'Singleback']) { chip(f).click(); out[f] = { formation: blurb('Formation'), strong: blurb('Strong side') }; }
+    const d = [...document.querySelectorAll('.pb')].find(x => x.querySelector('summary').textContent === 'Words coaches use');
+    out.words = d ? [...d.querySelectorAll('dt')].map(dt => dt.textContent) : [];
+    const { ZONES } = await import('./js/playbook.js');
+    out.zones = [...new Set(Object.values(ZONES).filter(z => !z.deep).map(z => z.name))];
+    return out;
+  });
+  assert.match(said['Gun Trips'].formation, / 11 personnel: one back, one tight end\.$/);
+  assert.match(said['I-Form'].formation, / 21 personnel: two backs, one tight end\.$/);
+  assert.match(said['Gun Doubles'].formation, / 10 personnel: one back, no tight ends\.$/);
+  assert.match(said['Gun Trips'].strong ?? '', /^The strong side is the tight end's side, or the side with more receivers\./, 'the strong side is explained');
+  assert.match(said['Gun Doubles'].strong ?? '', /^Gun Doubles is balanced, two receivers on each side, so the strong side is whichever side you call\./);
+  assert.match(said.Singleback.strong ?? '', /^Singleback is balanced, a tight end and a receiver on each side, so/);
+  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Check-down', 'Deep thirds, halves and quarters', 'Success']) {
+    assert.ok(said.words.includes(w), `the playbook's words don't explain "${w}"`);
+  }
+  for (const z of said.zones) assert.ok(said.words.some(w => w.toLowerCase().startsWith(z.replace(/ \(.*/, ''))), `the playbook's words don't explain the ${z}`);
+}
+
 // A phone turned sideways: the board, Snap and the scrubber all on screen at once, with the calls beside the board,
 // and they stay there while the calls scroll.
 for (const [width, height] of [[844, 390], [667, 375]]) {

@@ -452,13 +452,30 @@ function offenseChooser(host, readonly) {
     afterChange();
   };
   chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel })), fm.id, id => set({ formation: id }), {
-    disabled: readonly, blurb: `${fm.blurb} ${fm.personnel} personnel.`,
+    disabled: readonly, blurb: `${fm.blurb} ${personnelWords(fm.personnel)}`,
   });
-  chips(host, 'Strong side', [{ id: 'R', name: 'Right' }, { id: 'L', name: 'Left' }], state.off.flip ? 'L' : 'R', id => set({ flip: id === 'L' }), { disabled: readonly });
+  chips(host, 'Strong side', [{ id: 'R', name: 'Right' }, { id: 'L', name: 'Left' }], state.off.flip ? 'L' : 'R', id => set({ flip: id === 'L' }), {
+    disabled: readonly, blurb: strongBlurb(fm),
+  });
   chips(host, 'Play', PLAYS, pl.id, id => set({ play: id }), {
     disabled: readonly, blurb: pl.blurb,
     groups: [{ name: 'Runs', items: PLAYS.filter(p => p.type === 'run') }, { name: 'Passes', items: PLAYS.filter(p => p.type === 'pass') }],
   });
+}
+
+// "21 personnel: two backs, one tight end.", from the two digits.
+const COUNT = ['no', 'one', 'two', 'three'];
+function personnelWords(p) {
+  const [backs, ends] = [...p].map(Number), many = (n, w) => `${COUNT[n]} ${w}${n === 1 ? '' : 's'}`;
+  return `${p} personnel: ${many(backs, 'back')}, ${many(ends, 'tight end')}.`;
+}
+// What the strong side is. A formation with the same men on each side has none of its own: it's the side you call.
+function strongBlurb(fm) {
+  const count = (sd, cls) => fm.players.filter(([, x, , c]) => c === cls && Math.sign(x) === sd).length;
+  const balanced = ['te', 'wr'].every(c => count(1, c) === count(-1, c));
+  if (!balanced) return 'The strong side is the tight end\'s side, or the side with more receivers. Runs go that way, and the defense sets its strength to it.';
+  const each = [[count(1, 'te'), 'tight end'], [count(1, 'wr'), 'receiver']].filter(([n]) => n).map(([n, w]) => (n === 1 ? `a ${w}` : `${COUNT[n]} ${w}s`)).join(' and ');
+  return `${fm.name} is balanced, ${each} on each side, so the strong side is whichever side you call. The runs and one-sided pass plays like Flood go that way, and the defense sets its strength to it.`;
 }
 
 function defenseChooser(host, readonly) {
@@ -859,6 +876,25 @@ function playbook() {
     ['Dotted line to a receiver', 'Man-to-man coverage on that receiver.'],
     ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn in the bright colour.'],
     ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.'],
+  ]));
+  // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
+  // areas in ZONES (js/playbook.js), as the player cards name them.
+  sec('Words coaches use', false, dl([
+    ['Strong side and weak side', 'The strong side is the tight end\'s side, or the side with more receivers; the weak side is the other one. The defense sets its strength to it: the Sam and the strong safety go to the strong side, the Will to the weak side.'],
+    ['Play side and back side', 'On a run, the play side is where the ball is going and the back side is the other half of the line. Every run on this board is drawn up to the strong side.'],
+    ['The box', 'The area near the line where defenders play the run. The board counts it out to 3 yards past the end of the line on each side (the tight end, or the tackle where there\'s no tight end) and up to 8 yards deep. More defenders in the box than there are blockers makes a run hard; fewer makes it a good look to run against.'],
+    ['Shotgun', 'The quarterback lines up about five yards behind the center and takes a short snap through the air, instead of under center with his hands on the ball. He sees the defense from there, and needs only a short drop to throw.'],
+    ['Press', 'A corner lined up a yard or so off the receiver, right in his face, to jam him at the snap and stay on him. Corners press in man coverage.'],
+    ['Leverage', 'Which side of a receiver a defender lines up on. With outside leverage he\'s a step outside him, so the receiver\'s easy way is inside; with inside leverage it\'s the other way round.'],
+    ['Over the top', 'Deeper than a receiver, between him and the end zone: where a deep safety helps.'],
+    ['Check-down', 'The short, safe throw when everything downfield is covered, usually to the back a few yards past the line.'],
+    ['Flat', 'The short area out by the sideline, up to about 10 yards past the line.'],
+    ['Curl-flat', 'From about the slot out to the sideline, up to about 12 yards deep. The defender there sinks under a curl route first, then widens to the flat.'],
+    ['Hook-curl', 'Inside, from about the end of the line out to the slot, 2 to 13 yards deep: where curls and sit routes settle.'],
+    ['Middle hook', 'The middle of the field in front of the safeties, 3 to 14 yards deep.'],
+    ['Short middle, "the rat"', 'The middle of the field up to about 10 yards. In Cover 1 the defender left over sits there to take away crossing routes.'],
+    ['Deep thirds, halves and quarters', 'The deep field, from about 9 yards on, split between the deep defenders: in thirds in Cover 3 (the corners and the free safety), in halves in Cover 2 (the two safeties), in quarters in Cover 4 (the corners and the safeties). The deep middle third is the middle one of the three; an inside quarter is one of the two nearest the middle.'],
+    ['Success', 'A play that gains 4 yards or more. Coaches judge a gain by the down and the distance to go; with no downs on this board, 4 yards, a good start on 1st and 10, is the line. The chart\'s success rate counts these.'],
   ]));
 }
 
