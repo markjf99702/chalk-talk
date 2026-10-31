@@ -128,6 +128,7 @@ function lineUp() {
   board.setPlay(state.play);
   board.t = 0;
   board.selected = -1;
+  board.spot = -1;
   hideWho();
   $('why').hidden = true;
   $('result').hidden = true;
@@ -193,8 +194,8 @@ function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   state.t = Math.min(board.duration(), state.t + dt * state.speed);
-  draw();
   caption();
+  draw();
   $('scrub').value = String(Math.round(state.t / board.duration() * 1000));
   if (state.t >= board.duration()) { finish(); return; }
   if (state.phase === 'playing') raf = requestAnimationFrame(tick);
@@ -223,6 +224,8 @@ function sayResult() {
 // At the end of the play, the headline and a way down to the explanation, where the caption was.
 function showWhy() {
   setCaption('');
+  board.spot = -1; // the caption makes way for the headline, and nobody is named
+  draw();
   $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">↓</span></span>`;
   $('why').hidden = false;
   placeWhy();
@@ -261,9 +264,11 @@ function snap() {
 
 // The last two things that happened in the last 2.2 seconds, the older one above and fainter, so two that happen close
 // together both stay up long enough to read. It follows the clock alone, so scrubbing and pausing show the same words.
+// The man the newest line names is ringed on the board (see Board.players()).
 function caption() {
   const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && e.kind !== 'shed');
   setCaption(evs.slice(-2).map(e => e.text));
+  board.spot = evs.at(-1)?.who ?? -1;
 }
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
 // A line still up stays as it is, so a screen reader reads each line once, when it's new.
@@ -309,7 +314,7 @@ $('scrub').addEventListener('input', e => {
   cancelAnimationFrame(raf);
   state.t = (+e.target.value / 1000) * board.duration();
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
-  draw(); caption(); syncTransport();
+  caption(); draw(); syncTransport();
   if (state.phase === 'done') { showResult(); showWhy(); sayResult(); } else $('why').hidden = true;
 });
 for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { state.speed = +b.dataset.speed; save(); syncTransport(); });

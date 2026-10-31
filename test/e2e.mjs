@@ -291,6 +291,30 @@ for (const side of ['O', 'D']) {
   await p.close();
 }
 
+// The man the caption names is ringed on the board while his line is up, scrubbing as well as playing: the receiver at
+// the throw. Nobody is ringed before the snap or once the caption makes way for the headline.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  const ring = await p.evaluate(() => {
+    const { state, board, pause, lineUp } = window.chalkTalk, s = document.getElementById('scrub');
+    pause(); lineUp();
+    const before = board.spot;
+    const throwEv = state.play.events.find(e => e.kind === 'throw');
+    s.disabled = false; s.value = String(Math.round((throwEv.t + 0.05) / board.duration() * +s.max)); s.dispatchEvent(new Event('input'));
+    const at = { spot: board.spot, who: throwEv.who, caption: document.getElementById('caption').textContent.includes(throwEv.text) };
+    s.value = s.max; s.dispatchEvent(new Event('input'));
+    return { before, ...at, end: board.spot };
+  });
+  assert.equal(ring.before, -1, 'somebody is ringed before the snap');
+  assert.ok(ring.caption, 'the throw is in the caption');
+  assert.equal(ring.spot, ring.who, 'at the throw the ring is on somebody other than the receiver');
+  assert.equal(ring.end, -1, 'somebody is still ringed once the headline replaces the caption');
+  await p.close();
+}
+
 // Two things that happen close together both stay up long enough to read: the caption shows the last two from the
 // last 2.2 seconds, the older one above. It follows the clock, so scrubbing back and forth shows the same words.
 {

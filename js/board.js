@@ -20,6 +20,7 @@ export class Board {
     this.showTheirs = false;
     this.mineTeam = 'O';
     this.selected = -1;
+    this.spot = -1; // the man the caption names, ringed while nobody is picked out
     this.colors = {};
     this.grain = null;
     this.resize();
@@ -303,6 +304,14 @@ export class Board {
         const away = (p.team === 'O') !== this.flip ? 1 : -1;
         ctx.fillText(p.label, X, Y + away * (r + fs * 0.62));
       }
+    }
+    // The man the caption names: a dashed ring in the bright colour, so he can be found in a crowd.
+    if (this.spot >= 0 && this.selected < 0) {
+      const { x, y } = this.pos(this.t, this.spot);
+      ctx.globalAlpha = 1; ctx.strokeStyle = this.colors.hot; ctx.lineWidth = Math.max(2.2, lw);
+      ctx.setLineDash([r * 0.7, r * 0.45]);
+      ctx.beginPath(); ctx.arc(this.sx(x), this.sy(y), r * 2.1, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
     }
     ctx.globalAlpha = 1;
   }
