@@ -250,7 +250,7 @@ $('why').addEventListener('click', () => {
   const stage = document.querySelector('.stage');
   const under = innerWidth < 960 && getComputedStyle(stage).position === 'sticky' ? stage.offsetHeight + 8 : 12;
   const top = $('result').getBoundingClientRect().top + scrollY - under;
-  scrollTo({ top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  scrollTo({ top, behavior: smooth() });
   $('resHead').focus({ preventScroll: true });
 });
 
@@ -307,7 +307,7 @@ function syncTransport() {
 $('snap').addEventListener('click', snap);
 // The result card's buttons go away with it as the next play lines up, so the focus goes on to Snap.
 const toSnap = () => $('snap').focus({ preventScroll: true });
-$('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(max-width: 959px)').matches) $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+$('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(max-width: 959px)').matches) $('board').scrollIntoView({ block: 'nearest', behavior: smooth() }); });
 $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() : play()));
 $('scrub').addEventListener('input', e => {
   if (!state.play) return;
@@ -448,7 +448,9 @@ function chips(host, label, items, current, pick, opts = {}) {
       b.setAttribute('aria-checked', String(it.id === current));
       b.dataset.key = `${label}:${it.id}`; // the same chip once the choosers are drawn again, for the keyboard's focus
       b.disabled = !!opts.disabled;
-      b.innerHTML = it.sub ? `${esc(it.name)} <small>${esc(it.sub)}</small>` : esc(it.name);
+      // The small print a screen reader says in full: "I-Form 21 personnel", not a bare "twenty-one". (The name still
+      // starts with the words on the chip, for speech input: WCAG 2.2, 2.5.3 Label in Name.)
+      b.innerHTML = it.sub ? `${esc(it.name)} <small>${esc(it.sub)}<span class="sr-only"> ${esc(it.subWord)}</span></small>` : esc(it.name);
       b.addEventListener('click', () => pick(it.id));
       row.append(b);
     }
@@ -480,6 +482,9 @@ function rove(group) {
   for (const b of all) b.tabIndex = b === on ? 0 : -1;
 }
 
+// A smooth scroll, unless reduced motion is asked for (WCAG 2.2, 2.3.3 Animation from Interactions).
+function smooth() { return matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'; }
+
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
 
 function offenseChooser(host, readonly) {
@@ -492,7 +497,7 @@ function offenseChooser(host, readonly) {
     if (state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was) rollTheirs();
     afterChange();
   };
-  chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel })), fm.id, id => set({ formation: id }), {
+  chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel, subWord: 'personnel' })), fm.id, id => set({ formation: id }), {
     disabled: readonly, blurb: `${fm.blurb} ${personnelWords(fm.personnel)}`,
   });
   chips(host, 'Strong side', [{ id: 'R', name: 'Right' }, { id: 'L', name: 'Left' }], state.off.flip ? 'L' : 'R', id => set({ flip: id === 'L' }), {
@@ -622,7 +627,7 @@ function newLook(e) {
   rollTheirs();
   afterChange();
   setCaption(state.side === 'D' && formation() === was ? 'New look: same formation, a new play.' : 'New look: they\'ve changed their call.');
-  $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  $('board').scrollIntoView({ block: 'nearest', behavior: smooth() });
 }
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);

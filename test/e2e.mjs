@@ -969,6 +969,34 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Names a screen reader says, from the accessibility tree: the labels toggle, the speeds, a formation with its personnel,
+// the card's close button and the board as a picture. And with reduced motion asked for, nothing scrolls smoothly.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, reducedMotion: 'reduce' });
+  const p = await c.newPage();
+  await p.goto(base);
+  const named = async (role, name) => (await p.getByRole(role, { name, exact: true }).count()) === 1;
+  for (const [role, name] of [['button', 'Position labels'], ['radio', 'Half speed'], ['radio', 'Full speed'], ['radio', 'I-Form 21 personnel'],
+    ['radio', 'Gun Trips 11 personnel'], ['img', 'The field, with the offense drawn as circles and the defense as Xs']]) {
+    assert.ok(await named(role, name), `no ${role} named "${name}"`);
+  }
+  await p.evaluate(() => { const { state, board } = window.chalkTalk, i = state.play.players.findIndex(q => q.label === 'QB'), r = board.cv.getBoundingClientRect(), q = board.pos(0, i); window.qbAt = { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) }; });
+  const qb = await p.evaluate(() => window.qbAt);
+  await p.mouse.click(qb.x, qb.y);
+  assert.ok(await named('button', 'Close the player card'), 'the card\'s close button has no name of its own');
+  const smooth = await p.evaluate(() => {
+    const asked = [], into = Element.prototype.scrollIntoView, to = window.scrollTo;
+    Element.prototype.scrollIntoView = function (o) { asked.push(o?.behavior); };
+    window.scrollTo = o => { asked.push(o?.behavior); };
+    const { snap, finish } = window.chalkTalk;
+    for (const id of ['again', 'newLook', 'why']) { snap(); finish(); document.getElementById(id).click(); }
+    Element.prototype.scrollIntoView = into; window.scrollTo = to;
+    return asked;
+  });
+  assert.ok(smooth.length >= 3 && smooth.every(b => b !== 'smooth'), `with reduced motion the page scrolled: ${smooth}`);
+  await c.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
