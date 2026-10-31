@@ -121,6 +121,16 @@ test('the rush read tells the truth: only blitzers are drawn as blitzers, and on
   assert.ok(picked > 0, 'no unassigned rusher was ever picked up, so the check above proved nothing');
 });
 
+test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
+  const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
+  for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {
+    const two = box(fm, fr, 'c2').box, one = box(fm, fr, 'c3').box;
+    assert.ok(one > two, `${fm} vs ${fr}: Cover 3 brings a safety down, but the box shows ${one} against Cover 2's ${two}`);
+  }
+  assert.equal(box('trips', 'over', 'c3').blockers, 6, 'Gun Trips: the five linemen and the tight end block on a run');
+  assert.equal(box('iform', 'over', 'c3').blockers, 7, 'I-Form: the five linemen, the tight end and the fullback');
+});
+
 test('a back\'s flat route and check-down end past the line, and Flood sends one back to the flat', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) {
     const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip }, 5);

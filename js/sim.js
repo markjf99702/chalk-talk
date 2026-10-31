@@ -394,9 +394,15 @@ function assignRun(S) {
   if (S.FB && play.scheme !== 'power') S.FB.job.lead = true;
 }
 
+// The box: from the end of the line on each side (a tight end within 8 yards of the ball, attached or on the wing, or
+// else the tackle) out to 3 yards past it, and up to 8 yards deep. The blockers are the men a run hands blocks to
+// (see assignRun): the line, the fullback and the tight ends within 8 yards.
 function boxCount(S) {
-  const box = S.D.filter(d => Math.abs(d.x) < 6.5 && d.y < 7.6).length;
-  const blockers = S.O.filter(pl => pl.cls === 'ol' || (pl.cls === 'te' && Math.abs(pl.x) < 6 && pl.y > -1) || pl.cls === 'fb').length;
+  const te = pl => pl.cls === 'te' && Math.abs(pl.x) < 8;
+  const end = sd => Math.max(3, ...S.O.filter(pl => te(pl) && Math.sign(pl.x) === sd).map(pl => Math.abs(pl.x)));
+  const edge = { [1]: end(1), [-1]: end(-1) };
+  const box = S.D.filter(d => Math.abs(d.x) < edge[Math.sign(d.x) || 1] + 3 && d.y < 8).length;
+  const blockers = S.O.filter(pl => pl.cls === 'ol' || te(pl) || pl.cls === 'fb').length;
   const high = S.D.filter(d => d.cls === 's' && d.y > 10.5).length;
   return { box, blockers, high };
 }

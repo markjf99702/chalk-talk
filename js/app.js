@@ -10,7 +10,7 @@ const $ = id => document.getElementById(id);
 const byId = (list, id) => list.find(x => x.id === id) || list[0];
 
 const RUN_NOTES = {
-  iz: 'Inside zone works when there are as many blockers as defenders in the box. The back-side end is left unblocked on purpose, because the back reads the play-side blocks and may cut it back behind the flow.',
+  iz: 'Inside zone works when there are as many blockers as defenders in the box.',
   oz: 'Outside zone stretches the defense sideways. If the line reaches the edge, the back gets outside; if the defense flows too fast to stop that, a cutback lane opens behind it.',
   power: 'Power brings an extra blocker to the hole, the pulling guard, and wins with numbers at the point of attack. It loses to quick penetration and to an extra defender in the box.',
   draw: 'The draw wants defenders who think pass: rushers running up the field past the back, linebackers dropping into coverage. Against a blitz it runs into the rushers.',
@@ -424,16 +424,26 @@ function coachNote(P) {
     const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
     reads.push(`Rush: ${rushers} rushers against ${pro.length} in protection (${who})${P.cameFree.length ? `; ${P.cameFree.map(i => nm(P, i)).join(' and ')} came unblocked` : ''}.`);
   } else if (P.unblocked.length) {
-    reads.push(`Unblocked by design: ${P.unblocked.map(i => nm(P, i)).join(', ')}.`);
+    reads.push(`Unblocked by design: ${P.unblocked.map(i => nm(P, i, true)).join(', ')}.`);
   }
-  const note = pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + (P.box.box > P.box.blockers ? ` Here the defense had ${P.box.box - P.box.blockers} more in the box than the offense had blockers.` : P.box.box < P.box.blockers ? ' Here the offense had more blockers than the defense had defenders in the box: a good look to run against.' : ' Here the numbers in the box were even.');
+  // On inside zone the line works to the play side; when that leaves the back-side end alone, the note says who he is.
+  const backEnd = pl.id === 'iz' && P.unblocked.some(i => P.players[i].label === 'DE' && P.players[i].x * playSide(P) < 0)
+    ? ' The back-side end was left unblocked: the line works to the play side, so he\'s the man a cutback has to beat.' : '';
+  const note = pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd + (P.box.box > P.box.blockers ? ` Here the defense had ${P.box.box - P.box.blockers} more in the box than the offense had blockers.` : P.box.box < P.box.blockers ? ' Here the offense had more blockers than the defense had defenders in the box: a good look to run against.' : ' Here the numbers in the box were even.');
   return { note, reads };
 }
 
-// A short name for a defender, for the notes ("the Will", "the strong safety").
-function nm(P, i) {
+// Which way a run goes: +1 to the offense's right, -1 to its left.
+const playSide = P => Math.sign(byId(PLAYS, P.call.play).aim || 1) * (P.call.flip ? -1 : 1);
+
+// A short name for a defender, for the notes ("the Will", "the strong safety"). On a run, the ends and linebackers are
+// named by the side of the play they're on ("the back-side end", "the Will on the back side").
+function nm(P, i, run) {
   const p = P.players[i];
   const names = { DT: 'the defensive tackle', NT: 'the nose', M: 'the Mike', W: 'the Will', S: 'the Sam', J: 'the Jack', FS: 'the free safety', SS: 'the strong safety', NB: 'the nickel back', CB: 'a corner', DE: 'a defensive end' };
+  const side = run && (p.x * playSide(P) >= 0 ? 'play' : 'back');
+  if (side && p.label === 'DE') return `the ${side}-side end`;
+  if (side && 'SMWJ'.includes(p.label) && p.cls === 'lb') return `${names[p.label]} on the ${side} side`;
   return names[p.label] || `the ${p.label}`;
 }
 
