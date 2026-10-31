@@ -98,6 +98,12 @@ assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result ha
 assert.ok(await page.$$eval('#story li', li => li.length) >= 1, 'the play-by-play has at least one line');
 assert.ok((await page.textContent('#note')).trim().length > 40, 'the coach\'s note is there');
 assert.match(await page.textContent('#theirsHint'), /They called/, 'their call is shown after the snap');
+// One name for one thing: Snap again is a new snap of the same calls, here and in the result card, and it says so. The
+// play button watches this one again.
+assert.equal(await page.textContent('#snap'), 'Snap again');
+assert.equal(await page.textContent('#again'), 'Snap again');
+assert.equal(await page.getAttribute('#play', 'aria-label'), 'Watch it again', 'at the end the play button watches it again');
+assert.equal(await page.textContent('#actionsNote'), 'Snap again: the same two calls, played out fresh. New look: the other coach changes his call.');
 // The board shows the headline, and a button down to the explanation.
 assert.ok(await page.isVisible('#why'), 'the board points to the explanation when the play ends');
 assert.equal((await page.textContent('#why')).replace(/\s+/g, ' ').trim(), `${await page.textContent('#resHead')} · Why ↓`);
@@ -426,7 +432,7 @@ for (const side of ['O', 'D']) {
   await wide.close();
 }
 
-// The smallest phones (320 px wide): after the first snap, when the button reads "Run it again", every control under
+// The smallest phones (320 px wide): after the first snap, when the button reads "Snap again", every control under
 // the board still fits, and nothing scrolls sideways.
 for (const width of [320, 360, 375]) {
   const small = await browser.newContext({ viewport: { width, height: 568 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
@@ -598,6 +604,20 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.click('#theirsLook');
   assert.match(await p.textContent('#matchup'), /coverage hidden/, 'a new look is hidden until the snap');
   assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap/);
+  // The board says what New look did, even when it can't be seen: on defense a new play from the same formation lines up
+  // just like the last one.
+  assert.equal(await p.textContent('#caption'), 'New look: they\'ve changed their call.');
+  await p.click('[data-side="D"]');
+  const looks = await p.evaluate(() => {
+    const { state } = window.chalkTalk, seen = {};
+    for (let k = 0; k < 80; k++) {
+      const was = `${state.off.formation} ${state.off.flip}`;
+      document.getElementById('theirsLook').click();
+      seen[was === `${state.off.formation} ${state.off.flip}` ? 'same' : 'new'] = document.getElementById('caption').textContent;
+    }
+    return seen;
+  });
+  assert.deepEqual(looks, { same: 'New look: same formation, a new play.', new: 'New look: they\'ve changed their call.' });
   await p.click('#auto');
   assert.equal(await p.isVisible('#theirsLook'), false, 'New look is there when you call both sides');
   await p.context().close();

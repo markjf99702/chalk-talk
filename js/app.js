@@ -247,11 +247,13 @@ function setCaption(lines) {
 
 function syncTransport() {
   const pre = state.phase === 'pre';
-  $('snap').textContent = pre ? 'Snap' : 'Run it again';
+  $('snap').textContent = pre ? 'Snap' : 'Snap again';
   $('play').disabled = pre;
   $('scrub').disabled = pre;
-  $('play').innerHTML = state.phase === 'playing' ? '<span aria-hidden="true">❚❚</span>' : '<span aria-hidden="true">▶</span>';
-  $('play').setAttribute('aria-label', state.phase === 'playing' ? 'Pause' : 'Play');
+  // At the end of the play it watches the same snap again, from the start.
+  const [glyph, name] = { playing: ['❚❚', 'Pause'], done: ['↺', 'Watch it again'] }[state.phase] || ['▶', 'Play'];
+  $('play').innerHTML = `<span aria-hidden="true">${glyph}</span>`;
+  $('play').setAttribute('aria-label', name);
   if (pre) $('scrub').value = '0';
   for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-checked', String(+b.dataset.speed === state.speed));
   $('labels').setAttribute('aria-pressed', String(state.labels));
@@ -475,7 +477,15 @@ $('auto').addEventListener('change', e => {
   afterChange();
 });
 // New look: the other coach picks again. It's in the result card after a play, and in his card before the snap.
-function newLook() { rollTheirs(); afterChange(); $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+// The board says what it did until the snap, even when nothing there shows it: calling the defense, a new play from the
+// same formation and strong side lines up just like the last one.
+function newLook() {
+  const formation = () => `${state.off.formation} ${state.off.flip}`, was = formation();
+  rollTheirs();
+  afterChange();
+  setCaption(state.side === 'D' && formation() === was ? 'New look: same formation, a new play.' : 'New look: they\'ve changed their call.');
+  $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);
 
@@ -522,6 +532,7 @@ function showResult() {
   ul.textContent = '';
   for (const r of reads) { const li = document.createElement('li'); li.textContent = r; ul.append(li); }
   resetShare();
+  $('actionsNote').textContent = `Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
   $('result').hidden = false;
   syncTheirs();
 }

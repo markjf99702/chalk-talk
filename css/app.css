@@ -379,6 +379,7 @@ button:disabled { cursor: default; }
   font-size: 14px;
 }
 .ghost:disabled { opacity: .5; }
+.actions-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .share-msg { margin: 8px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .share-msg:empty { display: none; }
 /* 16px, so a phone doesn't zoom in when it's focused */
@@ -440,7 +441,7 @@ button:disabled { cursor: default; }
   .side-pick { width: 100%; }
   .side-pick button { flex: 1; padding: 8px 10px; }
   .snap { padding: 8px 14px; font-size: 17px; }
-  /* the scrubber on a row of its own under the buttons: room for "Run it again", and a longer scrubber to drag */
+  /* the scrubber on a row of its own under the buttons: room for "Snap again", and a longer scrubber to drag */
   .transport { flex-wrap: wrap; gap: 6px; }
   .transport .seg { margin-left: auto; }
   #scrub { order: 1; flex: 1 0 100%; margin: 0; height: 22px; }
@@ -458,7 +459,7 @@ button:disabled { cursor: default; }
   .jd-foot { align-items: center; }
   .jd-foot a { padding: 12px 4px; }
 }
-/* the narrowest phones: room for "Run it again" beside them */
+/* the narrowest phones: room for "Snap again" beside them */
 @media (pointer: coarse) and (max-width: 359px) {
   .seg.small button { min-width: 36px; }
   .transport { column-gap: 4px; }
