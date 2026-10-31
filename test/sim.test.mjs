@@ -208,6 +208,17 @@ test('a run names the hole: one line, when the ball carrier gets to the line aft
   assert.ok(named > 100, `only ${named} runs got to the line`);
 });
 
+test('every line of the play-by-play that names a man says which man, for the board to point at', () => {
+  let seed = 4000;
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    const r = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 }, seed++);
+    for (const e of r.events) {
+      if (e.text === 'It lands out of bounds. Incomplete.') continue; // names nobody
+      assert.ok(Number.isInteger(e.who) && e.who >= 0 && e.who < 22, `${pl.id} seed ${seed - 1}: "${e.text}" (${e.kind}) has nobody to point at`);
+    }
+  }
+});
+
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
   const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
   for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {

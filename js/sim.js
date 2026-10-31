@@ -527,13 +527,13 @@ function arrive(S) {
   const r = b.target >= 0 ? S.P[b.target] : null;
   const P = { x: b.tx, y: b.ty };
   if (!r) { b.state = 'dead'; ev(S, 'away', 'It lands out of bounds. Incomplete.'); return finish(S, 'throwaway'); }
-  if (Math.abs(P.x) > SIDELINE) { b.state = 'dead'; ev(S, 'inc', `Thrown out of bounds, out of ${name(S, r)}'s reach. Incomplete.`); return finish(S, 'incomplete'); }
+  if (Math.abs(P.x) > SIDELINE) { b.state = 'dead'; ev(S, 'inc', `Thrown out of bounds, out of ${name(S, r)}'s reach. Incomplete.`, { who: r.i }); return finish(S, 'incomplete'); }
   const rd = dist(r, P);
   let near = null, nd = 99;
   for (const d of S.D) { const dd = dist(d, P); if (dd < nd) { nd = dd; near = d; } }
   if (rd > 1.5) {
     if (nd < 1.1 && R.chance(0.2)) { b.state = 'dead'; ev(S, 'int', `The throw is off target, and ${name(S, near)} picks it off.`, { who: near.i }); return finish(S, 'int', near); }
-    b.state = 'dead'; ev(S, 'inc', `Off target: ${name(S, r)} can't get to it. Incomplete.`); return finish(S, 'incomplete');
+    b.state = 'dead'; ev(S, 'inc', `Off target: ${name(S, r)} can't get to it. Incomplete.`, { who: r.i }); return finish(S, 'incomplete');
   }
   if (nd < rd + 0.25 && nd < 1.0) {
     const pi = nd < rd - 0.2 ? 0.13 : 0.04;
@@ -665,7 +665,7 @@ function qb(S, pl) {
   }
   if (!hasBall) return;
   if (S.fakeEnd && t < S.fakeEnd) return;
-  if (S.fakeEnd && !S.faked) { S.faked = true; ev(S, 'fake', `Play-action fake to ${name(S, S.RB)}.`); }
+  if (S.fakeEnd && !S.faked) { S.faked = true; ev(S, 'fake', `Play-action fake to ${name(S, S.RB)}.`, { who: S.RB.i }); }
   // Under pressure: slide away from the nearest rusher.
   let rn = null, rd = 99;
   for (const d of S.D) if (d.eng < 0 && d.job.kind === 'rush') { const dd = dist(d, pl); if (dd < rd) { rd = dd; rn = d; } }
@@ -740,7 +740,7 @@ function throwAway(S, pl) {
   const d = hyp(P.x - pl.x, P.y - pl.y);
   S.ball.target = -1;
   throwTo(S, null, P, 0.1 + d / ballSpeed(d), '');
-  ev(S, 'away', `${cap(name(S, pl, true))} throws it away.`);
+  ev(S, 'away', `${cap(name(S, pl, true))} throws it away.`, { who: pl.i });
 }
 
 // Where the receiver will be when the ball gets there, and how close anyone else can get by then.
@@ -1198,13 +1198,13 @@ function hole(S) {
 function contact(S) {
   const c = S.carrier, t = S.t, R = S.R;
   if (!c || S.dead) return;
-  if (Math.abs(c.x) > SIDELINE) { ev(S, 'oob', `${cap(name(S, c))} is forced out of bounds.`); return finish(S, 'oob'); }
+  if (Math.abs(c.x) > SIDELINE) { ev(S, 'oob', `${cap(name(S, c))} is forced out of bounds.`, { who: c.i }); return finish(S, 'oob'); }
   if (c.y > 60) return stillRunning(S, c);
   const qbHeld = c === S.QB && S.play.type === 'pass' && !S.caught;
   // Near the sideline, a defender on his inside shoulder runs him out.
   if (Math.abs(c.x) > SIDELINE - 1.3 && !qbHeld && S.D.some(d => d.eng < 0 && dist(d, c) < 1.7 && Math.abs(d.x) < Math.abs(c.x) + 0.3) && R.chance(0.25)) {
     c.x = Math.sign(c.x) * (SIDELINE + 0.3);
-    ev(S, 'oob', `${cap(name(S, c))} is pushed out of bounds.`);
+    ev(S, 'oob', `${cap(name(S, c))} is pushed out of bounds.`, { who: c.i });
     return finish(S, 'oob');
   }
   for (const d of S.D) {
@@ -1231,7 +1231,7 @@ function contact(S) {
     }
     d.missUntil = t + 0.8;
     c.vx *= 0.75; c.vy *= 0.75;
-    if (qbHeld) { ev(S, 'escape', `${cap(name(S, S.QB, true))} slips out of ${name(S, d)}'s grasp.`); S.QB.tx = S.QB.x - (d.x - S.QB.x) * 2; continue; }
+    if (qbHeld) { ev(S, 'escape', `${cap(name(S, S.QB, true))} slips out of ${name(S, d)}'s grasp.`, { who: S.QB.i }); S.QB.tx = S.QB.x - (d.x - S.QB.x) * 2; continue; }
     ev(S, 'miss', `${cap(name(S, c))} breaks a tackle from ${name(S, d)}.`, { who: d.i });
   }
   if (qbHeld && t > 6) throwAway(S, S.QB);
@@ -1239,7 +1239,7 @@ function contact(S) {
 
 // The board stops counting at 60 yards, and at its clock: the carrier is still going, and the result says it's 60-plus.
 function stillRunning(S, c) {
-  ev(S, 'long', `${cap(name(S, c))} is still running at ${Math.round(c.y)} yards: the board stops counting here.`);
+  ev(S, 'long', `${cap(name(S, c))} is still running at ${Math.round(c.y)} yards: the board stops counting here.`, { who: c.i });
   return finish(S, 'long');
 }
 
