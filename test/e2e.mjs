@@ -250,6 +250,15 @@ for (const side of ['O', 'D']) {
     assert.deepEqual(seen.on, [], `calling the ${side === 'O' ? 'offense' : 'defense'}, at ${t} s`);
     if (t) assert.ok(seen.caption.length > 5, `a caption at ${t} s`);
   }
+  // At the end, the button down to the explanation stays on the board and off the ball.
+  const end = await p.evaluate(() => {
+    const { board } = window.chalkTalk, s = document.getElementById('scrub');
+    s.value = s.max; s.dispatchEvent(new Event('input'));
+    const cv = board.cv.getBoundingClientRect(), b = document.getElementById('why').getBoundingClientRect();
+    const { a } = board.at(board.t), x = cv.left + board.sx(a.ball[0]), y = cv.top + board.sy(a.ball[1]);
+    return { inside: b.left >= cv.left && b.right <= cv.right && b.top >= cv.top && b.bottom <= cv.bottom, onBall: x > b.left - 6 && x < b.right + 6 && y > b.top - 6 && y < b.bottom + 6 };
+  });
+  assert.deepEqual(end, { inside: true, onBall: false }, `the button at the end, calling the ${side === 'O' ? 'offense' : 'defense'}`);
   await p.close();
 }
 

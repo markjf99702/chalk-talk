@@ -172,6 +172,22 @@ function showWhy() {
   setCaption('');
   $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">↓</span></span>`;
   $('why').hidden = false;
+  placeWhy();
+}
+// The button sits along the deep end of the board, but at the end of a deep pass the receiver and the defenders around
+// him can be there too: it goes in the middle, or to the left or the right if that covers fewer of them.
+function placeWhy() {
+  const why = $('why');
+  if (why.hidden || !state.play) return;
+  why.style.left = why.style.transform = '';
+  const cv = board.cv.getBoundingClientRect(), b = why.getBoundingClientRect();
+  const r = board.radius(), reach = r * 2.4 + 4, top = b.top - cv.top, bottom = b.bottom - cv.top;
+  const spots = state.play.players.map(p => { const at = board.pos(board.t, p.i); return [board.sx(at.x), board.sy(at.y)]; })
+    .filter(([, y]) => y + reach > top && y - reach < bottom);
+  const covers = left => spots.filter(([x]) => x + r + 2 > left && x - r - 2 < left + b.width).length;
+  const middle = b.left - cv.left, side = Math.min(middle, 8);
+  const best = [middle, side, cv.width - side - b.width].reduce((a, c) => (covers(c) < covers(a) ? c : a));
+  if (best !== middle) { why.style.left = `${best}px`; why.style.transform = 'none'; }
 }
 // The result card, just under the board where the board stays at the top of a phone, or near the top.
 $('why').addEventListener('click', () => {
@@ -739,7 +755,7 @@ if (link === 'bad') badLink();
 
 // A board under about 620 px wide (a phone, or the two-column layout on a small laptop) gets the compact player card.
 function narrow() { return $('board').parentElement.classList.contains('narrow'); }
-const fit = () => { board.resize(); $('board').parentElement.classList.toggle('narrow', board.w < 620); if (!$('who').hidden) syncMore(); draw(); };
+const fit = () => { board.resize(); $('board').parentElement.classList.toggle('narrow', board.w < 620); if (!$('who').hidden) syncMore(); draw(); placeWhy(); };
 fit();
 new ResizeObserver(fit).observe($('board'));
 const recolor = () => { board.readColors(); draw(); };
