@@ -326,21 +326,26 @@ $('newLook').addEventListener('click', () => { rollTheirs(); afterChange(); $('b
 
 // ---------------------------------------------------------------- the result
 
+// Whole yards, as the headline says them. The simulator spots the ball to the half yard, and a half rounds away from
+// zero, so a 3.5-yard run is a gain of 4 and a success in the headline, the verdict over it and the chart alike.
+const gained = res => Math.sign(res.yards) * Math.round(Math.abs(res.yards));
+const success = res => (res.kind === 'run' || res.kind === 'catch') && gained(res) >= 4;
+
 function headline(res) {
-  const n = Math.round(Math.abs(res.yards));
+  const n = Math.abs(gained(res));
   const yd = v => `${v} yard${v === 1 ? '' : 's'}`;
   switch (res.kind) {
     case 'incomplete': return 'Incomplete';
     case 'int': return 'Intercepted';
     case 'throwaway': return 'Thrown away';
     case 'sack': return n ? `Sacked for a loss of ${yd(n)}` : 'Sacked at the line';
-    default: return res.yards >= 0.5 ? `Gain of ${yd(n)}` : res.yards <= -0.5 ? `Loss of ${yd(n)}` : 'No gain';
+    default: return gained(res) > 0 ? `Gain of ${yd(n)}` : gained(res) < 0 ? `Loss of ${yd(n)}` : 'No gain';
   }
 }
 
 function showResult() {
   const P = state.play, res = P.result;
-  const offWin = (res.kind === 'run' || res.kind === 'catch') && res.yards >= 4;
+  const offWin = success(res);
   $('resKicker').textContent = offWin ? 'A win for the offense' : 'A win for the defense';
   $('resKicker').dataset.win = offWin ? 'O' : 'D';
   $('resHead').textContent = headline(res);
@@ -466,7 +471,7 @@ async function runChart() {
         slice = performance.now();
       }
       const res = simulate({ ...r.call, flip: k % 2 === 1 }, newSeed()).result;
-      yds += res.yards; if ((res.kind === 'run' || res.kind === 'catch') && res.yards >= 4) ok++;
+      yds += res.yards; if (success(res)) ok++;
     }
     r.avg = yds / SNAPS; r.rate = ok / SNAPS;
     drawBars();

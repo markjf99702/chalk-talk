@@ -123,6 +123,23 @@ assert.equal(await page.getByRole('radio', { name: 'Blitz' }).isDisabled(), true
 await page.click('#runChart');
 await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 11, null, { timeout: 30000 });
 
+// The headline and the verdict over it round the same way: the simulator spots the ball to the half yard, and a
+// 3.5-yard run reads "Gain of 4 yards", the line where a play counts as a win for the offense.
+const close = await page.evaluate(() => {
+  const { state, board, simulate, lineUp, finish } = window.chalkTalk;
+  Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false });
+  Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four' });
+  for (let seed = 1; seed < 3000; seed++) {
+    const res = simulate({ ...state.off, ...state.def }, seed).result;
+    if (res.kind !== 'run' || res.yards !== 3.5) continue;
+    state.seed = seed; lineUp(); state.t = board.duration(); finish();
+    return { seed, head: document.getElementById('resHead').textContent, kicker: document.getElementById('resKicker').textContent };
+  }
+});
+assert.ok(close, 'no 3.5-yard run in 3,000 snaps of Inside Zone');
+assert.equal(close.head, 'Gain of 4 yards', `seed ${close.seed}`);
+assert.equal(close.kicker, 'A win for the offense', `"Gain of 4 yards" under "${close.kicker}" (seed ${close.seed})`);
+
 // A shared link opens the exact same play.
 await page.click('[data-side="O"]');
 await page.click('#snap');
