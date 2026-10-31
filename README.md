@@ -7,7 +7,7 @@
 <p align="center">
   <img src="docs/phone-call.png" alt="The board before the snap: Gun Trips against a nickel defense, with the routes for Smash drawn in white chalk and the defense's alignment in yellow Xs" width="250">
   &nbsp;
-  <img src="docs/phone-play.png" alt="The same play two seconds after the snap: chalk trails show where everyone went, the zone drops are shaded, and a caption reads 'The quarterback throws to the H on the corner, his first read.'" width="250">
+  <img src="docs/phone-play.png" alt="The same play two seconds after the snap: chalk trails show where everyone went, the zone drops are shaded, and a caption reads 'The quarterback throws to the H on a corner route, his first read.'" width="250">
   &nbsp;
   <img src="docs/phone-result.png" alt="The result card: 'A win for the offense. Gain of 19 yards', the play-by-play, and a coach's note explaining why Smash beats Cover 2" width="250">
 </p>
