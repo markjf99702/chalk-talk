@@ -277,6 +277,10 @@ export class Board {
   }
 
   radius() { return Math.max(5, Math.min(10.5, this.k * 0.62)); }
+  // The players' labels: their size, and how far below a player's mark his goes (above it, when it's negative). Offense
+  // labels sit on their own side of the ball, defense labels on theirs.
+  labelSize() { return Math.max(8.5, Math.min(12, this.radius() * 1.15)); }
+  labelDy(p) { return ((p.team === 'O') !== this.flip ? 1 : -1) * (this.radius() + this.labelSize() * 0.62); }
 
   players() {
     const { ctx, play } = this;
@@ -285,7 +289,7 @@ export class Board {
     const carrier = a.c;
     const lw = Math.max(1.8, Math.min(2.8, r * 0.3));
     ctx.lineWidth = lw; ctx.lineCap = 'round';
-    const fs = Math.max(8.5, Math.min(12, r * 1.15));
+    const fs = this.labelSize();
     ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const p of play.players) {
@@ -315,9 +319,7 @@ export class Board {
       }
       if (this.labels) {
         ctx.globalAlpha = dim ? 0.45 : 0.92;
-        // offense labels sit on their own side of the ball, defense labels on theirs
-        const away = (p.team === 'O') !== this.flip ? 1 : -1;
-        ctx.fillText(p.label, X, Y + away * (r + fs * 0.62));
+        ctx.fillText(p.label, X, Y + this.labelDy(p));
       }
     }
     // The man the caption names: a dashed ring in the bright colour, so he can be found in a crowd.

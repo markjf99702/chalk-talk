@@ -437,6 +437,53 @@ for (const side of ['O', 'D']) {
   await closed('when it is watched again');
   await p.close();
 }
+// Where the card goes on a phone: at the end of the play, a lineman's or the quarterback's card stays off the button
+// down to the explanation, on either side of the ball. Before the snap a safety's card doesn't cover the formation
+// (his deep spot is near the middle of a phone's board, and the card is a third of it): it covers three others at most,
+// and never him.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  const box = sel => p.evaluate(sel => { const b = document.querySelector(sel).getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; }, sel);
+  const tap = async label => {
+    const at = await p.evaluate(label => {
+      const { board, state } = window.chalkTalk, i = state.play.players.findIndex(q => q.label === label);
+      const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
+      return { i, x: r.left + board.sx(q.x), y: r.top + board.sy(q.y), r: board.radius() };
+    }, label);
+    await p.evaluate(() => { window.chalkTalk.board.selected = -1; document.getElementById('who').hidden = true; });
+    for (let n = 0; n < 4 && await p.evaluate(() => window.chalkTalk.board.selected) !== at.i; n++) await p.mouse.click(at.x, at.y);
+    assert.match(await p.textContent('#whoPos'), new RegExp(`^${label} ·`), `tapping the ${label}`);
+    const c = await box('#who');
+    assert.ok(!(at.x > c.l && at.x < c.r && at.y + at.r > c.t && at.y - at.r < c.b), `the ${label}'s card covers him`);
+    return { ...at, c };
+  };
+  for (const side of ['O', 'D']) {
+    const team = side === 'O' ? 'offense' : 'defense';
+    await p.goto(base + `#p=${side}.trips.smash.0.nickel.c2.four.15`);
+    await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+    await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input')); });
+    const why = await box('#why');
+    for (const label of ['LT', 'RT', 'QB']) {
+      const { c } = await tap(label);
+      assert.ok(!(c.l < why.r && why.l < c.r && c.t < why.b && why.t < c.b), `calling the ${team}, the ${label}'s card at the end of the play is over the button down to the explanation (card ${Math.round(c.t)}-${Math.round(c.b)}, button ${Math.round(why.t)}-${Math.round(why.b)})`);
+    }
+    for (const link of [`#p=${side}.trips.smash.0.nickel.c2.four.15`, `#p=${side}.iform.iz.0.over.c3.four.15`]) {
+      await p.evaluate(link => { location.hash = link; }, link);
+      await p.waitForFunction(() => window.chalkTalk.state.phase === 'playing');
+      await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
+      for (const label of ['FS', 'SS']) {
+        const at = await tap(label);
+        const hid = await p.evaluate(([i, c]) => {
+          const { board, state } = window.chalkTalk, cv = board.cv.getBoundingClientRect();
+          return state.play.players.filter(q => q.i !== i).filter(q => { const z = board.pos(board.t, q.i), x = cv.left + board.sx(z.x), y = cv.top + board.sy(z.y); return x > c.l && x < c.r && y > c.t && y < c.b; }).length;
+        }, [at.i, at.c]);
+        assert.ok(hid <= 3, `${link}: the ${label}'s card before the snap covers ${hid} other players`);
+      }
+    }
+  }
+  await p.close();
+}
 // On a crowded line a fingertip covers two or three players: tapping the same spot again picks the next one there,
 // nearest first, instead of closing the card. A tap that lands a little off a lineman reaches him in two taps, or three
 // where two others are nearer still (under center the quarterback is 4.5 px behind the center on a phone).

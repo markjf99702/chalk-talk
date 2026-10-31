@@ -233,6 +233,7 @@ function showWhy() {
   $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">↓</span></span>`;
   $('why').hidden = false;
   placeWhy();
+  placeWho(); // draw() placed the card before the button was there
 }
 // The button sits along the deep end of the board, but at the end of a deep pass the receiver and the defenders around
 // him can be there too: it goes in the middle, or to the left or the right if that covers fewer of them.
@@ -349,7 +350,7 @@ $('board').addEventListener('pointerup', e => {
   const near = board.hit(e.clientX - r.left, e.clientY - r.top);
   if (!near.length) { board.selected = -1; hideWho(); } else {
     const i = near[(near.indexOf(board.selected) + 1) % near.length];
-    board.selected = i; showWho(i); dropHint();
+    board.selected = i; dropHint(); showWho(i);
   }
   draw();
 });
@@ -420,24 +421,82 @@ function syncMore() {
 }
 
 // The card goes at the end of the board away from the player it's about, so it doesn't hide him, and while the play
-// runs it moves if he runs under it.
+// runs it moves if he runs under it. A narrow board places it by measure (see placeNarrow()).
 function placeWho(fresh) {
   const who = $('who');
   if (who.hidden || board.selected < 0 || !state.play) return;
   const at = board.pos(board.t, board.selected);
   const x = board.sx(at.x), y = board.sy(at.y), reach = board.radius() * 2.4 + 4; // his ring and his label
+  const him = { l: x - reach, r: x + reach, t: y - reach, b: y + reach };
+  if (narrow()) { placeNarrow(who, him, fresh); return; }
+  who.style.top = who.style.bottom = who.style.maxHeight = '';
   if (fresh) who.classList.toggle('top', y > board.h / 2);
-  const cv = board.cv.getBoundingClientRect();
-  const covered = () => {
-    const c = who.getBoundingClientRect();
-    const w = Math.min(c.right - cv.left, x + reach) - Math.max(c.left - cv.left, x - reach);
-    const h = Math.min(c.bottom - cv.top, y + reach) - Math.max(c.top - cv.top, y - reach);
-    return w > 0 && h > 0 ? h : 0;
-  };
+  const covered = () => { const c = onBoard(who); return meet(c, him) ? Math.min(c.b, him.b) - Math.max(c.t, him.t) : 0; };
   const before = covered();
   if (!before) return;
   who.classList.toggle('top');
   if (covered() > before) who.classList.toggle('top');
+}
+// Where an element is on the board, in the board's own pixels, and whether two such boxes overlap.
+function onBoard(el) {
+  const b = el.getBoundingClientRect(), cv = board.cv.getBoundingClientRect();
+  return { l: b.left - cv.left, r: b.right - cv.left, t: b.top - cv.top, b: b.bottom - cv.top };
+}
+const meet = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+
+// A narrow board's card takes up to half the board, so where it goes matters more. A new card tries both ends: off him
+// and his label, clear of the button down to the explanation and of the caption's words, and over as few of the others
+// as it can (the end farther from him, if that's a tie). Where neither end leaves him clear, or the one that does would
+// hide more than three others (a safety's card over the whole formation), it fits into the room between him and that
+// end instead, down to about the name and a line, with the rest scrolling. Once it's up it stays put, unless he runs
+// under it or the caption's words come up under it.
+function placeNarrow(who, him, fresh) {
+  const keep = [$('why'), ...$('caption').children].filter(el => !el.hidden && el.textContent).map(onBoard);
+  if (!fresh) { const c = onBoard(who); if (!meet(c, him) && !keep.some(k => meet(c, k))) return; }
+  const H = board.h, cap = H * 0.45, EDGE = 8;
+  who.style.top = who.style.bottom = '';
+  who.style.maxHeight = 'none';
+  const tall = who.offsetHeight, { l, r } = onBoard(who);
+  // the smallest it goes: his name and the first line of his job
+  const MIN = Math.ceil($('whoPos').getBoundingClientRect().bottom - who.getBoundingClientRect().top + parseFloat(getComputedStyle($('whoJob')).lineHeight) + 1);
+  // the others' marks, and their labels where they're shown
+  const others = state.play.players.filter(p => p.i !== board.selected).map(p => {
+    const q = board.pos(board.t, p.i), x = board.sx(q.x), y = board.sy(q.y);
+    return board.labels ? [[x, y], [x, y + board.labelDy(p)]] : [[x, y]];
+  });
+  const ends = [true, false].map(top => {
+    // Measured from this end's edge of the board: s is where the card starts, and he's at [near, far].
+    const from = k => (top ? [k.t, k.b] : [H - k.b, H - k.t]);
+    who.classList.toggle('top', top);
+    const s0 = parseFloat(getComputedStyle(who)[top ? 'top' : 'bottom']);
+    let s = s0;
+    for (const [a, b] of keep.filter(k => k.l < r && l < k.r).map(from).filter(([a]) => a < H / 2).sort((m, n) => m[0] - n[0])) {
+      if (a < s + Math.min(tall, cap) && b > s) s = b + 4;
+    }
+    const [near, far] = from(him);
+    let max = Math.min(cap, H - EDGE - s), full = true;
+    if (him.r <= l || him.l >= r || far <= s) { /* he's clear of it whatever its height */ }
+    else if (near < s) { full = false; max = 0; } // he's where it would start
+    else if (s + Math.min(tall, max) > near - 4) { // it would reach him: it stops short, starting at the edge if it can
+      full = false;
+      if (s === s0) s = Math.min(s, EDGE);
+      max = Math.min(cap, H - EDGE - s, near - 4 - s);
+    }
+    const h = Math.min(tall, Math.max(max, MIN));
+    const c = { l, r, t: top ? s : H - s - h, b: top ? s + h : H - s };
+    const hides = others.filter(o => o.some(([x, y]) => x > c.l && x < c.r && y > c.t && y < c.b)).length;
+    return { top, s, max, full, hides, far: Math.hypot((c.l + c.r) / 2 - (him.l + him.r) / 2, (c.t + c.b) / 2 - (him.t + him.b) / 2) };
+  });
+  const best = (list, tie) => list.sort((a, b) => a.hides - b.hides || tie(a, b))[0];
+  const whole = best(ends.filter(e => e.full), (a, b) => b.far - a.far);
+  const fitted = best(ends.filter(e => !e.full && e.max >= MIN), (a, b) => b.max - a.max);
+  const pick = (whole && whole.hides <= 3 ? whole : fitted && (!whole || fitted.hides < whole.hides) ? fitted : whole)
+    || ends.sort((a, b) => b.max - a.max)[0];
+  who.classList.toggle('top', pick.top);
+  who.style.top = pick.top ? `${pick.s}px` : 'auto';
+  who.style.bottom = pick.top ? 'auto' : `${pick.s}px`;
+  who.style.maxHeight = `${Math.max(pick.max, MIN)}px`;
+  syncMore();
 }
 
 // ---------------------------------------------------------------- choosers
@@ -1008,7 +1067,13 @@ if (link && link !== 'ok') badLink(link);
 
 // A board under about 620 px wide (a phone, or the two-column layout on a small laptop) gets the compact player card.
 function narrow() { return $('board').parentElement.classList.contains('narrow'); }
-const fit = () => { board.resize(); $('board').parentElement.classList.toggle('narrow', board.w < 620); if (!$('who').hidden) syncMore(); draw(); placeWhy(); };
+const fit = () => {
+  board.resize();
+  $('board').parentElement.classList.toggle('narrow', board.w < 620);
+  draw();
+  placeWhy();
+  if (!$('who').hidden) { syncMore(); placeWho(true); } // placed again for the board's new size
+};
 fit();
 new ResizeObserver(fit).observe($('board'));
 // A window dragged to a screen with another pixel density keeps its size in CSS pixels, so the ResizeObserver doesn't
