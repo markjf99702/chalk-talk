@@ -1,0 +1,301 @@
+// Everything a coach would put in the playbook: formations, plays, fronts, coverages, and what each position does.
+// Coordinates are in yards. x runs across the field (0 is the ball, + is the offense's right),
+// y runs down the field (0 is the line of scrimmage, + is toward the defense).
+// Formations and fronts are written with the strength to the right; the simulator mirrors them.
+
+export const SIDELINE = 26.67;
+export const HASH = 3.08;
+
+// Offensive line: the same five in every formation.
+const LINE = [['LT', -3, -0.6, 'ol'], ['LG', -1.5, -0.6, 'ol'], ['C', 0, -0.6, 'ol'], ['RG', 1.5, -0.6, 'ol'], ['RT', 3, -0.6, 'ol']];
+
+export const FORMATIONS = [
+  {
+    id: 'iform', name: 'I-Form', personnel: '21', under: true,
+    blurb: 'Two backs stacked behind the quarterback, a tight end, two receivers. Built to run.',
+    players: [['X', -17.5, -0.6, 'wr'], ...LINE, ['Y', 4.6, -0.6, 'te'], ['Z', 14, -1.4, 'wr'],
+      ['QB', 0, -1.3, 'qb'], ['FB', 0, -4.3, 'fb'], ['RB', 0, -6.8, 'rb']],
+  },
+  {
+    id: 'single', name: 'Singleback', personnel: '12', under: true,
+    blurb: 'One back, a tight end at each end of the line, and two receivers a step off the line.',
+    players: [['X', -16, -1.4, 'wr'], ['U', -4.6, -0.6, 'te'], ...LINE, ['Y', 4.6, -0.6, 'te'], ['Z', 16, -1.4, 'wr'],
+      ['QB', 0, -1.3, 'qb'], ['RB', 0, -6.3, 'rb']],
+  },
+  {
+    id: 'doubles', name: 'Gun Doubles', personnel: '10', under: false,
+    blurb: 'Shotgun with four receivers, two to each side, and one back beside the quarterback.',
+    players: [['X', -18, -0.6, 'wr'], ['H', -10, -1.4, 'wr'], ...LINE, ['Y', 10, -1.4, 'wr'], ['Z', 18, -0.6, 'wr'],
+      ['QB', 0, -5, 'qb'], ['RB', -1.6, -5.2, 'rb']],
+  },
+  {
+    id: 'trips', name: 'Gun Trips', personnel: '11', under: false,
+    blurb: 'Shotgun with three receivers to one side and one alone on the other. The tight end is the inside man of the three.',
+    players: [['X', -18, -0.6, 'wr'], ...LINE, ['Y', 6.2, -1.4, 'te'], ['H', 11, -1.4, 'wr'], ['Z', 18, -0.6, 'wr'],
+      ['QB', 0, -5, 'qb'], ['RB', -1.6, -5.2, 'rb']],
+  },
+];
+
+// Routes, in [out, up] yards from where the receiver lines up. "Out" is toward his own sideline.
+// settle: he stops at the end and turns to the quarterback.
+export const ROUTES = {
+  go: { readyY: 10, name: 'go', pts: [[0.6, 4], [1, 50]], desc: 'Go: straight down the field, as fast as he can.' },
+  seam: { readyY: 9, name: 'seam', pts: [[-0.4, 6], [-0.9, 50]], desc: 'Seam: straight up the field, splitting the deep defenders.' },
+  post: { ready: 1, name: 'post', pts: [[0, 11], [-8, 22], [-12, 50]], desc: 'Post: 11 yards up, then breaks toward the goalposts in the middle of the field.' },
+  corner: { ready: 1, name: 'corner', pts: [[0, 11], [7, 18], [12, 23], [12, 50]], desc: 'Corner: 11 yards up, then breaks out toward the back corner of the end zone.' },
+  out: { ready: 1, name: 'out', pts: [[0, 11], [15, 11]], desc: 'Out: 11 yards up, then a hard cut toward the sideline.' },
+  sail: { ready: 1, name: 'sail', pts: [[0, 8], [4, 12.5], [14, 14]], desc: 'Sail: up the field, then bends out toward the sideline at 12 to 14 yards.' },
+  dig: { ready: 1, name: 'dig', pts: [[0, 12], [-20, 12.5]], desc: 'Dig: 12 yards up, then a square cut across the middle.' },
+  over: { ready: 2, name: 'deep over', pts: [[0, 6], [-8, 13], [-32, 18]], desc: 'Deep over: a crossing route that climbs to about 18 yards on the far side of the field.' },
+  slant: { ready: 1, name: 'slant', pts: [[0, 1.5], [-6, 7], [-16, 14]], desc: 'Slant: two steps up, then a sharp angle inside.' },
+  hitch: { ready: 1, name: 'hitch', pts: [[0, 6.2], [0, 5.4]], settle: true, desc: 'Hitch: six yards up, then he stops and turns back to the quarterback.' },
+  curl: { ready: 1, name: 'curl', pts: [[0, 11], [-0.6, 10]], settle: true, desc: 'Curl: 11 yards up, then curls back inside toward the quarterback.' },
+  flat: { ready: 1, name: 'flat', pts: [[1.5, 1.5], [6, 3.5], [14, 4.5]], desc: 'Flat: out toward the sideline about four yards past the line.' },
+  drag: { ready: 2, name: 'drag', pts: [[-1.5, 2.5], [-5, 5], [-34, 5.5]], desc: 'Drag: a shallow crossing route about five yards past the line.' },
+  drag6: { ready: 2, name: 'drag', pts: [[-1.5, 3], [-5, 6.5], [-34, 7]], desc: 'Drag: a shallow crossing route about six or seven yards past the line.' },
+  sit: { ready: 2, name: 'sit', pts: [[0, 5], [-1.5, 9]], settle: true, desc: 'Sit: up to about 9 yards, then settles in the hole between the zone defenders.' },
+  // Backs: "out" is the side given by the play.
+  wheel: { ready: 3, name: 'wheel', pts: [[3, -0.5], [7, 1], [9, 5], [9.5, 50]], desc: 'Wheel: out to the flat, then turns straight up the sideline.' },
+  swing: { ready: 2, name: 'swing', pts: [[3, -1.2], [7, -1], [10, 0.5], [11.5, 3]], settle: true, desc: 'Swing: a loop out toward the sideline behind the line, a quick outlet.' },
+  bflat: { ready: 1, name: 'flat', pts: [[3, -0.3], [8, 2.5], [13, 3.5]], desc: 'Flat: out of the backfield to the flat, a few yards past the line.' },
+  check: { ready: 1, name: 'check-down', pts: [[1, 2.5], [1.5, 5]], settle: true, delay: 0.9, desc: 'Check-down: stays in to block if a blitzer comes, otherwise slips out to an open spot short.' },
+  screen: { ready: 1, name: 'screen', pts: [[4, 1.2], [7, 2.6]], settle: true, delay: 0.85, desc: 'Screen: blocks for a moment, then slips out behind the rush and waits for the ball with linemen in front.' },
+};
+
+// Each pass play says what every eligible player does, by where he lines up:
+// S1, S2, S3 are the receivers on the strong side counted from the outside in, W1, W2 the weak side, RB and FB the backs.
+// side: 'S' strong or 'W' weak for back routes. reads: the quarterback's progression, first to last.
+export const PLAYS = [
+  {
+    id: 'iz', name: 'Inside Zone', type: 'run', scheme: 'zone', aim: 1.7,
+    blurb: 'Every lineman steps to the play side and blocks whoever shows up in his gap. The back aims at the guard\'s outside hip and reads the blocks: hit it, bend it back, or bounce it.',
+  },
+  {
+    id: 'oz', name: 'Outside Zone', type: 'run', scheme: 'reach', aim: 6.2,
+    blurb: 'The whole line runs sideways to reach the play side. The back presses the edge and cuts up into the first lane that opens.',
+  },
+  {
+    id: 'power', name: 'Power', type: 'run', scheme: 'power', aim: 3.4,
+    blurb: 'A gap scheme: the play-side linemen block down, the end gets kicked out, and the back-side guard pulls through the hole for the linebacker.',
+  },
+  {
+    id: 'draw', name: 'Draw', type: 'run', scheme: 'draw', aim: 0.4,
+    blurb: 'It looks like a pass. The line sets to pass-block and lets the rushers come up the field, and the quarterback hands it to the back late, underneath them.',
+  },
+  {
+    id: 'verts', name: 'Four Verticals', type: 'pass', drop: 'five', reads: ['S2', 'W2', 'S3', 'S1', 'W1', 'RB'],
+    routes: r => ({ S1: 'go', S2: 'seam', S3: 'seam', W1: 'go', W2: 'seam', RB: 'check', FB: 'check' }),
+    blurb: 'Four receivers run straight down the field. Against one deep safety, someone ends up with nobody over the top; against two, the seams split them.',
+  },
+  {
+    id: 'smash', name: 'Smash', type: 'pass', drop: 'five', reads: ['S2', 'S1', 'W2', 'W1', 'RB', 'FB'],
+    routes: r => ({ S1: 'hitch', S2: 'corner', S3: 'sit', W1: r.W2 ? 'hitch' : 'dig', W2: 'corner', RB: 'check', FB: 'check' }),
+    blurb: 'The outside receiver runs a hitch at six yards and the inside one runs a corner route over the top of it. The cornerback can\'t take both. The classic Cover 2 beater.',
+  },
+  {
+    id: 'flood', name: 'Flood', type: 'pass', drop: 'five', reads: ['S2', 'S3', 'FB', 'RB', 'W1'],
+    routes: r => ({ S1: 'go', S2: 'sail', S3: 'flat', W1: 'dig', W2: 'seam', RB: r.S3 ? 'check' : 'bflat', FB: 'bflat', side: 'S' }),
+    blurb: 'Three receivers at three depths on one side: deep, a sail route at 12 to 14 yards, and the flat. It puts more receivers in the area than there are zone defenders. The classic Cover 3 beater.',
+  },
+  {
+    id: 'mesh', name: 'Mesh', type: 'pass', drop: 'five', reads: ['S1', 'S2', 'W2', 'W1', 'S3', 'RB'],
+    routes: r => ({ S1: 'corner', S2: 'drag6', S3: 'sit', W1: r.W2 ? 'corner' : 'drag', W2: 'drag', RB: 'swing', FB: 'check', side: 'S' }),
+    blurb: 'Two receivers run shallow crossing routes and brush past each other in the middle. Man-to-man defenders get caught in the traffic; against a zone, the crossers settle in the holes.',
+  },
+  {
+    id: 'slants', name: 'Slant-Flat', type: 'pass', drop: 'quick', reads: ['S1', 'S2', 'W1', 'W2'],
+    routes: r => ({ S1: 'slant', S2: 'flat', S3: 'seam', W1: 'slant', W2: 'flat', RB: 'check', FB: 'check' }),
+    blurb: 'Quick game: the outside receivers run slants, the inside ones run to the flat, and the ball is out in about a second and a half. It beats the blitz.',
+  },
+  {
+    id: 'pa', name: 'Play-Action Shot', type: 'pass', drop: 'pa', reads: ['S1', 'W1', 'S2', 'RB'],
+    routes: r => ({ S1: 'post', S2: r.S2 && r.S2.cls === 'te' && r.S2.y > -1 ? 'flat' : 'seam', S3: 'flat', W1: 'over', W2: 'flat', RB: 'block', FB: 'block' }),
+    blurb: 'Fake the inside zone handoff to pull the linebackers forward, then throw deep: a post from one side and a deep crossing route from the other, behind the linebackers who bit.',
+  },
+  {
+    id: 'screen', name: 'RB Screen', type: 'pass', drop: 'screen', reads: ['RB'],
+    routes: r => ({ S1: 'go', S2: 'go', S3: 'go', W1: 'go', W2: 'go', RB: 'screen', FB: 'block' }),
+    blurb: 'Let the rushers through, then flip it to the back behind them with three linemen out in front. Best against the blitz, worst against a defense that sits back and reads it.',
+  },
+];
+
+// Defensive fronts. dl: [label, technique, side]. Technique numbers say where a lineman lines up (see TECHNIQUES).
+// lb: [label, rule or [x, y]], x toward the strong side. rush: who rushes on a four-man rush. blitz: who comes on a blitz.
+export const FRONTS = [
+  {
+    id: 'over', name: '4-3 Over', db: 'base',
+    blurb: 'Four linemen and three linebackers. The line shifts toward the strong side: the 3-technique tackle lines up over the strong-side guard.',
+    dl: [['DE', '5', 'S'], ['DT', '3', 'S'], ['NT', '1', 'W'], ['DE', 'w5', 'W']],
+    lb: [['S', 'sam'], ['M', [0.6, 4.8]], ['W', [-3.2, 4.6]]],
+    rush: ['DE', 'DT', 'NT', 'DE'], blitz: 'M',
+  },
+  {
+    id: 'under', name: '4-3 Under', db: 'base',
+    blurb: 'The line shifts away from the strength: the 3-technique goes to the weak side, the nose shades the strong side of the center, and the Sam linebacker walks up on the line outside the tight end.',
+    dl: [['DE', '5', 'S'], ['NT', '1', 'S'], ['DT', '3', 'W'], ['DE', 'w5', 'W']],
+    lb: [['S', 'samUp'], ['M', [1.2, 4.8]], ['W', [-2.4, 4.6]]],
+    rush: ['DE', 'NT', 'DT', 'DE'], blitz: 'M',
+  },
+  {
+    id: '34', name: '3-4', db: 'base',
+    blurb: 'Three linemen and four linebackers: a nose on the center, ends outside the tackles, two inside linebackers, and two outside linebackers standing up on the edges.',
+    dl: [['DE', '5', 'S'], ['NT', '0', 'S'], ['DE', '5', 'W']],
+    lb: [['S', 'edgeS'], ['M', [1.8, 4.8]], ['W', [-1.8, 4.8]], ['J', 'edgeW']],
+    rush: ['DE', 'NT', 'DE', 'J'], blitz: 'M',
+  },
+  {
+    id: 'nickel', name: 'Nickel', db: 'nickel',
+    blurb: 'Four linemen, two linebackers and five defensive backs. Built for three-receiver sets: the nickel back comes in for a linebacker to cover the slot.',
+    dl: [['DE', '5', 'S'], ['DT', '3', 'S'], ['NT', '1', 'W'], ['DE', 'w5', 'W']],
+    lb: [['M', [1.2, 4.8]], ['W', [-2.2, 4.6]]],
+    rush: ['DE', 'DT', 'NT', 'DE'], blitz: 'M',
+  },
+];
+
+// Zones, with the left/right halves of the field written out. x: [from, to], y: [from, to], at: the spot he drops to.
+export const ZONES = {
+  deepL3: { name: 'deep third', side: 'left', deep: true, x: [-26.7, -8.9], y: [9, 60], at: [-15.5, 14] },
+  deepM3: { name: 'deep middle third', side: '', deep: true, x: [-8.9, 8.9], y: [9, 60], at: [0, 15] },
+  deepR3: { name: 'deep third', side: 'right', deep: true, x: [8.9, 26.7], y: [9, 60], at: [15.5, 14] },
+  deepLH: { name: 'deep half', side: 'left', deep: true, x: [-26.7, 0], y: [9, 60], at: [-8, 15] },
+  deepRH: { name: 'deep half', side: 'right', deep: true, x: [0, 26.7], y: [9, 60], at: [8, 15] },
+  q1: { name: 'deep quarter', side: 'far left', deep: true, x: [-26.7, -12], y: [8, 60], at: [-16, 13] },
+  q2: { name: 'deep quarter', side: 'inside left', deep: true, x: [-12, 0], y: [8, 60], at: [-6, 13] },
+  q3: { name: 'deep quarter', side: 'inside right', deep: true, x: [0, 12], y: [8, 60], at: [6, 13] },
+  q4: { name: 'deep quarter', side: 'far right', deep: true, x: [12, 26.7], y: [8, 60], at: [16, 13] },
+  flatL: { name: 'flat', side: 'left', x: [-26.7, -11], y: [-1, 10], at: [-17, 5] },
+  flatR: { name: 'flat', side: 'right', x: [11, 26.7], y: [-1, 10], at: [17, 5] },
+  cfL: { name: 'curl-flat', side: 'left', x: [-26.7, -5], y: [0, 12], at: [-12, 8] },
+  cfR: { name: 'curl-flat', side: 'right', x: [5, 26.7], y: [0, 12], at: [12, 8] },
+  hookL: { name: 'hook-curl', side: 'left', x: [-12, -1.5], y: [2, 13], at: [-6.5, 9.5] },
+  hookR: { name: 'hook-curl', side: 'right', x: [1.5, 12], y: [2, 13], at: [6.5, 9.5] },
+  mid: { name: 'middle hook', side: '', x: [-6, 6], y: [3, 14], at: [0, 10] },
+  rat: { name: 'short middle (the "rat")', side: '', x: [-6, 6], y: [1, 10], at: [0, 7] },
+};
+
+// Coverages. deep: zone per role (CBL/CBR are the corners on the left and right, SL/SR the safeties by side).
+// under: the underneath zones, handed to whoever is nearest. blitzUnder: the same with one fewer man.
+export const COVERAGES = [
+  {
+    id: 'c0', name: 'Cover 0', man: true, shell: 0, press: true,
+    blurb: 'Man-to-man on every receiver with nobody deep. Everyone else blitzes. The ball has to come out fast, but one missed tackle can go the distance.',
+  },
+  {
+    id: 'c1', name: 'Cover 1', man: true, shell: 1, press: true, deep: { FS: 'deepM3' }, extra: 'rat',
+    blurb: 'Man-to-man with one free safety deep in the middle. The defender left over sits in the short middle (the "rat") to take away crossing routes.',
+  },
+  {
+    id: 'c2', name: 'Cover 2', shell: 2, deep: { CBL: 'flatL', CBR: 'flatR', SL: 'deepLH', SR: 'deepRH' },
+    under: ['hookL', 'mid', 'hookR'], blitzUnder: ['hookL', 'hookR'],
+    blurb: 'Two safeties split the deep field in halves, the corners sit in the flats, three linebackers drop underneath. Soft spots: the deep middle between the safeties, and the sideline between the corner and the safety.',
+  },
+  {
+    id: 'c3', name: 'Cover 3', shell: 1, deep: { CBL: 'deepL3', FS: 'deepM3', CBR: 'deepR3' },
+    under: ['cfL', 'hookL', 'hookR', 'cfR'], blitzUnder: ['cfL', 'mid', 'cfR'],
+    blurb: 'Three deep (the two corners and the free safety each take a third) and four underneath. Sound against the run with a safety down in the box; soft in the flats and the seams.',
+  },
+  {
+    id: 'c4', name: 'Cover 4', shell: 2, deep: { CBL: 'q1', SL: 'q2', SR: 'q3', CBR: 'q4' },
+    under: ['cfL', 'mid', 'cfR'], blitzUnder: ['cfL', 'cfR'],
+    blurb: 'Quarters: four defenders deep, each with a quarter of the field, and three underneath. Takes away the deep ball and lets the safeties come up on runs; short throws are there.',
+  },
+];
+
+export const PRESSURES = [
+  { id: 'four', name: 'Rush four', blurb: 'Four rushers, seven in coverage.' },
+  { id: 'blitz', name: 'Blitz', blurb: 'The Mike linebacker rushes too: five rushers, one fewer in coverage.' },
+];
+
+export const TECHNIQUES = {
+  '0': 'a 0-technique, head-up on the center',
+  '1': 'a 1-technique, on the center\'s shoulder in the A gap',
+  '3': 'a 3-technique, on the guard\'s outside shoulder in the B gap',
+  '5': 'a 5-technique, on the tackle\'s outside shoulder in the C gap',
+  'w5': 'a wide 5-technique, outside the tackle',
+  '9': 'a 9-technique, outside the tight end',
+};
+
+// What each position is. Defense labels are the shorthand coaches draw on the board.
+export const POSITIONS = {
+  QB: ['Quarterback', 'Takes the snap and runs the offense: hands off, throws, or keeps it himself. Reads the defense before and after the snap.'],
+  RB: ['Running back', 'The main ball carrier. Also picks up blitzers and catches passes out of the backfield.'],
+  FB: ['Fullback', 'A blocking back who lines up in front of the tailback and leads him through the hole.'],
+  X: ['Split end (X)', 'A wide receiver on the line of scrimmage, usually on the side away from the tight end. Being on the line, he can be jammed right at the snap.'],
+  Z: ['Flanker (Z)', 'A wide receiver who lines up a step off the line, usually on the tight end\'s side. Being off the line, he is allowed to go in motion.'],
+  H: ['Slot receiver (H)', 'Lines up between the wide receiver and the line, a step off it. Runs quick routes and crossing routes in the middle.'],
+  Y: ['Tight end (Y)', 'Lines up at the end of the line or just outside it. Blocks like a lineman and catches like a receiver.'],
+  Yslot: ['Slot receiver (Y)', 'In a four-receiver set the Y is a second slot receiver; in sets with a tight end, Y is usually the tight end.'],
+  U: ['Second tight end (U)', 'The second tight end, on the other end of the line. Blocks on runs, leaks out on passes.'],
+  LT: ['Left tackle', 'Protects the quarterback\'s blind side (for a right-handed passer). Often the best pass blocker on the line.'],
+  LG: ['Left guard', 'Lines up beside the center. Guards pull on some runs: they leave their spot and lead through a hole on the other side.'],
+  C: ['Center', 'Snaps the ball and usually makes the line\'s blocking calls.'],
+  RG: ['Right guard', 'Lines up beside the center. Guards pull on some runs: they leave their spot and lead through a hole on the other side.'],
+  RT: ['Right tackle', 'Blocks the edge on the right side, often against the defensive end on the tight end\'s side.'],
+  DE: ['Defensive end', 'Lines up at the end of the defensive line. Rushes the passer from the edge, and keeps runs from getting outside him ("sets the edge").'],
+  DT: ['Defensive tackle', 'Lines up inside, over a guard. As a 3-technique he shoots the gap and gets into the backfield.'],
+  NT: ['Nose tackle', 'Lines up on or right next to the center. Takes on double teams so the linebackers behind him can run free.'],
+  S: ['Sam linebacker', 'The strong-side linebacker: lines up on the tight end\'s side and takes on the tight end, against runs and in coverage.'],
+  M: ['Mike linebacker', 'The middle linebacker, usually the one who calls the defense. Fills the inside gaps against the run.'],
+  W: ['Will linebacker', 'The weak-side linebacker, away from the tight end. Often the fastest linebacker; chases plays from sideline to sideline.'],
+  J: ['Jack linebacker', 'The weak-side outside linebacker in a 3-4. Stands up on the edge and usually rushes the passer.'],
+  S34: ['Sam linebacker', 'In a 3-4, the strong-side outside linebacker: stands up on the edge outside the tight end, sets the edge on runs and drops into coverage on passes.'],
+  CB: ['Cornerback', 'Covers the wide receivers, man-to-man or in a zone, deep or short depending on the call.'],
+  NB: ['Nickel back', 'A fifth defensive back who comes on for a linebacker to cover a slot receiver.'],
+  FS: ['Free safety', 'Usually the deepest defender, the last line. In one-high coverages he guards the deep middle.'],
+  SS: ['Strong safety', 'Lines up on the strong side, closer to the line. Helps against the run and covers tight ends and slots.'],
+};
+
+export const PERSONNEL = 'Personnel is two digits: how many running backs, then how many tight ends. The rest of the five eligible receivers are wide receivers. 21 is two backs and one tight end; 10 is one back, no tight end, four receivers.';
+
+// Coach's notes on how a pass concept tends to fare against each coverage. Short and plain.
+export const NOTES = {
+  verts: {
+    c0: 'No safety deep against four vertical routes: if the protection holds, it\'s a footrace with nobody over the top. If a blitzer comes free first, there\'s no time for it.',
+    c1: 'One free safety can only help on one seam. The quarterback holds him with his eyes and throws the other way.',
+    c2: 'The seams go right at the hole between the two deep safeties, and the corners in the flats are left with nobody to cover.',
+    c3: 'Four vertical routes on three deep defenders: one of the seams has nobody over the top. The classic Cover 3 beater.',
+    c4: 'Quarters puts four defenders deep, one for each vertical route. The deep shots are taken away; the check-down underneath is there.',
+  },
+  smash: {
+    c0: 'Against man with no help, the corner route is a one-on-one footrace to the sideline, and the hitch beats a press corner who turns to run.',
+    c1: 'Man coverage turns Smash into one-on-ones. The hitch is quick and safe; the corner route fights the free safety over the top.',
+    c2: 'The Cover 2 corner sits in the flat, so he can\'t carry the corner route, and the half-field safety is a long way from the sideline. Built to beat exactly this.',
+    c3: 'The Cover 3 corner bails deep and takes away the corner route, but that leaves the hitch open underneath him.',
+    c4: 'Quarters is built to stop this: the safety reads the slot and jumps the corner route, and the corner sits over the hitch.',
+  },
+  flood: {
+    c0: 'Against man, Flood is three one-on-ones on one side. The sail route breaking away from a trailing defender is the best of them.',
+    c1: 'The free safety can\'t help on routes breaking toward the sideline. The sail and the flat are one-on-ones in space.',
+    c2: 'The Cover 2 corner has the flat, the safety is deep: the sail route lands in between them at about 13 yards.',
+    c3: 'Three receivers on one side against two zone defenders there (the corner deep and the curl-flat defender short). Someone is left uncovered. Built to beat exactly this.',
+    c4: 'Quarters has an extra man deep, so the sail is covered over the top; the flat is open underneath.',
+  },
+  mesh: {
+    c0: 'The two crossers brush past each other, and man defenders trailing them run into the traffic. With no help in the middle, a clean catch can go a long way.',
+    c1: 'The crossers pick the man defenders off each other, but the "rat" in the short middle is there to wall them.',
+    c2: 'Against zone, the crossers keep running into the next defender\'s area or settle in the soft spots between the linebackers. The corner route over the flat defender is there too.',
+    c3: 'The crossers clear the middle and the corner route attacks the deep third; the sit route settles between the linebackers.',
+    c4: 'The four deep defenders leave three underneath, so the crossers and the sit route have room.',
+  },
+  slants: {
+    c0: 'Quick throws are the answer to an all-out blitz: the ball is out before the rush gets there. A slant beating a press corner has nobody behind him.',
+    c1: 'Slants against outside-leverage corners are open inside. The rat in the middle is the danger.',
+    c2: 'The Cover 2 corner sits in the flat, right where the flat route goes; the slant goes behind him, in front of the linebackers.',
+    c3: 'The curl-flat defender has to choose: widen for the flat and the slant comes open behind him, or squeeze the slant and the flat is free.',
+    c4: 'Quarters corners play off and deep, so there\'s room underneath for both quick routes.',
+  },
+  pa: {
+    c0: 'With no deep safety, play-action is all-or-nothing: the deep routes are one-on-ones, but the blitz arrives before the fake is over.',
+    c1: 'The free safety has to pick the post or the deep crosser. The fake pulls the underneath defenders up, and the crosser runs behind them.',
+    c2: 'Two deep safeties sit over the top of the post, but the linebackers bite on the fake and the crosser gets the space they left.',
+    c3: 'The lone middle safety can\'t take both the post and the deep crosser, and the linebackers who stepped up for the fake are out of the throwing lane.',
+    c4: 'Quarters safeties read the run fake and come up, which is exactly when the post goes behind them, or they stay home and the crosser is underneath.',
+  },
+  screen: {
+    c0: 'The best call against an all-out blitz: every rusher runs past the back, and there\'s nobody left to tackle him but the corners, who are running with their receivers.',
+    c1: 'Man defenders are turned and running with their receivers. The man on the back is the one who has to beat three linemen.',
+    c2: 'The underneath zone defenders are facing the quarterback and see it coming. It works only if the linemen get to them first.',
+    c3: 'The curl-flat defender is often right where the screen goes. Screens against Cover 3 need the linemen to block him quickly.',
+    c4: 'Three underneath defenders, two of them out wide: the middle is thin once the back has the ball.',
+  },
+};

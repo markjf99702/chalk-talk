@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chalk Talk</title>
+  <meta name="description" content="A football coach's board you can run. Call the offense or the defense, snap it, and watch every route, block, rush and coverage play out, then see why the play worked or didn't. Tap any player to learn his position and his job.">
+  <meta property="og:title" content="Chalk Talk">
+  <meta property="og:description" content="Call a play, snap it, and watch the Xs and Os play out.">
+  <meta property="og:image" content="https://chalk-talk.junkdrawer.works/og.png">
+  <meta property="og:url" content="https://chalk-talk.junkdrawer.works/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#e9e7e1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#18201c" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="preload" href="fonts/barlow-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/barlow-condensed-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <noscript><p class="noscript">Chalk Talk needs JavaScript to run the plays.</p></noscript>
+
+  <header class="top">
+    <div class="brand">
+      <h1>Chalk Talk</h1>
+      <p>Call a play, snap it, and see why it worked.</p>
+    </div>
+    <div class="side-pick" role="radiogroup" aria-label="Which side you call">
+      <button type="button" role="radio" data-side="O" aria-checked="true">Call the offense</button>
+      <button type="button" role="radio" data-side="D" aria-checked="false">Call the defense</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="stage" aria-label="The board">
+      <div class="board-wrap">
+        <canvas id="board" aria-label="The field, with the offense drawn as circles and the defense as Xs"></canvas>
+        <p class="matchup" id="matchup"></p>
+        <p class="caption" id="caption" aria-live="polite"></p>
+        <div class="who" id="who" hidden>
+          <button type="button" class="who-x" id="whoClose" aria-label="Close">×</button>
+          <p class="who-pos" id="whoPos"></p>
+          <p class="who-job" id="whoJob"></p>
+          <p class="who-about" id="whoAbout"></p>
+        </div>
+      </div>
+      <div class="transport">
+        <button type="button" class="snap" id="snap">Snap</button>
+        <button type="button" class="tool" id="play" aria-label="Play" disabled><span aria-hidden="true">▶</span></button>
+        <input type="range" id="scrub" min="0" max="100" step="1" value="0" aria-label="Scrub through the play" disabled>
+        <div class="seg small" role="radiogroup" aria-label="Speed">
+          <button type="button" role="radio" data-speed="0.5" aria-checked="false">½×</button>
+          <button type="button" role="radio" data-speed="1" aria-checked="true">1×</button>
+        </div>
+        <button type="button" class="tool toggle" id="labels" aria-pressed="true" title="Position labels">ABC</button>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <section class="call card" id="mine">
+        <h2 id="mineTitle">Your call</h2>
+        <div id="mineBody"></div>
+      </section>
+
+      <section class="call card theirs" id="theirs">
+        <div class="theirs-head">
+          <h2 id="theirsTitle">Their call</h2>
+          <label class="switch"><input type="checkbox" id="auto" checked> <span>Let the other coach pick</span></label>
+        </div>
+        <p class="hint" id="theirsHint"></p>
+        <div id="theirsBody"></div>
+      </section>
+
+      <section class="card result" id="result" hidden>
+        <p class="kicker" id="resKicker"></p>
+        <h2 class="headline" id="resHead"></h2>
+        <p class="vs" id="resVs"></p>
+        <ol class="story" id="story"></ol>
+        <div class="note">
+          <h3>Coach's note</h3>
+          <p id="note"></p>
+          <ul class="reads" id="reads"></ul>
+        </div>
+        <div class="actions">
+          <button type="button" class="ghost" id="again">Run it again</button>
+          <button type="button" class="ghost" id="newLook">New look</button>
+          <button type="button" class="ghost" id="share">Copy link to this play</button>
+        </div>
+        <p class="share-msg" id="shareMsg" aria-live="polite"></p>
+      </section>
+
+      <section class="card chart" id="chart">
+        <div class="chart-head">
+          <h2 id="chartTitle">How this call does</h2>
+          <button type="button" class="ghost" id="runChart">Run it 20 times each</button>
+        </div>
+        <p class="hint" id="chartHint"></p>
+        <div class="bars" id="bars" role="list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <section class="playbook" id="playbook" aria-labelledby="pbTitle">
+    <h2 id="pbTitle">The playbook</h2>
+    <p class="lede">Everything on the board, in plain words. Tap a player on the board to see his job on the play you called.</p>
+    <div class="pb-grid" id="pbGrid"></div>
+  </section>
+
+  <footer class="jd-foot">
+    <a href="https://junkdrawer.works/">Part of junkdrawer.works</a>
+    <span aria-hidden="true">·</span>
+    <a href="https://junkdrawer.works/privacy.html">Privacy</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "chalk-talk",
+  "private": true,
+  "type": "module",
+  "description": "Call a play, snap it, and watch the Xs and Os play out.",
+  "scripts": {
+    "test": "node --test test/sim.test.mjs && node test/e2e.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
