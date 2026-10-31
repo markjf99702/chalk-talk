@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, prepare } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES } from '../js/playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -24,6 +24,7 @@ test('every call against every defense runs to a finish', () => {
     assert.equal(r.jobs.filter(Boolean).length, 22, `${what}: everyone has a job to describe`);
     for (let k = 1; k < r.events.length; k++) assert.ok(r.events[k].t >= r.events[k - 1].t, `${what} seed ${seed - 1}: the play-by-play goes back in time at "${r.events[k].text}"`);
     assert.ok(ended(r), `${what} seed ${seed - 1}: the play-by-play never says how the play ended`);
+    if (r.result.kind === 'sack') assert.ok(!r.events.some(e => e.kind === 'throw' || e.kind === 'away'), `${what} seed ${seed - 1}: a sack after the ball was thrown`);
     if (r.result.carrier >= 0) { // the board's last picture puts the ball carrier where the headline does
       const y = r.frames.at(-1).xy[2 * r.result.carrier + 1];
       assert.ok(r.result.long ? y >= r.result.yards - 0.5 : Math.abs(y - r.result.yards) <= 0.5, `${what} seed ${seed - 1}: the play ends with the carrier at ${y.toFixed(2)}, the result says ${r.result.yards}`);
@@ -38,6 +39,10 @@ test('a play still going when the board\'s clock runs out ends with a tackle or 
   const last = r.events.at(-1);
   if (last.kind === 'long') assert.equal(r.result.long, true);
   else assert.equal(last.kind, 'tackle');
+});
+
+test('the coach has a note for every pass play against every coverage', () => {
+  for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const cv of COVERAGES) assert.ok(NOTES[pl.id]?.[cv.id], `no note for ${pl.name} against ${cv.name}`);
 });
 
 test('the same seed replays the same play', () => {
