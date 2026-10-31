@@ -265,9 +265,11 @@ function assignOffense(S) {
     if (pl.cls === 'rb' || pl.cls === 'fb') {
       out = route === 'screen' && !under ? Math.sign(pl.x) || S.s : (map.side === 'W' ? -S.s : S.s);
       if (pl.cls === 'fb' && (route === 'check' || route === 'bflat')) out = map.side === 'S' && route === 'bflat' ? S.s : -S.s;
+      // A back set off to one side checks down on his own side, outside his own tackle, not across the pocket.
+      if (route === 'check' && Math.abs(pl.x) > 0.5) out = Math.sign(pl.x);
     }
     pl.job = { kind: 'route', route, out, delay: r.delay || 0 };
-    pl.path = r.pts.map(([o, u]) => ({ x: clamp(pl.x + o * out, -EDGE + 0.6, EDGE - 0.6), y: pl.y + u }));
+    pl.path = r.pts.map(([o, u]) => ({ x: clamp(pl.x + o * out, -EDGE + 0.6, EDGE - 0.6), y: r.fromLine ? u : pl.y + u }));
   }
   for (const pl of S.O) if (pl.cls !== 'qb' && pl.cls !== 'ol' && pl.job.kind === 'none') pl.job = { kind: 'pro' };
   for (const ol of S.OL) ol.job = { kind: 'pro' };

@@ -37,7 +37,8 @@ export const FORMATIONS = [
 ];
 
 // Routes, in [out, up] yards from where the receiver lines up. "Out" is toward his own sideline.
-// settle: he stops at the end and turns to the quarterback.
+// settle: he stops at the end and turns to the quarterback. fromLine: "up" counts from the line of scrimmage, not from
+// where he lines up (for back routes that have to end past the line wherever the back starts).
 export const ROUTES = {
   go: { readyY: 10, name: 'go', pts: [[0.6, 4], [1, 50]], desc: 'Go: straight down the field, as fast as he can.' },
   seam: { readyY: 9, name: 'seam', pts: [[-0.4, 6], [-0.9, 50]], desc: 'Seam: straight up the field, splitting the deep defenders.' },
@@ -57,8 +58,8 @@ export const ROUTES = {
   // Backs: "out" is the side given by the play.
   wheel: { ready: 3, name: 'wheel', pts: [[3, -0.5], [7, 1], [9, 5], [9.5, 50]], desc: 'Wheel: out to the flat, then turns straight up the sideline.' },
   swing: { ready: 2, name: 'swing', pts: [[3, -1.2], [7, -1], [10, 0.5], [11.5, 3]], settle: true, desc: 'Swing: a loop out toward the sideline behind the line, a quick outlet.' },
-  bflat: { ready: 1, name: 'flat', pts: [[3, -0.3], [8, 2.5], [13, 3.5]], desc: 'Flat: out of the backfield to the flat, a few yards past the line.' },
-  check: { ready: 1, name: 'check-down', pts: [[1, 2.5], [1.5, 5]], settle: true, delay: 0.9, desc: 'Check-down: stays in to block if a blitzer comes, otherwise slips out to an open spot short.' },
+  bflat: { ready: 1, name: 'flat', fromLine: true, pts: [[3, -4], [7.5, -0.5], [12.5, 3.3]], desc: 'Flat: out of the backfield to the flat, a few yards past the line.' },
+  check: { ready: 1, name: 'check-down', fromLine: true, pts: [[3.2, -1], [3.6, 3]], settle: true, delay: 0.9, desc: 'Check-down: stays in to block if a blitzer comes, otherwise slips out to an open spot short.' },
   screen: { ready: 1, name: 'screen', pts: [[4, 1.2], [7, 2.6]], settle: true, delay: 0.85, desc: 'Screen: blocks for a moment, then slips out behind the rush and waits for the ball with linemen in front.' },
 };
 
@@ -94,7 +95,7 @@ export const PLAYS = [
   },
   {
     id: 'flood', name: 'Flood', type: 'pass', drop: 'five', reads: ['S2', 'S3', 'FB', 'RB', 'W1'],
-    routes: r => ({ S1: 'go', S2: 'sail', S3: 'flat', W1: 'dig', W2: 'seam', RB: r.S3 ? 'check' : 'bflat', FB: 'bflat', side: 'S' }),
+    routes: r => ({ S1: 'go', S2: 'sail', S3: 'flat', W1: 'dig', W2: 'seam', RB: r.S3 || r.FB ? 'check' : 'bflat', FB: 'bflat', side: 'S' }),
     blurb: 'Three receivers at three depths on one side: deep, a sail route at 12 to 14 yards, and the flat. It puts more receivers in the area than there are zone defenders. The classic Cover 3 beater.',
   },
   {
