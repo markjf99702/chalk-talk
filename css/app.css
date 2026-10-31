@@ -22,6 +22,11 @@
   --frame: #c3c7cc;
   --frame-shadow: rgba(29, 35, 41, .18);
   --field-line: #87909a;
+  /* the yard numbers, and the sidelines and 10-yard lines: dark enough to read on the whiteboard (WCAG 2.2: 4.5:1 for
+     text, 3:1 for the lines), with the 5-yard lines and hash marks left faint in --field-line */
+  --field-num: #5b6168;
+  --field-side: #87909a;
+  --field-ten: #87909a;
   --off: #1f3f8f;
   --def: #c22f29;
   --los: #2d8250;
@@ -52,6 +57,9 @@
     --frame: #5a4430;
     --frame-shadow: rgba(0, 0, 0, .45);
     --field-line: #e6e4da;
+    --field-num: rgba(230, 228, 218, .75);
+    --field-side: rgba(230, 228, 218, .55);
+    --field-ten: rgba(230, 228, 218, .32);
     --off: #f4f2ea;
     --def: #f2d36b;
     --los: #8fc3e8;
@@ -169,7 +177,8 @@ button:disabled { cursor: default; }
   color: var(--ink);
   line-height: 1.2;
 }
-.matchup { top: 6px; font-size: 15px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* faded by its colour rather than its opacity, so the dimmer words in it still read at 4.5:1 */
+.matchup { top: 6px; font-size: 15px; color: color-mix(in srgb, var(--ink) 80%, var(--board)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .matchup .dim { color: var(--muted); }
 .caption {
   top: 28px;
@@ -328,7 +337,7 @@ button:disabled { cursor: default; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.group-label { margin: 8px 0 5px; font-size: 12px; letter-spacing: .06em; opacity: .85; }
+.group-label { margin: 8px 0 5px; font-size: 12px; letter-spacing: .06em; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   border: 1px solid var(--line-strong);

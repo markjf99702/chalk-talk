@@ -29,7 +29,7 @@ export class Board {
   readColors() {
     const cs = getComputedStyle(this.cv);
     const v = n => cs.getPropertyValue(n).trim();
-    this.colors = { line: v('--field-line'), off: v('--off'), def: v('--def'), los: v('--los'), ball: v('--ball'), hot: v('--hot'), chalk: v('--chalk-grain') === '1' };
+    this.colors = { line: v('--field-line'), num: v('--field-num'), side: v('--field-side'), ten: v('--field-ten'), off: v('--off'), def: v('--def'), los: v('--los'), ball: v('--ball'), hot: v('--hot'), chalk: v('--chalk-grain') === '1' };
     this.makeGrain();
   }
 
@@ -97,7 +97,7 @@ export class Board {
     this.camY = this.cam(this.t);
     this.field();
     const pre = this.t <= 0.001;
-    this.assignments(pre ? 1 : 0.22);
+    this.assignments(pre ? 1 : 0.35); // after the snap the drawn-up play stays faintly under the trails
     if (!pre) this.trails();
     this.players();
     this.ballDraw();
@@ -116,23 +116,24 @@ export class Board {
     const C = this.colors;
     const y0 = Y_LOW + this.camY - 1, y1 = y0 + this.rangeY + 2;
     ctx.lineCap = 'round';
-    // sidelines
-    ctx.strokeStyle = C.line; ctx.globalAlpha = 0.55; ctx.lineWidth = 2;
+    // sidelines (each theme sets how strong they and the 10-yard lines are: see --field-side and --field-ten)
+    ctx.strokeStyle = C.side; ctx.globalAlpha = 1; ctx.lineWidth = 2;
     for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(this.sx(sd * SIDELINE), this.sy(y0)); ctx.lineTo(this.sx(sd * SIDELINE), this.sy(y1)); ctx.stroke(); }
     // yard lines every five, hash marks every yard
     for (let y = Math.ceil(y0); y <= y1; y++) {
       if (y % 5 === 0) {
-        ctx.globalAlpha = y % 10 === 0 ? 0.32 : 0.22; ctx.lineWidth = 1.5;
+        const ten = y % 10 === 0;
+        ctx.strokeStyle = ten ? C.ten : C.line; ctx.globalAlpha = ten ? 1 : 0.22; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(this.sx(-SIDELINE), this.sy(y)); ctx.lineTo(this.sx(SIDELINE), this.sy(y)); ctx.stroke();
       } else {
-        ctx.globalAlpha = 0.26; ctx.lineWidth = 1;
+        ctx.strokeStyle = C.line; ctx.globalAlpha = 0.26; ctx.lineWidth = 1;
         const tick = 0.7;
         for (const hx of [-HASH, HASH]) { ctx.beginPath(); ctx.moveTo(this.sx(hx - tick / 2), this.sy(y)); ctx.lineTo(this.sx(hx + tick / 2), this.sy(y)); ctx.stroke(); }
         for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(this.sx(sd * SIDELINE), this.sy(y)); ctx.lineTo(this.sx(sd * (SIDELINE - tick)), this.sy(y)); ctx.stroke(); }
       }
     }
     // yard markers, counted from the line of scrimmage
-    ctx.globalAlpha = 0.5; ctx.fillStyle = C.line;
+    ctx.globalAlpha = 1; ctx.fillStyle = C.num;
     const fs = Math.max(9, Math.min(13, k * 0.95));
     ctx.font = `600 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

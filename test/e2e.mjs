@@ -909,6 +909,46 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Contrast, by WCAG 2.2: the yard numbers (text, 1.4.3) at 4.5:1 or more on the board as they're drawn, the sidelines and
+// 10-yard lines on the whiteboard at 3:1 (graphics, 1.4.11), and the small grey words on and beside the board at 4.5:1.
+for (const colorScheme of ['light', 'dark']) {
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme });
+  const p = await c.newPage();
+  await p.goto(base);
+  const seen = await p.evaluate(() => {
+    // '#5b6168', 'rgba(230, 228, 218, 0.75)', or what a color-mix() computes to, 'color(srgb 0.2 0.3 0.4 / 0.5)'
+    const rgb = s => {
+      if (!s) return [0, 0, 0, 0];
+      if (s.startsWith('#')) return [1, 3, 5].map(k => parseInt(s.slice(k, k + 2), 16)).concat(1);
+      const m = s.replace(/^color\(srgb/, '').match(/[\d.]+/g).map(Number), k = s.startsWith('color(') ? 255 : 1;
+      return [m[0] * k, m[1] * k, m[2] * k, m[3] ?? 1];
+    };
+    const over = (fg, bg, alpha = 1) => { const [r, g, b, a] = rgb(fg), [R, G, B] = rgb(bg), k = a * alpha; return [r * k + R * (1 - k), g * k + G * (1 - k), b * k + B * (1 - k)]; };
+    const lum = c => { const [r, g, b] = c.map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+    const { board } = window.chalkTalk, cs = getComputedStyle(board.cv), token = n => cs.getPropertyValue(n).trim();
+    const paper = token('--board'), card = token('--card');
+    // the yard numbers as the board draws them
+    const nums = [], fillText = board.ctx.fillText;
+    board.ctx.fillText = function (t, ...rest) { if (/^\d+$/.test(t)) nums.push(ratio(over(this.fillStyle, paper, this.globalAlpha), rgb(paper))); return fillText.call(this, t, ...rest); };
+    board.render();
+    board.ctx.fillText = fillText;
+    // words in the page: their colour at their opacity, over what's behind them
+    const word = (el, bg) => { const s = getComputedStyle(el); return ratio(over(s.color, bg, +s.opacity * +getComputedStyle(el.parentElement).opacity), rgb(bg)); };
+    return {
+      nums: Math.min(...nums), count: nums.length,
+      lines: ['--field-side', '--field-ten'].map(n => ratio(over(token(n), paper), rgb(paper))),
+      dim: word(document.querySelector('#matchup .dim'), paper),
+      matchup: word(document.getElementById('matchup'), paper),
+      group: word(document.querySelector('.group-label'), card),
+    };
+  });
+  assert.ok(seen.count >= 4 && seen.nums >= 4.5, `${colorScheme}: the yard numbers are ${seen.nums.toFixed(2)}:1`);
+  if (colorScheme === 'light') assert.ok(seen.lines.every(r => r >= 3), `light: the sidelines and 10-yard lines are ${seen.lines.map(r => r.toFixed(2))}:1`);
+  for (const k of ['dim', 'matchup', 'group']) assert.ok(seen[k] >= 4.5, `${colorScheme}: ${k} is ${seen[k].toFixed(2)}:1`);
+  await c.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
