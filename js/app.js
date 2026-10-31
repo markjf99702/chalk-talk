@@ -98,8 +98,18 @@ function lineUp() {
   syncTransport();
   syncTheirs();
   renderMatchup();
-  setCaption('');
+  setCaption(firstHint ? FIRST_HINT : '');
   draw();
+}
+
+// Before the first snap of a visit, the empty caption says what to do first, until a player is tapped or the play is
+// snapped.
+const FIRST_HINT = 'Tap any player to see his job, then Snap.';
+let firstHint = true;
+function dropHint() {
+  if (!firstHint) return;
+  firstHint = false;
+  if ($('caption').textContent === FIRST_HINT) setCaption('');
 }
 
 function syncBoard() {
@@ -118,7 +128,7 @@ function draw() { board.t = state.t; board.render(); }
 function play() {
   if (!state.play) return;
   const snapped = state.phase === 'pre';
-  if (snapped) linkNote = ''; // a word about a link that couldn't open lasts until the next play
+  if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   $('why').hidden = true;
@@ -231,7 +241,7 @@ $('board').addEventListener('pointerup', e => {
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;
   const r = $('board').getBoundingClientRect();
   const i = board.hit(e.clientX - r.left, e.clientY - r.top);
-  if (i < 0 || i === board.selected) { board.selected = -1; hideWho(); } else { board.selected = i; showWho(i); }
+  if (i < 0 || i === board.selected) { board.selected = -1; hideWho(); } else { board.selected = i; showWho(i); dropHint(); }
   draw();
 });
 $('whoClose').addEventListener('click', () => { board.selected = -1; hideWho(); draw(); });
@@ -670,6 +680,7 @@ function techDiagram() {
 
 load();
 const link = fromLink();
+if (link === 'ok') firstHint = false; // a shared play runs on its own
 if (link !== 'ok' && state.auto) rollTheirs();
 renderChoosers();
 playbook();

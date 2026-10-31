@@ -63,12 +63,19 @@ const tapOn = label => page.evaluate(label => {
   return { x: r.left + board.sx(p.x), y: r.top + board.sy(p.y) };
 }, label).then(at => page.mouse.click(at.x, at.y));
 assert.match(await page.textContent('#matchup'), /coverage hidden/, 'the board says the coverage is hidden');
+// The first thing to do, before the first snap: until a player is tapped or the play is snapped.
+const HINT = 'Tap any player to see his job, then Snap.';
+assert.equal(await page.textContent('#caption'), HINT, 'the board says what to do first');
+await page.getByRole('radio', { name: 'Four Verticals' }).click();
+assert.equal(await page.textContent('#caption'), HINT, 'the first hint stays when the call changes');
+await page.getByRole('radio', { name: 'Smash' }).click();
 await page.click('#runChart');
 assert.match(await page.textContent('#runChart'), /^Running… [1-5] of 5$/, 'the chart says how far along it is');
 await page.waitForFunction(() => !document.getElementById('runChart').disabled && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
 await tapOn('FS');
 assert.match(await page.textContent('#whoPos'), /Free safety/, 'tapping the free safety opens his card');
+assert.equal(await page.textContent('#caption'), '', 'the first hint goes once a player is tapped');
 assert.match(await page.textContent('#whoJob'), /hidden until the snap/, 'a defender\'s job is hidden before the snap');
 
 // Snap a play: it runs, and the result card explains it. Their call is out: the chart marks it, and the card says
