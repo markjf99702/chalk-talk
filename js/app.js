@@ -1007,6 +1007,10 @@ function narrow() { return $('board').parentElement.classList.contains('narrow')
 const fit = () => { board.resize(); $('board').parentElement.classList.toggle('narrow', board.w < 620); if (!$('who').hidden) syncMore(); draw(); placeWhy(); };
 fit();
 new ResizeObserver(fit).observe($('board'));
+// A window dragged to a screen with another pixel density keeps its size in CSS pixels, so the ResizeObserver doesn't
+// see it: a query for the density it has now says when that changes, once, and then the new density is watched.
+const density = () => matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => { fit(); density(); }, { once: true });
+density();
 const recolor = () => { board.readColors(); draw(); };
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', recolor);
 new MutationObserver(recolor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

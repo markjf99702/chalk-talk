@@ -1029,6 +1029,30 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Dragged to a screen with another pixel density (an external monitor to a laptop's), the board is drawn again for it
+// rather than left soft: nothing about its size in CSS pixels changes, so only a watch on the density catches it. (The
+// density is changed through the DevTools protocol, which in headless Chromium doesn't send the media query's change
+// event a real screen change does, so the test sends it.)
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  const p = await c.newPage();
+  await p.addInitScript(() => {
+    const mm = window.matchMedia.bind(window);
+    window.densityWatch = [];
+    window.matchMedia = q => { const m = mm(q); if (/resolution/.test(q)) window.densityWatch.push(m); return m; };
+  });
+  await p.goto(base);
+  const sharp = () => p.evaluate(() => { const { board } = window.chalkTalk; return board.cv.width / board.w; });
+  assert.ok(Math.abs(await sharp() - 1) < 0.01);
+  const cdp = await c.newCDPSession(p);
+  for (const dpr of [2, 1]) {
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: dpr, mobile: false });
+    await p.evaluate(() => window.densityWatch.at(-1)?.dispatchEvent(new Event('change')));
+    await until(async () => Math.abs(await sharp() - dpr) < 0.01, 3000, `on a screen with ${dpr}x density the board is drawn at ${(await sharp()).toFixed(2)}x`);
+  }
+  await c.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
