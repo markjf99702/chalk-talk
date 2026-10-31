@@ -27,6 +27,7 @@ const state = {
   speed: 1,
   seed: newSeed(),
   linked: false, // showing a shared play: both calls, until the first change
+  seen: false, // the other coach's call has been out since he picked it: a snap showed it
   play: null,
   phase: 'pre', // pre, playing, paused, done
   t: 0,
@@ -62,12 +63,14 @@ function save() {
 }
 
 const call = () => ({ ...state.off, ...state.def });
-// The other coach's call is hidden from the board, the chart and the player cards until the snap.
-const hidden = () => state.auto && state.phase === 'pre';
+// The other coach's call is hidden from the board, the chart and the player cards until the snap. Once a snap has shown
+// it, it stays out until he picks again.
+const hidden = () => state.auto && state.phase === 'pre' && !state.seen;
 
 // The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on. It's
 // never the call they had (New look always changes something), short of ten unlucky rolls in a row.
 function rollTheirs() {
+  state.seen = false;
   const R = rng(newSeed());
   const w = list => { let x = R() * list.reduce((a, [, p]) => a + p, 0); for (const [v, p] of list) { if ((x -= p) <= 0) return v; } return list[0][0]; };
   const theirs = () => (state.side === 'O'
@@ -129,7 +132,7 @@ function syncBoard() {
   board.mineTeam = state.side;
   board.labels = state.labels;
   board.showMine = true;
-  board.showTheirs = !state.auto || state.phase !== 'pre';
+  board.showTheirs = !hidden();
 }
 
 let raf = 0, last = 0;
@@ -139,6 +142,7 @@ function play() {
   if (!state.play) return;
   const snapped = state.phase === 'pre';
   if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
+  if (snapped && state.auto) state.seen = true;
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   $('why').hidden = true;
@@ -440,9 +444,10 @@ function syncTheirs() {
       : 'You\'re calling both sides. Turn on "Let the other coach pick" to be surprised.';
     return;
   }
-  if (state.phase === 'pre') hint.textContent = state.side === 'O'
+  if (hidden()) hint.textContent = state.side === 'O'
     ? 'Hidden until the snap. Read their alignment on the board: how many safeties are deep, how many defenders are in the box.'
     : 'Hidden until the snap. You can see their formation; the play is a surprise.';
+  else if (state.phase === 'pre') hint.textContent = `Same call as last snap: ${theirSummary()}. New look gets you a new one.`;
   else hint.textContent = `They called: ${theirSummary()}.`;
 }
 

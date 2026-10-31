@@ -576,6 +576,23 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// A call you've seen stays seen. Change your play after a snap and their call is still shown, as the same one as last
+// snap, until New look has him pick again: that one is hidden until the next snap.
+{
+  const p = await phone();
+  await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); });
+  const called = (await p.textContent('#theirsHint')).match(/^They called: (.*)\.$/)?.[1];
+  assert.ok(called, 'their call is out after the snap');
+  await p.getByRole('radio', { name: 'Mesh' }).click();
+  assert.equal(await p.textContent('#theirsHint'), `Same call as last snap: ${called}. New look gets you a new one.`);
+  assert.doesNotMatch(await p.textContent('#matchup'), /hidden/, 'a call you have seen is hidden again on the board');
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.showTheirs), true, 'their drawn-up play is hidden again');
+  await p.evaluate(() => document.getElementById('newLook').click());
+  assert.match(await p.textContent('#matchup'), /coverage hidden/, 'a new look is hidden until the snap');
+  assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap/);
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
