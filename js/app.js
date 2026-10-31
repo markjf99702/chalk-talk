@@ -33,6 +33,8 @@ const state = {
   t: 0,
 };
 
+// Whether call a has everything call b has.
+const same = (a, b) => Object.keys(b).every(f => a[f] === b[f]);
 // A kept call that this version can play, tidied up, or null.
 const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip } : null);
 const okDef = d => (d && FRONTS.some(f => f.id === d.front) && COVERAGES.some(c => c.id === d.coverage) ? { front: d.front, coverage: d.coverage, pressure: d.pressure === 'blitz' ? 'blitz' : 'four' } : null);
@@ -77,7 +79,6 @@ function keepPlay() {
 function keptPlay() {
   try {
     const k = JSON.parse(sessionStorage.getItem(PLAY_KEY) || 'null'), off = okOff(k?.off), def = okDef(k?.def);
-    const same = (a, b) => Object.keys(b).every(f => a[f] === b[f]);
     if (!off || !def || k.side !== state.side || k.auto !== state.auto || !Number.isInteger(k.seed) || k.seed < 0) return null;
     if ((!state.auto || state.side === 'O') && !same(off, own.off)) return null;
     if ((!state.auto || state.side === 'D') && !same(def, own.def)) return null;
@@ -167,9 +168,9 @@ function play() {
   if (!state.play) return;
   const snapped = state.phase === 'pre';
   if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
-  if (snapped && state.auto) state.seen = true;
-  // Said again at the end of each run of the play, so a replay is heard too.
-  if (snapped && state.auto) say(`They called: ${theirSummary()}.`); else if (!snapped) say('');
+  // His call is out now, and stays out until he picks again. For a replay the status line is cleared, so that its end
+  // is said again.
+  if (snapped && state.auto) { state.seen = true; say(`They called: ${theirSummary()}.`); } else if (!snapped) say('');
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   if (snapped) keepPlay();
@@ -475,10 +476,11 @@ function afterChange() {
   const focused = document.activeElement?.dataset.key; // a chip picked from the keyboard keeps the focus once it's drawn again
   // The chart is for the last call. One still running starts again for the new call; a finished one goes, with a word
   // saying why until it's run again. (Calling the other side is another chart altogether.)
-  const k = state.side === 'O' ? 'off' : 'def', yours = !state.auto || JSON.stringify(state[k]) !== JSON.stringify(own[k]);
+  const k = state.side === 'O' ? 'off' : 'def', yours = !state.auto || !same(state[k], own[k]);
   const finished = chart && chart.rows.every(r => r.avg !== undefined);
   const rerun = chart && !finished && chart.side === state.side;
-  redo = (chart ? finished && chart.side : redo?.side) === state.side ? { side: state.side, yours } : null;
+  const stale = chart ? finished && chart.side === state.side : redo?.side === state.side; // a finished one, or one gone already
+  redo = stale ? { side: state.side, yours } : null;
   state.linked = false;
   linkNote = '';
   keepOwn();
