@@ -440,3 +440,22 @@ button:disabled { cursor: default; }
   .transport .seg { margin-left: auto; }
   #scrub { order: 1; flex: 1 0 100%; margin: 0; height: 22px; }
 }
+
+/* Fingers: tap targets 44 px (Apple's guideline, and WCAG 2.2's enhanced target size), mostly drawn the same size. */
+@media (pointer: coarse) {
+  .chips { gap: 8px; }
+  .chip { min-height: 42px; }
+  .ghost, .side-pick button { min-height: 44px; }
+  .tool { width: 44px; height: 44px; }
+  .seg.small button { position: relative; min-width: 44px; }
+  .seg.small button::before { content: ''; position: absolute; inset: -7px 0; }
+  .switch { min-height: 44px; }
+  .jd-foot { align-items: center; }
+  .jd-foot a { padding: 12px 4px; }
+}
+/* the narrowest phones: room for "Run it again" beside them */
+@media (pointer: coarse) and (max-width: 359px) {
+  .seg.small button { min-width: 36px; }
+  .transport { column-gap: 4px; }
+  .snap { padding: 8px 12px; }
+}

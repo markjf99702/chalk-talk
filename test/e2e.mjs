@@ -393,18 +393,35 @@ for (const width of [320, 360, 375]) {
   const p = await small.newPage();
   p.on('pageerror', e => problems.push(e.message));
   await p.goto(base);
+  let tall = 0;
   for (const when of ['before', 'after']) {
     if (when === 'after') await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); scrollTo(0, 0); });
     const fit = await p.evaluate(() => ({
       wide: document.documentElement.scrollWidth - innerWidth,
       out: [...document.querySelectorAll('.transport > *')].filter(el => { const b = el.getBoundingClientRect(); return b.left < 0 || b.right > innerWidth || b.width < 24; }).map(el => el.id || el.className),
       scrub: document.getElementById('scrub').getBoundingClientRect().width,
+      tall: document.querySelector('.transport').offsetHeight,
     }));
+    if (when === 'before') tall = fit.tall;
+    else assert.equal(fit.tall, tall, `${width} px wide: the controls take another row after the snap`);
     assert.equal(fit.wide, 0, `${width} px wide, ${when} the snap: the page scrolls sideways`);
     assert.deepEqual(fit.out, [], `${width} px wide, ${when} the snap: controls cut off`);
     assert.ok(fit.scrub > width / 2, `${width} px wide, ${when} the snap: the scrubber is ${Math.round(fit.scrub)} px`);
   }
   await small.close();
+}
+
+// On a touch screen the things to tap are 44 px or so (the chips 42), and the speed buttons' 31 px pills take a tap
+// 44 px tall.
+{
+  const sizes = await page.evaluate(() => {
+    const short = (sel, min) => [...document.querySelectorAll(sel)].filter(e => e.getClientRects().length).map(e => e.getBoundingClientRect()).filter(b => b.height < min).length;
+    const speed = document.querySelector('[data-speed="1"]').getBoundingClientRect();
+    const reach = [-21, 21].every(dy => document.elementFromPoint(speed.left + speed.width / 2, speed.top + speed.height / 2 + dy)?.closest('[data-speed="1"]'));
+    return { coarse: matchMedia('(pointer: coarse)').matches, chips: short('.chip', 40), buttons: short('.ghost, .side-pick button, .tool, .switch', 44), reach };
+  });
+  assert.ok(sizes.coarse, 'the phone context has a touch screen');
+  assert.deepEqual(sizes, { coarse: true, chips: 0, buttons: 0, reach: true }, 'tap targets on a touch screen');
 }
 
 // Fits a phone: nothing scrolls sideways.
