@@ -445,8 +445,8 @@ function syncTheirs() {
     return;
   }
   if (hidden()) hint.textContent = state.side === 'O'
-    ? 'Hidden until the snap. Read their alignment on the board: how many safeties are deep, how many defenders are in the box.'
-    : 'Hidden until the snap. You can see their formation; the play is a surprise.';
+    ? 'Hidden until the snap. Read their alignment: how many safeties are deep, how far off the corners are, how many defenders are in the box. Then call the play that beats it: change your play and they keep their call; change your personnel and they\'ll substitute.'
+    : 'Hidden until the snap. You can see their formation; the play is a surprise. Change your call to match it: they keep theirs.';
   else if (state.phase === 'pre') hint.textContent = `Same call as last snap: ${theirSummary()}. New look gets you a new one.`;
   else hint.textContent = `They called: ${theirSummary()}.`;
 }

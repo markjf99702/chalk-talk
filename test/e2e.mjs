@@ -63,6 +63,8 @@ const tapOn = label => page.evaluate(label => {
   return { x: r.left + board.sx(p.x), y: r.top + board.sy(p.y) };
 }, label).then(at => page.mouse.click(at.x, at.y));
 assert.match(await page.textContent('#matchup'), /coverage hidden/, 'the board says the coverage is hidden');
+// It says what to do with the read: call the play that beats it, and they keep their call.
+assert.match(await page.textContent('#theirsHint'), /change your play and they keep their call/, 'the card says you can change your play after the read');
 // The first thing to do, before the first snap: until a player is tapped or the play is snapped.
 const HINT = 'Tap any player to see his job, then Snap.';
 assert.equal(await page.textContent('#caption'), HINT, 'the board says what to do first');
