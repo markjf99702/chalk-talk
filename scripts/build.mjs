@@ -44,7 +44,13 @@ const fragment = html
   .replace(/<meta charset[^>]*>\s*/i, '')
   .replace(/<meta name="viewport"[^>]*>\s*/i, '');
 
+// That host pads the page clear of a phone's notch itself, so the board that sticks to the top on a phone sits below
+// that padding instead of adding its own.
+const embedded = fragment.replace('.stage { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: max(6px, env(safe-area-inset-top)); margin-top: -6px; }',
+  '.stage { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-top: 6px; margin-top: -6px; }');
+if (embedded === fragment) throw new Error('css/app.css: sticky board rule not found');
+
 await mkdir(new URL('dist/', root), { recursive: true });
 await writeFile(new URL('dist/chalk-talk.html', root), html);
-await writeFile(new URL('dist/artifact.html', root), fragment);
+await writeFile(new URL('dist/artifact.html', root), embedded);
 console.log(`dist/chalk-talk.html  ${(html.length / 1024).toFixed(1)} KB`);
