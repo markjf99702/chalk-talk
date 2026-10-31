@@ -404,6 +404,39 @@ for (const side of ['O', 'D']) {
   assert.equal(await p.isVisible('#who'), false, 'a tap on the card over empty field goes through and closes it');
   await p.close();
 }
+// On a phone the card closes whenever the play starts to run, not only at the snap: at ▶ after a pause or a scrub, and
+// at ↺ Watch it again. Left up, it sits over the caption saying what's happening.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  const tap = async label => {
+    const at = await p.evaluate(label => {
+      const { board, state } = window.chalkTalk, i = state.play.players.findIndex(q => q.label === label);
+      const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
+      return { i, x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) };
+    }, label);
+    for (let n = 0; n < 4 && await p.evaluate(() => window.chalkTalk.board.selected) !== at.i; n++) await p.mouse.click(at.x, at.y);
+    assert.match(await p.textContent('#whoPos'), new RegExp(`^${label} ·`), `tapping the ${label}`);
+  };
+  const closed = async what => assert.deepEqual(await p.evaluate(() => ({ phase: window.chalkTalk.state.phase, shown: !document.getElementById('who').hidden, picked: window.chalkTalk.board.selected })),
+    { phase: 'playing', shown: false, picked: -1 }, `on a phone the card stays up over the play ${what}`);
+  await p.waitForFunction(() => window.chalkTalk.state.t > 1, null, { timeout: 10000 });
+  await p.click('#play');
+  await tap('RT');
+  await p.click('#play');
+  await closed('when it goes on after a pause');
+  await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = '20'; s.dispatchEvent(new Event('input')); });
+  await tap('RT');
+  await p.click('#play');
+  await closed('when it goes on after a scrub');
+  await p.waitForFunction(() => window.chalkTalk.state.phase === 'done', null, { timeout: 15000 });
+  await tap('RT');
+  await p.click('#play');
+  await closed('when it is watched again');
+  await p.close();
+}
 // On a crowded line a fingertip covers two or three players: tapping the same spot again picks the next one there,
 // nearest first, instead of closing the card. A tap that lands a little off a lineman reaches him in two taps, or three
 // where two others are nearer still (under center the quarterback is 4.5 px behind the center on a phone).

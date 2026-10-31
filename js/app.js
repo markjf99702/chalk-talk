@@ -180,15 +180,19 @@ function play() {
   syncTheirs();
   renderMatchup();
   syncTransport();
+  if (board.selected >= 0 && cardClosesOnPlay()) { board.selected = -1; hideWho(); }
   if (snapped) { // the other side's call is out now: the tapped player's job, and which row of the chart it is
-    // On a narrow board the card would hide part of the play, so it closes; a bigger board has room to keep it.
-    if (board.selected >= 0 && narrow()) { board.selected = -1; hideWho(); } else if (board.selected >= 0) showWho(board.selected);
+    if (board.selected >= 0) showWho(board.selected);
     syncChart();
   }
   last = performance.now();
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
 }
+
+// Whether the player's card closes as the play starts to run: at the snap, at ▶ after a pause or a scrub, and at ↺ Watch
+// it again. On a narrow board it would hide part of the play; a bigger board has room to keep it up.
+const cardClosesOnPlay = () => narrow();
 
 function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
