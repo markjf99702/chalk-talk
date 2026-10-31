@@ -45,11 +45,20 @@ function load() {
     }
   } catch { /* storage unavailable: start fresh */ }
   ownAuto = state.auto;
+  own.off = { ...state.off };
+  own.def = { ...state.def };
 }
 // The person's own "Let the other coach pick". A shared link shows both calls without changing it: only the switch does.
 let ownAuto = true;
+// The person's own call for each side, which is what's saved. While the other coach picks, the side you aren't calling
+// is his, and switching sides brings yours back (see the side pick); calling both sides, both are yours.
+const own = { off: { ...state.off }, def: { ...state.def } };
+function keepOwn() {
+  if (!state.auto || state.side === 'O') own.off = { ...state.off };
+  if (!state.auto || state.side === 'D') own.def = { ...state.def };
+}
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: state.off, def: state.def, auto: ownAuto, labels: state.labels, speed: state.speed })); } catch { /* fine */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, auto: ownAuto, labels: state.labels, speed: state.speed })); } catch { /* fine */ }
 }
 
 const call = () => ({ ...state.off, ...state.def });
@@ -386,6 +395,7 @@ function defenseChooser(host, readonly) {
 function afterChange() {
   state.linked = false;
   linkNote = '';
+  keepOwn();
   save();
   state.seed = newSeed();
   renderChoosers();
@@ -441,7 +451,10 @@ function renderMatchup() {
 for (const b of document.querySelectorAll('[data-side]')) b.addEventListener('click', () => {
   if (state.side === b.dataset.side) return;
   state.side = b.dataset.side;
-  if (state.auto) rollTheirs();
+  if (state.auto) { // your own call for this side comes back, and the other coach picks for the other one
+    if (state.side === 'O') state.off = { ...own.off }; else state.def = { ...own.def };
+    rollTheirs();
+  }
   afterChange();
 });
 $('auto').addEventListener('change', e => {

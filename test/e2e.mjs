@@ -530,6 +530,28 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Each side keeps your own call. Switch to the defense and back and the offense is the one you called, not the one the
+// other coach picked while you were on defense; the same for the defense, and after a reload.
+{
+  const p = await phone();
+  const calls = () => p.evaluate(() => { const { state } = window.chalkTalk; return { off: { ...state.off }, def: { ...state.def } }; });
+  for (const name of ['Singleback', 'Left', 'Power']) await p.getByRole('radio', { name }).click();
+  const off = (await calls()).off;
+  assert.deepEqual(off, { formation: 'single', play: 'power', flip: true });
+  await p.click('[data-side="D"]');
+  await p.getByRole('radio', { name: 'Cover 4' }).click();
+  const def = (await calls()).def;
+  await p.click('[data-side="O"]');
+  assert.deepEqual((await calls()).off, off, 'switching to the defense and back lost your offense');
+  await p.click('[data-side="D"]');
+  assert.deepEqual((await calls()).def, def, 'switching to the offense and back lost your defense');
+  await p.reload();
+  assert.deepEqual((await calls()).def, def, 'a reload lost your defense');
+  await p.click('[data-side="O"]');
+  assert.deepEqual((await calls()).off, off, 'a reload lost your offense');
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
