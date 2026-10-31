@@ -632,6 +632,23 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Calling the defense, their call says where the strength is on the board as you see it: turned around, the
+// offense's right is on your left.
+{
+  const p = await phone();
+  await p.click('[data-side="D"]');
+  for (const flip of [false, true]) {
+    const said = await p.evaluate(f => {
+      const { state, lineUp, snap, finish } = window.chalkTalk;
+      Object.assign(state.off, { formation: 'single', play: 'smash', flip: f });
+      lineUp(); snap(); finish();
+      return document.getElementById('theirsHint').textContent;
+    }, flip);
+    assert.equal(said, `They called: Singleback, strength to your ${flip ? 'right' : 'left'}, Smash.`, `strong side ${flip ? 'left' : 'right'}`);
+  }
+  await p.context().close();
+}
+
 // From the keyboard: a pick keeps focus on the chip picked (the choosers are drawn again on every pick), the result
 // card's buttons hand it to Snap as the card goes away, and the chart's button keeps it while it runs.
 {

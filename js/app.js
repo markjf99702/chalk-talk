@@ -512,8 +512,9 @@ function theirSummary() {
     const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
     return `${fr.name}, ${cv.name}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ', blitz' : ', rush four'}`;
   }
+  // Where the strength is on the board as you see it: the defense's view is turned around, so their right is your left.
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
-  return `${fm.name} (strong ${state.off.flip ? 'left' : 'right'}), ${pl.name}`;
+  return `${fm.name}, strength to your ${state.off.flip ? 'right' : 'left'}, ${pl.name}`;
 }
 
 function syncTheirs() {
