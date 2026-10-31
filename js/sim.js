@@ -215,9 +215,10 @@ function buildDefense(S) {
   for (const d of S.D) {
     const j = d.job;
     if (d.cls === 'cb' && d !== S.NB) continue;
-    if (j.kind === 'man' && d !== fs) {
+    if (j.kind === 'man') {
       const r = j.r;
       if (r.num && Math.abs(r.x) > 6) { d.x = r.x - Math.sign(r.x) * (cov.id === 'c1' ? 0.9 : 0.6); d.y = cov.id === 'c0' ? 2 : 3.6; }
+      else if (r.cls === 'te' && d.edge && r.y > -1) { /* an edge man on the line takes the tight end from outside him, a 9-technique: he stays there */ }
       else if (r.cls === 'te') { d.x = r.x + Math.sign(r.x) * 0.5; d.y = d.cls === 'lb' ? 4 : 4.5; }
       else if (d.cls === 's') { d.x = clamp(r.x * 0.5 + d.x * 0.5, -6, 6); d.y = 6; }
       else if (d.edge) { d.y = 3; }
