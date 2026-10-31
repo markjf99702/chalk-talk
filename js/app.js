@@ -370,7 +370,14 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 
 function offenseChooser(host, readonly) {
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
-  const set = patch => { Object.assign(state.off, patch); afterChange(); };
+  const set = patch => {
+    const was = fm.personnel;
+    Object.assign(state.off, patch);
+    // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
+    // or strong side keeps his call, the way an audible at the line does.
+    if (state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was) rollTheirs();
+    afterChange();
+  };
   chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel })), fm.id, id => set({ formation: id }), {
     disabled: readonly, blurb: `${fm.blurb} ${fm.personnel} personnel.`,
   });

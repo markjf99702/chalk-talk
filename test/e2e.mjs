@@ -552,6 +552,30 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Change your personnel and the other coach substitutes (nickel against three receivers, base against two backs), so a
+// nickel defense rarely stays on against I-Form. Change only your play or strong side and he keeps his call: an audible.
+{
+  const p = await phone();
+  const def = () => p.evaluate(() => ({ ...window.chalkTalk.state.def }));
+  const before = await def();
+  await p.getByRole('radio', { name: 'Mesh' }).click();
+  await p.getByRole('radio', { name: 'Left' }).click();
+  assert.deepEqual(await def(), before, 'changing your play or strong side changed their call');
+  const nickel = await p.evaluate(() => {
+    const { state } = window.chalkTalk, chip = name => [...document.querySelectorAll('#mineBody .chip')].find(b => b.textContent.startsWith(name));
+    let n = 0;
+    for (let k = 0; k < 30; k++) {
+      chip('Gun Trips').click();
+      Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four' });
+      chip('I-Form').click();
+      if (state.def.front === 'nickel') n++;
+    }
+    return n;
+  });
+  assert.ok(nickel < 12, `a nickel defense stayed on against I-Form ${nickel} times in 30`);
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
