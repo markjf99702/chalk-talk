@@ -686,6 +686,28 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// A change of call while the chart is running starts it again for the new call, and one that clears a finished chart
+// says so until it's run again.
+{
+  const p = await phone();
+  const rows = () => p.$$eval('#bars .bar-row:not(.waiting)', r => r.length);
+  const ready = () => p.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
+  await p.click('#runChart');
+  await p.getByRole('radio', { name: 'Mesh' }).click();
+  assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), 'true', 'changing the call stopped the chart');
+  await ready();
+  await p.getByRole('radio', { name: 'Flood' }).click();
+  assert.equal(await rows(), 0);
+  assert.match(await p.textContent('#chartHint'), / You changed the call\. Run it again for Flood\.$/);
+  await p.click('#theirsLook');
+  assert.match(await p.textContent('#chartHint'), / They changed their call\. Run it again for Flood\.$/);
+  await p.click('#snap');
+  assert.match(await p.textContent('#chartHint'), /Run it again for Flood\.$/, 'the word about the chart lasts through the snap');
+  await p.click('#runChart');
+  assert.doesNotMatch(await p.textContent('#chartHint'), /Run it again/, 'the word about the chart stays once it runs again');
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 

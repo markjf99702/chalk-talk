@@ -447,6 +447,12 @@ function defenseChooser(host, readonly) {
 
 function afterChange() {
   const focused = document.activeElement?.dataset.key; // a chip picked from the keyboard keeps the focus once it's drawn again
+  // The chart is for the last call. One still running starts again for the new call; a finished one goes, with a word
+  // saying why until it's run again. (Calling the other side is another chart altogether.)
+  const k = state.side === 'O' ? 'off' : 'def', yours = !state.auto || JSON.stringify(state[k]) !== JSON.stringify(own[k]);
+  const finished = chart && chart.rows.every(r => r.avg !== undefined);
+  const rerun = chart && !finished && chart.side === state.side;
+  redo = (chart ? finished && chart.side : redo?.side) === state.side ? { side: state.side, yours } : null;
   state.linked = false;
   linkNote = '';
   keepOwn();
@@ -455,6 +461,7 @@ function afterChange() {
   renderChoosers();
   lineUp();
   clearChart();
+  if (rerun) runChart();
   if (focused) document.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus();
 }
 
@@ -682,7 +689,8 @@ addEventListener('hashchange', () => {
 // ---------------------------------------------------------------- the chart: this call against everything
 
 let chartJob = 0;
-let chart = null; // the rows of the last run: { rows: [{ id, name, call, avg, rate }], pressure }
+let chart = null; // the rows of the last run: { rows: [{ id, name, call, avg, rate }], pressure, side }
+let redo = null; // a finished chart went with a change of call: { side, yours } until it's run again
 const RUN_LABEL = $('runChart').textContent, SNAPS = 20;
 
 function clearChart() {
@@ -699,10 +707,17 @@ function clearChart() {
 // coverage gets a four-man rush (Cover 0 always blitzes) until the call is out.
 function chartHint() {
   const fm = byId(FORMATIONS, state.off.formation).name;
-  if (state.side === 'D') return `Average yards a play allowed, against ${fm}. A play counts as a success for the offense if it gains 4 yards or more.`;
+  if (state.side === 'D') return `Average yards a play allowed, against ${fm}. A play counts as a success for the offense if it gains 4 yards or more.${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure;
   return `Average yards a play, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four'}.`
-    + `${hidden() ? ' Their real call stays hidden until the snap.' : ''} A play counts as a success if it gains 4 yards or more.`;
+    + `${hidden() ? ' Their real call stays hidden until the snap.' : ''} A play counts as a success if it gains 4 yards or more.${again()}`;
+}
+function again() {
+  if (!redo) return '';
+  const cv = byId(COVERAGES, state.def.coverage);
+  const mine = state.side === 'O' ? byId(PLAYS, state.off.play).name
+    : `${byId(FRONTS, state.def.front).name}, ${cv.name}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ', blitz' : ', rush four'}`;
+  return ` ${redo.yours ? 'You changed the call' : 'They changed their call'}. Run it again for ${mine}.`;
 }
 function syncChart() { $('chartHint').textContent = chartHint(); if (chart) drawBars(); }
 
@@ -718,13 +733,14 @@ async function runChart() {
   const button = $('runChart');
   if (button.getAttribute('aria-disabled') === 'true') return;
   const job = ++chartJob;
+  redo = null;
   button.setAttribute('aria-disabled', 'true');
   const base = call();
   if (state.side === 'O' && hidden()) base.pressure = 'four';
   const rows = state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
     : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }));
-  chart = { rows, pressure: base.pressure };
+  chart = { rows, pressure: base.pressure, side: state.side };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();
