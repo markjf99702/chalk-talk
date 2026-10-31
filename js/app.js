@@ -656,8 +656,9 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed): 'ok' once it's set up,
-// 'bad' for one this version can't open (the address is cleared either way), '' when there's none.
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed): 'ok' once it's set up, 'bad'
+// for one cut short or garbled, 'unknown' for a formation, play, front or coverage this version doesn't have (the
+// address is cleared either way), '' when there's none.
 let linkNote = '';
 function fromLink() {
   const hash = location.hash;
@@ -666,15 +667,16 @@ function fromLink() {
   const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)/);
   if (!m) return 'bad';
   const [, side, formation, playId, flip, front, coverage, pressure, seed] = m;
-  if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'bad';
+  if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
   Object.assign(state, { side, auto: false, linked: true, seed: +seed >>> 0 });
   state.off = { formation, play: playId, flip: flip === '1' };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four' };
   linkNote = '';
   return 'ok';
 }
-function badLink() {
-  linkNote = 'That link is for a play this version doesn\'t have.';
+function badLink(link) {
+  linkNote = link === 'bad' ? 'That link is cut off or garbled, so there\'s no play to show. Ask for it again.'
+    : 'That link is for a play this version doesn\'t have.';
   syncTheirs();
   say(linkNote);
   if (state.phase === 'pre') setCaption(linkNote);
@@ -683,7 +685,7 @@ function badLink() {
 addEventListener('hashchange', () => {
   const link = fromLink();
   if (link === 'ok') { renderChoosers(); clearChart(); lineUp(); play(); }
-  else if (link === 'bad') badLink();
+  else if (link) badLink(link);
 });
 
 // ---------------------------------------------------------------- the chart: this call against everything
@@ -859,7 +861,7 @@ clearChart();
 lineUp();
 syncTransport();
 if (link === 'ok') setTimeout(play, 500);
-if (link === 'bad') badLink();
+if (link && link !== 'ok') badLink(link);
 
 // A board under about 620 px wide (a phone, or the two-column layout on a small laptop) gets the compact player card.
 function narrow() { return $('board').parentElement.classList.contains('narrow'); }

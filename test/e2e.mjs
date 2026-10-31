@@ -223,6 +223,11 @@ await page2.waitForFunction(() => location.hash === '', null, { timeout: 5000 })
 assert.equal(await page2.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
 assert.equal(await page2.textContent('#say'), 'That link is for a play this version doesn\'t have.', 'a screen reader hears it too');
 assert.equal(await page2.evaluate(() => window.chalkTalk.state.off.play), 'power', 'a bad link changes the play');
+// One cut short (a messaging app can do that to a long link) says so, rather than that it's for a play from elsewhere.
+await page2.evaluate(() => { location.hash = '#p=O.trips.sm'; });
+await page2.waitForFunction(() => location.hash === '', null, { timeout: 5000 }).catch(() => assert.fail('a cut-off link stays in the address'));
+assert.equal(await page2.textContent('#theirsHint'), 'That link is cut off or garbled, so there\'s no play to show. Ask for it again.');
+assert.equal(await page2.evaluate(() => window.chalkTalk.state.off.play), 'power', 'a cut-off link changes the play');
 await page2.click('#snap');
 assert.doesNotMatch(await page2.textContent('#theirsHint'), /That link/, 'the word about the bad link stays after the next snap');
 // Opening links doesn't turn off "Let the other coach pick" for next time, even once you change a call.
