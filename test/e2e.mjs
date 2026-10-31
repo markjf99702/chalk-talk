@@ -126,6 +126,20 @@ await tapOn('QB');
 assert.match(await page.textContent('#whoPos'), /Quarterback/, 'tapping the quarterback opens his card');
 await page.click('#whoClose');
 
+// New look always changes their call, even from the likeliest one against three receivers (Nickel, Cover 3, rush four).
+const looks = await page.evaluate(() => {
+  const { state } = window.chalkTalk;
+  let same = 0;
+  for (let k = 0; k < 30; k++) {
+    Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four' });
+    document.getElementById('newLook').click();
+    if (state.def.front === 'nickel' && state.def.coverage === 'c3' && state.def.pressure === 'four') same++;
+  }
+  return { same, phase: state.phase };
+});
+assert.equal(looks.same, 0, `New look gave the same call ${looks.same} times in 30`);
+assert.equal(looks.phase, 'pre', 'New look lines up a new play');
+
 // Call the defense instead: the choosers swap and the board turns around.
 await page.click('[data-side="D"]');
 assert.match(await page.textContent('#mineTitle'), /defense/);

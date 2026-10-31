@@ -56,20 +56,27 @@ const call = () => ({ ...state.off, ...state.def });
 // The other coach's call is hidden from the board, the chart and the player cards until the snap.
 const hidden = () => state.auto && state.phase === 'pre';
 
-// The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on.
+// The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on. It's
+// never the call they had (New look always changes something), short of ten unlucky rolls in a row.
 function rollTheirs() {
   const R = rng(newSeed());
   const w = list => { let x = R() * list.reduce((a, [, p]) => a + p, 0); for (const [v, p] of list) { if ((x -= p) <= 0) return v; } return list[0][0]; };
-  if (state.side === 'O') {
-    const pers = byId(FORMATIONS, state.off.formation).personnel;
-    const spread = pers === '10' || pers === '11';
-    state.def.front = w(spread ? [['nickel', 0.55], ['over', 0.15], ['under', 0.12], ['34', 0.18]] : [['over', 0.3], ['under', 0.25], ['34', 0.3], ['nickel', 0.15]]);
-    state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]]);
-    state.def.pressure = R() < 0.25 ? 'blitz' : 'four';
-  } else {
-    state.off.formation = R.pick(FORMATIONS).id;
-    state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? 0.105 : 0.083]));
-    state.off.flip = R() < 0.5;
+  const theirs = () => (state.side === 'O'
+    ? [state.def.front, state.def.coverage, state.def.coverage === 'c0' ? 'blitz' : state.def.pressure] // Cover 0 always blitzes
+    : [state.off.formation, state.off.play, state.off.flip]).join();
+  const had = theirs();
+  for (let tries = 0; tries < 10 && theirs() === had; tries++) {
+    if (state.side === 'O') {
+      const pers = byId(FORMATIONS, state.off.formation).personnel;
+      const spread = pers === '10' || pers === '11';
+      state.def.front = w(spread ? [['nickel', 0.55], ['over', 0.15], ['under', 0.12], ['34', 0.18]] : [['over', 0.3], ['under', 0.25], ['34', 0.3], ['nickel', 0.15]]);
+      state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]]);
+      state.def.pressure = R() < 0.25 ? 'blitz' : 'four';
+    } else {
+      state.off.formation = R.pick(FORMATIONS).id;
+      state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? 0.105 : 0.083]));
+      state.off.flip = R() < 0.5;
+    }
   }
 }
 
