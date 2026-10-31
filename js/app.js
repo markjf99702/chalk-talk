@@ -413,6 +413,7 @@ function fromLink() {
 
 let chartJob = 0;
 let chart = null; // the rows of the last run: { rows: [{ id, name, call, avg, rate }], pressure }
+const RUN_LABEL = $('runChart').textContent, SNAPS = 20;
 
 function clearChart() {
   chartJob++;
@@ -420,6 +421,7 @@ function clearChart() {
   $('bars').textContent = '';
   $('chartTitle').textContent = state.side === 'O' ? 'Your play against each coverage' : 'Your defense against each play';
   $('chartHint').textContent = chartHint();
+  $('runChart').textContent = RUN_LABEL;
   $('runChart').disabled = false;
 }
 
@@ -434,9 +436,16 @@ function chartHint() {
 }
 function syncChart() { $('chartHint').textContent = chartHint(); if (chart) drawBars(); }
 
+// A snap takes a few milliseconds on a laptop and up to about 90 on a slow phone, so the chart runs about 10 ms' worth
+// at a time and lets the page answer taps and draw in between. While a play is running it waits, so the play gets
+// every frame. (A plain timeout, not scheduler.yield(): that one goes ahead of drawing and of timers, and a slow phone
+// drew the page about ten times a second until the chart was done.)
+const breather = () => new Promise(r => setTimeout(r, 0));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
 async function runChart() {
-  const job = ++chartJob;
-  $('runChart').disabled = true;
+  const job = ++chartJob, button = $('runChart');
+  button.disabled = true;
   const base = call();
   if (state.side === 'O' && hidden()) base.pressure = 'four';
   const rows = state.side === 'O'
@@ -444,20 +453,26 @@ async function runChart() {
     : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }));
   chart = { rows, pressure: base.pressure };
   $('chartHint').textContent = chartHint();
-  $('bars').textContent = '';
-  for (const r of rows) {
+  drawBars();
+  let slice = performance.now();
+  for (const [n, r] of rows.entries()) {
+    button.textContent = `Running… ${n + 1} of ${rows.length}`;
     let yds = 0, ok = 0;
-    const N = 20;
-    for (let k = 0; k < N; k++) {
+    for (let k = 0; k < SNAPS; k++) {
+      if (performance.now() - slice > 10 || state.phase === 'playing') {
+        await breather();
+        while (state.phase === 'playing' && job === chartJob) await wait(100);
+        if (job !== chartJob) return;
+        slice = performance.now();
+      }
       const res = simulate({ ...r.call, flip: k % 2 === 1 }, newSeed()).result;
       yds += res.yards; if ((res.kind === 'run' || res.kind === 'catch') && res.yards >= 4) ok++;
     }
-    if (job !== chartJob) return;
-    r.avg = yds / N; r.rate = ok / N;
+    r.avg = yds / SNAPS; r.rate = ok / SNAPS;
     drawBars();
-    await new Promise(res => setTimeout(res, 0));
   }
-  $('runChart').disabled = false;
+  button.textContent = RUN_LABEL;
+  button.disabled = false;
 }
 
 // The row for the other side's call is marked only once that call is out.
@@ -469,25 +484,25 @@ function drawBars() {
   const neg = done.some(r => r.avg < 0);
   const mineId = hidden() ? null : state.side === 'O' ? state.def.coverage : state.off.play;
   const tag = state.auto ? 'their call' : 'this call';
-  if (done.length) host.insertAdjacentHTML('beforeend', '<div class="bar-head" aria-hidden="true">avg yards · success</div>');
-  for (const r of done) {
+  host.insertAdjacentHTML('beforeend', '<div class="bar-head" aria-hidden="true">avg yards · success</div>');
+  for (const r of chart.rows) {
     const mine = r.id === mineId;
+    const name = `<span class="bar-name"><span>${esc(r.name)}</span>${mine ? `<em>${tag}</em>` : ''}</span>`;
     const row = document.createElement('div');
-    row.className = 'bar-row' + (mine ? ' mine' : '');
     row.setAttribute('role', 'listitem');
+    host.append(row);
+    if (r.avg === undefined) { // still to run
+      row.className = 'bar-row waiting';
+      row.innerHTML = `${name}<span class="bar-track"></span><span class="bar-val">…</span>`;
+      continue;
+    }
+    row.className = 'bar-row' + (mine ? ' mine' : '');
     const w = Math.abs(r.avg) / max * (neg ? 50 : 100);
     const left = neg ? (r.avg < 0 ? 50 - w : 50) : 0;
-    row.innerHTML = `<span class="bar-name"><span>${esc(r.name)}</span>${mine ? `<em>${tag}</em>` : ''}</span>
+    row.innerHTML = `${name}
       <span class="bar-track${neg ? ' split' : ''}"><span class="bar ${r.avg < 0 ? 'neg' : ''}" style="left:${left}%;width:${Math.max(0.6, w)}%"></span></span>
       <span class="bar-val">${r.avg >= 0 ? '' : '−'}${Math.abs(r.avg).toFixed(1)} <small>${Math.round(r.rate * 100)}%</small></span>`;
     row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${r.avg.toFixed(1)} yards a play, ${Math.round(r.rate * 100)}% successful`;
-    host.append(row);
-  }
-  for (let k = done.length; k < chart.rows.length; k++) {
-    const row = document.createElement('div');
-    row.className = 'bar-row waiting';
-    row.innerHTML = '<span class="bar-name">…</span><span class="bar-track"></span><span class="bar-val"></span>';
-    host.append(row);
   }
 }
 $('runChart').addEventListener('click', runChart);

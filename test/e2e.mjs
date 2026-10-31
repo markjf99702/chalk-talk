@@ -64,6 +64,7 @@ const tapOn = label => page.evaluate(label => {
 }, label).then(at => page.mouse.click(at.x, at.y));
 assert.match(await page.textContent('#matchup'), /coverage hidden/, 'the board says the coverage is hidden');
 await page.click('#runChart');
+assert.match(await page.textContent('#runChart'), /^Running… [1-5] of 5$/, 'the chart says how far along it is');
 await page.waitForFunction(() => !document.getElementById('runChart').disabled && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
 await tapOn('FS');
