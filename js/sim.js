@@ -224,9 +224,13 @@ function buildDefense(S) {
     } else if (j.kind === 'zone' && !j.z.deep && j.zid !== 'rat') {
       const sd = j.z.at[0] < 0 ? -1 : 1;
       const slot = sd < 0 ? left2 : right2;
-      if (slot && Math.abs(slot.x) > 6 && (j.zid.startsWith('cf') || j.zid.startsWith('flat') || (j.zid.startsWith('hook') && d.cls !== 'lb'))) {
+      const wide = slot && Math.abs(slot.x) > 6;
+      // The curl-flat or flat defender walks out to the apex, halfway to the slot; a nickel back with a hook zone
+      // does too (in Cover 2 the corners have the flats). A safety with a hook zone stays inside him, deeper.
+      if (wide && (j.zid.startsWith('cf') || j.zid.startsWith('flat') || (j.zid.startsWith('hook') && d.cls === 'cb'))) {
         d.x = (slot.x + core(sd)) / 2; d.y = 5;
-      } else if (d.edge) { d.y = 2.5; }
+      } else if (wide && j.zid.startsWith('hook') && d.cls === 's') { d.x = core(sd) + 1.5 * sd; d.y = 7.5; }
+      else if (d.edge) { d.y = 2.5; }
       else if (d.cls === 's' && d.y > 9) { d.y = 8; }
     } else if (j.kind === 'zone' && j.zid === 'rat') { if (d.cls === 's') { d.x = -0.5 * s; d.y = 8; } }
     else if (j.kind === 'rush' && d.blitzer && !d.edge) { d.y = Math.max(3.4, d.y - 1.2); }
@@ -235,7 +239,10 @@ function buildDefense(S) {
   for (let k = 0; k < 4; k++) for (const a of S.D) for (const b of S.D) {
     if (a === b) continue;
     const dd = dist(a, b);
-    if (dd < 1.3 && dd > 0) { const [ux, uy] = unit(a.x - b.x, a.y - b.y); a.x += ux * (1.3 - dd) / 2; b.x -= ux * (1.3 - dd) / 2; a.y += uy * (1.3 - dd) / 2; b.y -= uy * (1.3 - dd) / 2; }
+    if (dd < 1.3) { // two men on the very same spot step apart sideways, the first one in the list toward the left
+      const [ux, uy] = dd > 0 ? unit(a.x - b.x, a.y - b.y) : [a.i < b.i ? -1 : 1, 0];
+      a.x += ux * (1.3 - dd) / 2; b.x -= ux * (1.3 - dd) / 2; a.y += uy * (1.3 - dd) / 2; b.y -= uy * (1.3 - dd) / 2;
+    }
     if (a.y < 0.6) a.y = 0.6;
   }
   for (const d of S.D) { d.x0 = d.x; d.y0 = d.y; d.tx = d.x; d.ty = d.y; }

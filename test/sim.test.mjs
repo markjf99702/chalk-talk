@@ -40,6 +40,17 @@ test('formations are legal: seven on the line, eleven a side, nobody offside', (
   }
 });
 
+test('before the snap, no two defenders stand on the same spot', () => {
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const S = prepare({ formation: fm.id, play: 'smash', front: fr.id, coverage: cv.id, pressure, flip }, 7);
+    for (const a of S.D) for (const b of S.D) {
+      if (a.i >= b.i) continue;
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      assert.ok(d >= 1.2, `${fm.id} vs ${fr.id} ${cv.id} ${pressure}${flip ? ' flipped' : ''}: the ${a.label} and the ${b.label} are ${d.toFixed(2)} yards apart, at (${a.x.toFixed(1)}, ${a.y.toFixed(1)})`);
+    }
+  }
+});
+
 test('a back\'s flat route and check-down end past the line, and Flood sends one back to the flat', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) {
     const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip }, 5);
