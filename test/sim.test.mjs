@@ -63,6 +63,24 @@ test('man coverage lines up on its men, and an edge man on the tight end stays o
   }
 });
 
+test('on the screen the linemen let the rushers go, and in man coverage the back\'s man comes after them', () => {
+  let seed = 300;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    const call = { formation: fm.id, play: 'screen', front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    const c = r.events.find(e => e.kind === 'catch');
+    if (!c) continue;
+    const f = r.frames.find(f => f.t >= c.t - 1e-9);
+    for (const o of S.OL.filter(o => o.job.kind === 'screenOL')) {
+      const d = f.eng[o.i];
+      if (d >= 0) assert.ok(f.xy[2 * d + 1] >= 0, `${what}: at the catch the ${o.label} is still blocking a rusher behind the line`);
+    }
+    const man = S.D.find(d => d.job.kind === 'man' && d.job.r === S.RB);
+    if (man && (cv.id === 'c0' || cv.id === 'c1')) assert.ok(f.xy[2 * man.i + 1] < man.y0 - 2, `${what}: the ${man.label}, in man on the back, never came forward`);
+  }
+});
+
 test('a back\'s flat route and check-down end past the line, and Flood sends one back to the flat', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) {
     const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip }, 5);

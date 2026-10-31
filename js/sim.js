@@ -823,15 +823,20 @@ function stalk(S, pl) {
 function screenOL(S, pl) {
   const j = pl.job, t = S.t;
   if (t < j.go) { pl.job.kind = 'pro'; pro(S, pl); pl.job.kind = 'screenOL'; return; }
-  if (pl.eng >= 0 && !j.released) { const d = S.P[pl.eng]; release(S, pl, d, true); }
-  j.released = true;
+  if (!j.released) { // let his man go and forget him: the rushers run on past the back, and the linemen block downfield
+    if (pl.eng >= 0) release(S, pl, S.P[pl.eng], true);
+    j.released = true; j.target = null; pl.want = null;
+  }
   if (!S.caught && dist(pl, j.at) > 0.8 && S.ball.state !== 'air') { pl.tx = j.at.x; pl.ty = j.at.y; pl.ts = pl.top * 0.9; return; }
   if (pl.eng >= 0) return;
   const c = S.carrier && S.caught ? S.carrier : S.RB;
   let best = null, bd = 7;
-  for (const d of S.D) if (d.eng < 0 && d.lostTo !== pl.i) { const dd = dist(d, c) + dist(d, pl) * 0.6; if (dd < bd && d.y > pl.y - 2) { bd = dd; best = d; } }
+  for (const d of S.D) if (d.eng < 0 && d.lostTo !== pl.i && !behindLine(d)) { const dd = dist(d, c) + dist(d, pl) * 0.6; if (dd < bd && d.y > pl.y - 2) { bd = dd; best = d; } }
   if (best) { pl.job.target = best; pl.tx = best.x; pl.ty = best.y; pl.ts = pl.top; } else { pl.tx = pl.x; pl.ty = pl.y + 1; pl.ts = 2; }
 }
+
+// A rusher who has got past the line, into the backfield: the screen's linemen leave him be.
+const behindLine = d => d.job.kind === 'rush' && d.y < 0;
 
 function convoy(S, pl) {
   if (pl.eng >= 0) return;
@@ -919,7 +924,9 @@ function cover(S, d) {
   const j = d.job, r = j.r, t = S.t;
   if (r.job.kind !== 'route' || (r.job.delay && t < r.job.delay)) {
     // His man stayed in to block. In Cover 0 he joins the rush; otherwise he sits underneath and reads.
-    if (t > 0.9 && (S.cov.id === 'c0' || r.cls === 'rb' || r.cls === 'fb') && r.job.kind !== 'route') { d.job = { kind: 'rush', gap: d.x * 0.3 }; d.addOn = true; return rush(S, d); }
+    // So does the man on a back who blocks for a moment before the screen: he sees a blocker and comes after the passer.
+    const screen = r.job.route === 'screen' && (S.cov.id === 'c0' || S.cov.id === 'c1') && t > 0.6;
+    if (screen || (t > 0.9 && (S.cov.id === 'c0' || r.cls === 'rb' || r.cls === 'fb') && r.job.kind !== 'route')) { d.job = { kind: 'rush', gap: d.x * 0.3 }; d.addOn = true; return rush(S, d); }
     d.tx = d.x0 * 0.7 + r.x * 0.3; d.ty = d.y0; d.ts = 2; return;
   }
   // He sees his man a moment late: where the receiver was, carried forward at the speed he was going then.
@@ -1014,6 +1021,7 @@ function engage(S) {
     const tgt = b.job.target || b.want;
     const canBlock = k === 'pro' || k === 'block' || k === 'stalk' || (k === 'screenOL' && b.job.released) || k === 'convoy';
     if (!canBlock || !tgt || tgt.eng >= 0 || tgt.noEngage > t || tgt.lostTo === b.i || tgt === S.carrier) continue;
+    if (k === 'screenOL' && behindLine(tgt)) continue;
     if (dist(b, tgt) < 1.15) {
       const pass = S.play.type === 'pass' && !S.caught && k === 'pro' || (k === 'pro' && S.play.scheme === 'draw' && S.carrier === S.QB);
       b.eng = tgt.i; tgt.eng = b.i;
