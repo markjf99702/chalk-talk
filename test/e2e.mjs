@@ -285,8 +285,14 @@ for (const side of ['O', 'D']) {
       s.disabled = false; s.value = String(t / board.duration() * 1000); s.dispatchEvent(new Event('input'));
       return [...document.querySelectorAll('#caption span')].map(x => x.textContent);
     };
-    return { a: a.text, b: b.text, both: at(b.t + 0.1), before: at((a.t + b.t) / 2), later: at(a.t + 2.3), again: at(b.t + 0.1) };
+    // A line still up when the next one comes stays put, so a screen reader doesn't read it out again.
+    const span = text => [...document.querySelectorAll('#caption span')].find(x => x.textContent === text);
+    at(a.t + 0.05);
+    const first = span(a.text);
+    const both = at(b.t + 0.1), kept = !!first && span(a.text) === first;
+    return { a: a.text, b: b.text, both, kept, before: at((a.t + b.t) / 2), later: at(a.t + 2.3), again: at(b.t + 0.1) };
   });
+  assert.ok(seen.kept, 'the older line was put up again when the newer one came, so a screen reader reads it twice');
   assert.deepEqual(seen.both, [seen.a, seen.b], 'the caption shows the last two, the older one first');
   assert.ok(seen.before.at(-1) === seen.a && !seen.before.includes(seen.b), 'scrubbing back shows only what had happened by then');
   assert.deepEqual(seen.later, [seen.b], 'the older one goes after 2.2 seconds, and the newer one is still up');

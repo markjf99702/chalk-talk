@@ -213,12 +213,16 @@ function caption() {
   setCaption(evs.slice(-2).map(e => e.text));
 }
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
+// A line still up stays as it is, so a screen reader reads each line once, when it's new.
 function setCaption(lines) {
   const el = $('caption');
   lines = [].concat(lines).filter(Boolean);
-  if (el.children.length === lines.length && el.textContent === lines.join('')) return; // the same words: leave them be
-  el.textContent = '';
-  for (const text of lines) {
+  const now = [...el.children].map(s => s.textContent);
+  let keep = Math.min(now.length, lines.length);
+  while (keep && now.slice(now.length - keep).join('\n') !== lines.slice(0, keep).join('\n')) keep--;
+  if (keep === now.length && keep === lines.length) return; // the same words: leave them be
+  for (let k = keep; k < now.length; k++) el.firstElementChild.remove();
+  for (const text of lines.slice(keep)) {
     const span = document.createElement('span');
     span.textContent = text;
     el.append(span);
