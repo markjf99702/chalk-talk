@@ -1053,6 +1053,22 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Two tabs keep each other's settings: labels turned off in one and half speed picked in the other are both still so
+// after a reload, and each tab takes the other's change as it's made. Calls stay each tab's own.
+{
+  const a = await phone(), b = await a.context().newPage();
+  await b.goto(base);
+  const settings = q => q.evaluate(() => { const { state, board } = window.chalkTalk; return { labels: state.labels, drawn: board.labels, speed: state.speed, pressed: document.getElementById('labels').getAttribute('aria-pressed') }; });
+  await a.click('#labels');
+  await b.click('[data-speed="0.5"]');
+  await until(async () => (await settings(a)).speed === 0.5, 3000, 'the first tab didn\'t take half speed from the second');
+  assert.deepEqual(await settings(a), { labels: false, drawn: false, speed: 0.5, pressed: 'false' });
+  assert.deepEqual(await settings(b), { labels: false, drawn: false, speed: 0.5, pressed: 'false' }, 'the second tab didn\'t take labels off from the first');
+  await a.reload();
+  assert.deepEqual(await settings(a), { labels: false, drawn: false, speed: 0.5, pressed: 'false' }, 'a reload lost a setting the other tab saved over');
+  await a.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 

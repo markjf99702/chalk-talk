@@ -1011,6 +1011,18 @@ new ResizeObserver(fit).observe($('board'));
 // see it: a query for the density it has now says when that changes, once, and then the new density is watched.
 const density = () => matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => { fit(); density(); }, { once: true });
 density();
+// Another tab saved: take its labels and speed, so neither tab saves its own over them later. Its calls stay its own,
+// and a play under way here isn't swapped out.
+addEventListener('storage', e => {
+  if (e.key !== KEY || !e.newValue) return;
+  try {
+    const s = JSON.parse(e.newValue);
+    if (typeof s.labels === 'boolean') state.labels = board.labels = s.labels;
+    if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
+    syncTransport();
+    draw();
+  } catch { /* something this version can't read: keep ours */ }
+});
 const recolor = () => { board.readColors(); draw(); };
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', recolor);
 new MutationObserver(recolor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
