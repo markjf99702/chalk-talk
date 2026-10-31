@@ -155,6 +155,8 @@ button:disabled { cursor: default; }
   #board { aspect-ratio: 1.3; }
 }
 
+/* The words on the board sit over the deep field, where nobody is for most of the play: along the top, or along the
+   bottom when calling the defense turns the board around (.flipped), so they don't cover the backfield. */
 .matchup, .caption {
   position: absolute;
   left: 8px;
@@ -168,15 +170,27 @@ button:disabled { cursor: default; }
 .matchup { top: 6px; font-size: 15px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .matchup .dim { color: var(--muted); }
 .caption {
-  bottom: 8px;
+  top: 28px;
   text-align: center;
   font-size: clamp(15px, 2.6vw, 19px);
 }
-.caption:not(:empty) span, .caption:not(:empty) { text-shadow: 0 0 6px var(--board), 0 0 3px var(--board), 0 0 1px var(--board); }
+/* a soft backing in the board's colour, so a caption reads over the trails */
+.caption span {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--board) 75%, transparent);
+  text-shadow: 0 0 6px var(--board), 0 0 3px var(--board), 0 0 1px var(--board);
+}
+.flipped .matchup { top: auto; bottom: 6px; }
+.flipped .caption, .flipped .why { top: auto; bottom: 28px; }
 .why {
   position: absolute;
   left: 50%;
-  bottom: 8px;
+  top: 28px;
   transform: translateX(-50%);
   max-width: calc(100% - 16px);
   min-height: 40px;

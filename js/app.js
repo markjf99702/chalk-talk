@@ -98,12 +98,14 @@ function lineUp() {
   syncTransport();
   syncTheirs();
   renderMatchup();
-  $('caption').textContent = '';
+  setCaption('');
   draw();
 }
 
 function syncBoard() {
   board.flip = state.side === 'D';
+  // The words on the board go over the deep field: at the top, or at the bottom when the board is turned around.
+  $('board').parentElement.classList.toggle('flipped', board.flip);
   board.mineTeam = state.side;
   board.labels = state.labels;
   board.showMine = true;
@@ -156,7 +158,7 @@ function finish() {
 
 // At the end of the play, the headline and a way down to the explanation, where the caption was.
 function showWhy() {
-  $('caption').textContent = '';
+  setCaption('');
   $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">↓</span></span>`;
   $('why').hidden = false;
 }
@@ -180,7 +182,16 @@ function snap() {
 function caption() {
   const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && e.kind !== 'shed');
   const e = evs[evs.length - 1];
-  $('caption').textContent = e && state.t - e.t < 2.2 ? e.text : '';
+  setCaption(e && state.t - e.t < 2.2 ? e.text : '');
+}
+// Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
+function setCaption(text) {
+  const el = $('caption');
+  el.textContent = '';
+  if (!text) return;
+  const span = document.createElement('span');
+  span.textContent = text;
+  el.append(span);
 }
 
 // ---------------------------------------------------------------- transport
@@ -496,7 +507,7 @@ function fromLink() {
 function badLink() {
   linkNote = 'That link is for a play this version doesn\'t have.';
   syncTheirs();
-  if (state.phase === 'pre') $('caption').textContent = linkNote;
+  if (state.phase === 'pre') setCaption(linkNote);
 }
 // Another play link opened in a tab that's already open.
 addEventListener('hashchange', () => {

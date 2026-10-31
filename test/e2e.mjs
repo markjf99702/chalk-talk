@@ -211,6 +211,41 @@ await page2.getByRole('radio', { name: 'Cover 2' }).click();
 assert.equal(await page2.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), true, 'opening a link turned off "Let the other coach pick" for good');
 await page2.close();
 
+// The words on the board sit over the deep field, where nobody is for most of the play, not on the backfield: at the top
+// when you call the offense, and at the bottom when you call the defense and the board is turned around. And there's
+// room behind the offense for the quarterback's label on a deep drop.
+for (const side of ['O', 'D']) {
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base + `#p=${side}.iform.pa.0.over.c1.four.7`);
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
+  for (const t of [0, 1.6]) {
+    const seen = await p.evaluate(t => {
+      const { state, board } = window.chalkTalk, s = document.getElementById('scrub');
+      if (t) { s.disabled = false; s.value = String(Math.round(t / board.duration() * 1000)); s.dispatchEvent(new Event('input')); }
+      const cv = board.cv.getBoundingClientRect();
+      // A player's mark and his label, which sits on one side of it or the other (see Board.players()).
+      const r = board.radius(), fs = Math.max(8.5, Math.min(12, r * 1.15)), tall = r + fs * 1.15;
+      const backs = state.play.players.filter(q => ['QB', 'RB', 'FB'].includes(q.label)).map(q => {
+        const at = board.pos(board.t, q.i), x = cv.left + board.sx(at.x), y = cv.top + board.sy(at.y);
+        return { label: q.label, l: x - r - 4, r: x + r + 4, t: y - tall, b: y + tall };
+      });
+      const words = ['matchup', 'caption'].map(id => {
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById(id));
+        return [...range.getClientRects()].map(b => ({ id, l: b.left, r: b.right, t: b.top, b: b.bottom }));
+      }).flat();
+      const on = words.flatMap(w => backs.filter(q => w.l < q.r && q.l < w.r && w.t < q.b && q.t < w.b).map(q => `${w.id} on the ${q.label}`));
+      const out = backs.filter(q => q.t < cv.top || q.b > cv.bottom).map(q => `the ${q.label} off the edge`);
+      return { on: [...on, ...out], caption: document.getElementById('caption').textContent };
+    }, t);
+    assert.deepEqual(seen.on, [], `calling the ${side === 'O' ? 'offense' : 'defense'}, at ${t} s`);
+    if (t) assert.ok(seen.caption.length > 5, `a caption at ${t} s`);
+  }
+  await p.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 

@@ -4,7 +4,9 @@
 import { SIDELINE, HASH } from './playbook.js';
 
 const W_YDS = SIDELINE * 2 + 1.6; // a little room outside each sideline
-const Y_LOW = -10.5; // the deepest the offense goes before the snap (a five-step drop)
+// The bottom of the view, behind the offense: the deepest a back or a dropping quarterback goes (about nine yards), and
+// room past that for his label, so it isn't cut off at the edge.
+const Y_LOW = -12;
 
 export class Board {
   constructor(canvas) {
