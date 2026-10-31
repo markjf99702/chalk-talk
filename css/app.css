@@ -230,6 +230,10 @@ button:disabled { cursor: default; }
 .who.top { top: 30px; bottom: auto; }
 .flipped .who { bottom: 30px; }
 .flipped .who.top { top: 8px; bottom: auto; }
+/* A bigger board keeps the card up through the play, so at the deep end it stands clear of the caption and of the
+   button down to the explanation. */
+.board-wrap:not(.narrow) .who.top { top: 80px; }
+.board-wrap.flipped:not(.narrow) .who:not(.top) { bottom: 80px; }
 .who p { margin: 0; }
 .who-pos { font-family: var(--cond); font-weight: 700; font-size: 18px; }
 .who-job { margin-top: 4px !important; }

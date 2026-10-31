@@ -392,6 +392,29 @@ for (const side of ['O', 'D']) {
   assert.match(await p.textContent('#whoJob'), /^On this play:/, 'the card shows his job once the play is snapped');
   assert.equal(await p.isVisible('#whoMore'), false, 'a bigger board shows the whole card');
   assert.equal(await p.isVisible('#whoAbout'), true);
+  // The quarterback's card goes at the deep end of the board, away from him, where the caption and the button down to
+  // the explanation are: on a bigger board it stands clear of both, so they can still be read and tapped.
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  const qb = await p.evaluate(() => {
+    const { state, board, pause } = window.chalkTalk, s = document.getElementById('scrub');
+    pause();
+    const ev = state.play.events.find(e => e.kind !== 'shed');
+    s.value = String(Math.round((ev.t + 0.05) / board.duration() * 1000)); s.dispatchEvent(new Event('input'));
+    const i = state.play.players.findIndex(q => q.label === 'QB');
+    const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
+    return { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) };
+  });
+  await p.mouse.click(qb.x, qb.y);
+  const clear = await p.evaluate(() => {
+    const { state, board, finish } = window.chalkTalk, who = document.getElementById('who');
+    const under = el => { const b = el.getBoundingClientRect(), c = who.getBoundingClientRect(); return b.left < c.right && c.left < b.right && b.top < c.bottom && c.top < b.bottom; };
+    const seen = { card: document.getElementById('whoPos').textContent.split(' ')[0], top: who.classList.contains('top'), caption: under(document.querySelector('#caption span')) };
+    state.t = board.duration(); finish();
+    const b = document.getElementById('why').getBoundingClientRect();
+    return { ...seen, open: !who.hidden, why: !!document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.closest('#why') };
+  });
+  assert.deepEqual(clear, { card: 'QB', top: true, caption: false, open: true, why: true }, 'on a bigger board the card at the deep end hides the caption or the button down to the explanation');
   await wide.close();
 }
 
