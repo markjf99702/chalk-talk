@@ -157,6 +157,34 @@ test('pass protection picks up every rusher it has the men for: a rusher goes fr
   }
 });
 
+test('the words match the board: zones by strong and weak side, a run in every defender\'s card, and plain play-by-play', () => {
+  let seed = 314000, qbDown = 0;
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    for (const d of S.D) {
+      const job = r.jobs[d.i];
+      assert.doesNotMatch(job, /:.*:/, `${what}: the ${d.label}'s card stacks colons: "${job}"`);
+      if (d.job.kind === 'zone' && d.job.z.at[0]) {
+        const strong = Math.sign(d.job.z.at[0]) === S.s;
+        assert.match(job, strong ? /strong[- ]side/ : /weak[- ]side/, `${what}: the ${d.label} at x ${d.x.toFixed(1)} has a zone on the ${strong ? 'strong' : 'weak'} side, and his card says "${job}"`);
+        assert.doesNotMatch(job, /\b(left|right)\b/, `${what}: the ${d.label}'s card says left or right: "${job}"`);
+      }
+      if (pl.type === 'run' && (d.job.kind === 'zone' || d.job.kind === 'man')) assert.match(job, /On this (run|draw)/, `${what}: the ${d.label}'s card on a run is his pass job alone: "${job}"`);
+    }
+    const story = r.events.map(e => e.text).join(' ');
+    assert.doesNotMatch(story, /\b1 yards\b/, `${what}: "${story}"`);
+    assert.doesNotMatch(story, /'s block|his last option|The corner on/, `${what}: "${story}"`);
+    if (r.events.some(e => e.kind === 'throw')) assert.match(r.events.find(e => e.kind === 'throw').text, /on (a|an) [a-z ]+ route|on the (check-down|screen)/, `${what}: "${r.events.find(e => e.kind === 'throw').text}"`);
+    if (pl.type === 'run' && r.result.carrier === S.QB.i && !r.events.some(e => e.kind === 'hand')) {
+      qbDown++;
+      assert.match(r.events.at(-1).text, /drops the quarterback before the handoff/, `${what}: the quarterback goes down before the handoff, and the story says "${story}"`);
+    }
+  }
+  assert.ok(qbDown > 0, 'no quarterback went down before the handoff, so that check proved nothing');
+});
+
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
   const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
   for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {

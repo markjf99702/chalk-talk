@@ -516,7 +516,7 @@ function throwTo(S, r, P, tf, why) {
   S.pressedThrow = pressed;
   if (r) {
     r.catchAt = { x: tx, y: ty };
-    ev(S, 'throw', `${name(S, QB, true)} throws to ${name(S, r)} on the ${ROUTES[r.job.route]?.name || 'route'}${why ? ', ' + why : ''}.`, { who: r.i });
+    ev(S, 'throw', `${name(S, QB, true)} throws to ${name(S, r)} on ${routeText(r.job.route)}${why ? ', ' + why : ''}.`, { who: r.i });
   }
 }
 
@@ -698,7 +698,7 @@ function qb(S, pl) {
   } else {
     // Past the last read: take the best thing there, or throw it away when time runs out.
     const best = bestWindow(S);
-    if (best && best.w > 0.3) return throwTo(S, best.r, best.P, best.tf, 'his last option');
+    if (best && best.w > 0.3) return throwTo(S, best.r, best.P, best.tf, 'after nothing else came open');
     if (t > S.hold) return throwAway(S, pl);
   }
   if (rd < 1.5) hurry(S, pl);
@@ -1197,7 +1197,8 @@ function contact(S) {
       const fall = clamp(c.vy * 0.16 * (head > 0.3 ? 0.5 : 1), -0.5, 1.8);
       const hit = { x: c.x, y: c.y };
       c.y += fall; // where he goes down, and where the ball is spotted
-      ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i });
+      if (c === S.QB && S.play.type === 'run') ev(S, 'tackle', `${cap(name(S, d))} ${blocked ? 'reaches out of a block' : 'gets into the backfield'} and drops the quarterback before the handoff.`, { who: d.i });
+      else ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i });
       return finish(S, c === S.QB && S.play.type === 'run' ? 'run' : S.caught ? 'catch' : 'run', d, hit);
     }
     d.missUntil = t + 0.8;
@@ -1247,7 +1248,7 @@ function finish(S, kind, by, hit) {
   if (S.down) { c.x = S.down.from.x; c.y = S.down.from.y; }
   // keep the shed blocks that mattered: the tackler's, and any rusher who got the passer, each in its place in time
   if (S.sheds && by) for (const sh of S.sheds) if (sh.d === by.i) {
-    const e = { t: +sh.t.toFixed(2), kind: 'shed', text: `${cap(name(S, S.P[sh.d]))} gets off ${name(S, S.P[sh.b])}'s block.`, who: sh.d };
+    const e = { t: +sh.t.toFixed(2), kind: 'shed', text: `${cap(name(S, S.P[sh.d]))} gets off a block by ${name(S, S.P[sh.b])}.`, who: sh.d };
     const at = S.events.findIndex(x => x.t >= e.t);
     S.events.splice(at < 0 ? S.events.length : at, 0, e);
   }
@@ -1265,12 +1266,16 @@ export function name(S, pl, plain) {
     return `the ${pl.label}`;
   }
   if (pl.label === 'DE') return pl.side === S.s ? 'the strong-side end' : 'the weak-side end';
-  if (pl.label === 'CB') { const r = pl.over || pl.job.r; return r ? `the corner on the ${r.label}` : 'the corner'; }
+  // "Cornerback", not "corner", so he isn't mixed up with the route: over a receiver in a zone, on him in man.
+  if (pl.label === 'CB') { const man = pl.job.kind === 'man', r = man ? pl.job.r : pl.over; return r ? `the cornerback ${man ? 'on' : 'over'} the ${r.label}` : 'the cornerback'; }
   if (pl.label === 'DT' && pl.tech !== '3') return 'the defensive tackle';
   return DEF_NAMES[pl.label] || `the ${pl.label}`;
 }
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-export const yardText = y => (y >= 0.5 ? `${Math.round(y)} yards downfield` : y <= -0.5 ? `${Math.round(-y)} yards behind the line` : 'the line of scrimmage');
+const yardWord = n => (n === 1 ? '1 yard' : `${n} yards`);
+export const yardText = y => (y >= 0.5 ? `${yardWord(Math.round(y))} downfield` : y <= -0.5 ? `${yardWord(Math.round(-y))} behind the line` : 'the line of scrimmage');
+// "a corner route", "an out route"; the check-down and the screen are what they are.
+const routeText = id => { const n = ROUTES[id]?.name; return !n ? 'his route' : id === 'check' || id === 'screen' ? `the ${n}` : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n} route`; };
 
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
@@ -1305,10 +1310,20 @@ function describeJob(S, pl) {
     const tech = pl.tech ? `Lines up as ${{ 0: 'a 0-technique', 1: 'a 1-technique', 3: 'a 3-technique', 5: 'a 5-technique', w5: 'a wide 5-technique' }[pl.tech]}. ` : '';
     return `${tech}${pl.blitzer ? 'Blitzes' : 'Rushes'} ${g === 'outside' ? 'off the edge' : `through the ${g} gap`} on the ${sideWord(j.gap ?? pl.x)} side.`;
   }
-  if (j.kind === 'man') return `Man-to-man on ${name(S, j.r)}${j.press ? ', pressed up at the line' : ''}. Goes wherever he goes.`;
+  // On a run his pass job comes first, as what he'd have done, then what he does about the run (see defense() and bite()).
+  const run = S.play.type === 'run', draw = run && S.play.scheme === 'draw';
+  const onRun = !run ? '' : draw ? ' On this draw he plays it as a pass until he sees the handoff, then comes up to the ball.'
+    : j.kind === 'man' && pl.cls === 'cb' ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
+    : ' On this run he reads it and comes downhill to the ball.';
+  if (j.kind === 'man') {
+    const man = `man-to-man on ${name(S, j.r)}${j.press ? ', pressed up at the line' : ''}`;
+    return run ? `On a pass he'd play ${man}.${onRun}` : `Plays ${man}, and goes wherever he goes.`;
+  }
   if (j.kind === 'zone') {
-    const z = j.z;
-    return `Zone: the ${z.side ? z.side + ' ' : ''}${z.name}. ${z.deep ? 'Stays deeper than anyone in his area.' : 'Guards that area and breaks on the ball when it\'s thrown.'}`;
+    // Strong and weak side, the way coaches say it, so it reads right from either side of the board.
+    const z = j.z, sd = Math.sign(z.at[0]) * s > 0 ? 'strong' : 'weak';
+    const area = !z.at[0] ? `the ${z.name}` : z.name === 'deep quarter' ? `the ${Math.abs(z.at[0]) > 10 ? 'outside' : 'inside'} quarter on the ${sd} side` : `the ${sd}-side ${z.name}`;
+    return run ? `On a pass he'd play zone in ${area}.${onRun}` : `Plays zone in ${area} and ${z.deep ? 'stays deeper than anyone in his area' : 'breaks on the ball when it\'s thrown'}.`;
   }
   return '';
 }
