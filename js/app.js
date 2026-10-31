@@ -260,7 +260,9 @@ function syncTransport() {
 }
 
 $('snap').addEventListener('click', snap);
-$('again').addEventListener('click', () => { snap(); if (matchMedia('(max-width: 959px)').matches) $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+// The result card's buttons go away with it as the next play lines up, so the focus goes on to Snap.
+const toSnap = () => $('snap').focus({ preventScroll: true });
+$('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(max-width: 959px)').matches) $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
 $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() : play()));
 $('scrub').addEventListener('input', e => {
   if (!state.play) return;
@@ -361,6 +363,7 @@ function chips(host, label, items, current, pick, opts = {}) {
       b.className = 'chip';
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(it.id === current));
+      b.dataset.key = `${label}:${it.id}`; // the same chip once the choosers are drawn again, for the keyboard's focus
       b.disabled = !!opts.disabled;
       b.innerHTML = it.sub ? `${esc(it.name)} <small>${esc(it.sub)}</small>` : esc(it.name);
       b.addEventListener('click', () => pick(it.id));
@@ -406,6 +409,7 @@ function defenseChooser(host, readonly) {
 }
 
 function afterChange() {
+  const focused = document.activeElement?.dataset.key; // a chip picked from the keyboard keeps the focus once it's drawn again
   state.linked = false;
   linkNote = '';
   keepOwn();
@@ -414,6 +418,7 @@ function afterChange() {
   renderChoosers();
   lineUp();
   clearChart();
+  if (focused) document.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus();
 }
 
 function renderChoosers() {
@@ -479,7 +484,8 @@ $('auto').addEventListener('change', e => {
 // New look: the other coach picks again. It's in the result card after a play, and in his card before the snap.
 // The board says what it did until the snap, even when nothing there shows it: calling the defense, a new play from the
 // same formation and strong side lines up just like the last one.
-function newLook() {
+function newLook(e) {
+  if (e?.currentTarget.closest('#result')) toSnap();
   const formation = () => `${state.off.formation} ${state.off.flip}`, was = formation();
   rollTheirs();
   afterChange();
@@ -647,7 +653,7 @@ function clearChart() {
   $('chartTitle').textContent = state.side === 'O' ? 'Your play against each coverage' : 'Your defense against each play';
   $('chartHint').textContent = chartHint();
   $('runChart').textContent = RUN_LABEL;
-  $('runChart').disabled = false;
+  $('runChart').removeAttribute('aria-disabled');
 }
 
 // Before the snap the offense's chart can't use the other coach's real pressure without giving it away, so every
@@ -668,9 +674,12 @@ function syncChart() { $('chartHint').textContent = chartHint(); if (chart) draw
 const breather = () => new Promise(r => setTimeout(r, 0));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
+// While it runs the button says it's busy and takes no clicks, but keeps the focus (a disabled one would drop it).
 async function runChart() {
-  const job = ++chartJob, button = $('runChart');
-  button.disabled = true;
+  const button = $('runChart');
+  if (button.getAttribute('aria-disabled') === 'true') return;
+  const job = ++chartJob;
+  button.setAttribute('aria-disabled', 'true');
   const base = call();
   if (state.side === 'O' && hidden()) base.pressure = 'four';
   const rows = state.side === 'O'
@@ -697,7 +706,7 @@ async function runChart() {
     drawBars();
   }
   button.textContent = RUN_LABEL;
-  button.disabled = false;
+  button.removeAttribute('aria-disabled');
 }
 
 // The row for the other side's call is marked only once that call is out.

@@ -378,7 +378,8 @@ button:disabled { cursor: default; }
   font-weight: 600;
   font-size: 14px;
 }
-.ghost:disabled { opacity: .5; }
+.ghost:disabled, .ghost[aria-disabled="true"] { opacity: .5; }
+.ghost[aria-disabled="true"] { cursor: default; }
 .actions-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .share-msg { margin: 8px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .share-msg:empty { display: none; }

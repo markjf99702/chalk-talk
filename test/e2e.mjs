@@ -73,7 +73,7 @@ assert.equal(await page.textContent('#caption'), HINT, 'the first hint stays whe
 await page.getByRole('radio', { name: 'Smash' }).click();
 await page.click('#runChart');
 assert.match(await page.textContent('#runChart'), /^Running… [1-5] of 5$/, 'the chart says how far along it is');
-await page.waitForFunction(() => !document.getElementById('runChart').disabled && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
+await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
 await tapOn('FS');
 assert.match(await page.textContent('#whoPos'), /Free safety/, 'tapping the free safety opens his card');
@@ -620,6 +620,32 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.deepEqual(looks, { same: 'New look: same formation, a new play.', new: 'New look: they\'ve changed their call.' });
   await p.click('#auto');
   assert.equal(await p.isVisible('#theirsLook'), false, 'New look is there when you call both sides');
+  await p.context().close();
+}
+
+// From the keyboard: a pick keeps focus on the chip picked (the choosers are drawn again on every pick), the result
+// card's buttons hand it to Snap as the card goes away, and the chart's button keeps it while it runs.
+{
+  const p = await phone();
+  const focused = () => p.evaluate(() => document.activeElement.dataset.key || document.activeElement.id || document.activeElement.tagName);
+  await p.getByRole('radio', { name: 'Flood' }).focus();
+  await p.keyboard.press('Enter');
+  assert.equal(await focused(), 'Play:flood', 'Enter on a chip lost the focus');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.off.play), 'flood');
+  await p.getByRole('radio', { name: 'Left' }).focus();
+  await p.keyboard.press('Space');
+  assert.equal(await focused(), 'Strong side:L', 'Space on a chip lost the focus');
+  await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); });
+  for (const id of ['again', 'newLook']) {
+    await p.evaluate(() => { const { state, snap, finish } = window.chalkTalk; if (state.phase === 'pre') { snap(); finish(); } });
+    await p.focus(`#${id}`);
+    await p.keyboard.press('Enter');
+    assert.equal(await focused(), 'snap', `#${id} dropped the focus as the result card went away`);
+  }
+  await p.focus('#runChart');
+  await p.keyboard.press('Enter');
+  assert.equal(await focused(), 'runChart', 'the chart\'s button dropped the focus while it runs');
+  assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), 'true', 'the chart\'s button says it is busy');
   await p.context().close();
 }
 
