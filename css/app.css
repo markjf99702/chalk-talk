@@ -166,6 +166,7 @@ button:disabled { cursor: default; }
   line-height: 1.2;
 }
 .matchup { top: 6px; font-size: 15px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.matchup .dim { color: var(--muted); }
 .caption {
   bottom: 8px;
   text-align: center;
@@ -311,9 +312,13 @@ button:disabled { cursor: default; }
 .bars { display: grid; gap: 7px; margin-top: 12px; }
 .bars:empty { display: none; }
 .bar-row { display: grid; grid-template-columns: minmax(6.5em, 9.5em) 1fr 4.6em; align-items: center; gap: 8px; font-size: 14px; }
-.bar-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-head, .bar-name em { font-style: normal; font-size: 11px; font-family: var(--cond); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bar-head { text-align: right; line-height: 1; margin-bottom: -2px; }
+.bar-name { white-space: nowrap; min-width: 0; }
+.bar-name > span { display: block; overflow: hidden; text-overflow: ellipsis; }
 .bar-row.mine .bar-name { font-weight: 700; }
-.bar-name em { font-style: normal; font-size: 11px; font-family: var(--cond); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-left: 3px; }
+/* the tag goes under the name, so a long name doesn't cut it off */
+.bar-name em { display: block; line-height: 1.1; }
 .bar-track { position: relative; height: 12px; }
 .bar-track.split::before { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line-strong); }
 .bar { position: absolute; top: 0; bottom: 0; background: var(--bar); border-radius: 0 4px 4px 0; }

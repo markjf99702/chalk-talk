@@ -49,6 +49,8 @@ function save() {
 }
 
 const call = () => ({ ...state.off, ...state.def });
+// The other coach's call is hidden from the board, the chart and the player cards until the snap.
+const hidden = () => state.auto && state.phase === 'pre';
 
 // The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on.
 function rollTheirs() {
@@ -101,12 +103,17 @@ function draw() { board.t = state.t; board.render(); }
 
 function play() {
   if (!state.play) return;
+  const snapped = state.phase === 'pre';
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   syncBoard();
   syncTheirs();
   renderMatchup();
   syncTransport();
+  if (snapped) { // the other side's call is out now: the tapped player's job, and which row of the chart it is
+    if (board.selected >= 0) showWho(board.selected);
+    syncChart();
+  }
   last = performance.now();
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
@@ -189,7 +196,7 @@ $('whoClose').addEventListener('click', () => { board.selected = -1; hideWho(); 
 function showWho(i) {
   const p = state.play.players[i];
   const [title, about] = POSITIONS[p.info] || POSITIONS[p.label] || [p.label, ''];
-  const hiddenJob = p.team !== state.side && state.auto && state.phase === 'pre';
+  const hiddenJob = p.team !== state.side && hidden();
   $('whoPos').textContent = `${p.label} · ${title}`;
   $('whoJob').textContent = hiddenJob ? 'His job on this play is hidden until the snap. Read the alignment: where he stands gives some of it away.' : `On this play: ${state.play.jobs[i]}`;
   $('whoAbout').textContent = about;
@@ -298,10 +305,10 @@ function syncTheirs() {
 function renderMatchup() {
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
-  const hide = state.auto && state.phase === 'pre';
-  const off = state.side === 'D' && hide ? fm.name : `${fm.name} · ${pl.name}`;
-  const def = state.side === 'O' && hide ? fr.name : `${fr.name} · ${cv.name}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ' · Blitz' : ''}`;
-  $('matchup').textContent = `${off}  vs  ${def}`;
+  const dim = what => ` <span class="dim">· ${what} hidden</span>`;
+  const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : ` · ${esc(pl.name)}`);
+  const def = esc(fr.name) + (state.side === 'O' && hidden() ? dim('coverage') : ` · ${esc(cv.name)}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ' · Blitz' : ''}`);
+  $('matchup').innerHTML = `${off}  vs  ${def}`;
 }
 
 for (const b of document.querySelectorAll('[data-side]')) b.addEventListener('click', () => {
@@ -405,25 +412,39 @@ function fromLink() {
 // ---------------------------------------------------------------- the chart: this call against everything
 
 let chartJob = 0;
+let chart = null; // the rows of the last run: { rows: [{ id, name, call, avg, rate }], pressure }
+
 function clearChart() {
   chartJob++;
+  chart = null;
   $('bars').textContent = '';
   $('chartTitle').textContent = state.side === 'O' ? 'Your play against each coverage' : 'Your defense against each play';
-  $('chartHint').textContent = state.side === 'O'
-    ? `Average yards a play, from ${byId(FORMATIONS, state.off.formation).name} against a ${byId(FRONTS, state.def.front).name} front. A play counts as a success if it gains 4 yards or more.`
-    : `Average yards a play allowed, against ${byId(FORMATIONS, state.off.formation).name}. A play counts as a success for the offense if it gains 4 yards or more.`;
+  $('chartHint').textContent = chartHint();
   $('runChart').disabled = false;
 }
+
+// Before the snap the offense's chart can't use the other coach's real pressure without giving it away, so every
+// coverage gets a four-man rush (Cover 0 always blitzes) until the call is out.
+function chartHint() {
+  const fm = byId(FORMATIONS, state.off.formation).name;
+  if (state.side === 'D') return `Average yards a play allowed, against ${fm}. A play counts as a success for the offense if it gains 4 yards or more.`;
+  const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure;
+  return `Average yards a play, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four'}.`
+    + `${hidden() ? ' Their real call stays hidden until the snap.' : ''} A play counts as a success if it gains 4 yards or more.`;
+}
+function syncChart() { $('chartHint').textContent = chartHint(); if (chart) drawBars(); }
 
 async function runChart() {
   const job = ++chartJob;
   $('runChart').disabled = true;
+  const base = call();
+  if (state.side === 'O' && hidden()) base.pressure = 'four';
   const rows = state.side === 'O'
-    ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...call(), coverage: c.id }, mine: c.id === state.def.coverage }))
-    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...call(), play: p.id }, mine: p.id === state.off.play }));
-  const host = $('bars');
-  host.textContent = '';
-  const out = [];
+    ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
+    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }));
+  chart = { rows, pressure: base.pressure };
+  $('chartHint').textContent = chartHint();
+  $('bars').textContent = '';
   for (const r of rows) {
     let yds = 0, ok = 0;
     const N = 20;
@@ -431,32 +452,38 @@ async function runChart() {
       const res = simulate({ ...r.call, flip: k % 2 === 1 }, newSeed()).result;
       yds += res.yards; if ((res.kind === 'run' || res.kind === 'catch') && res.yards >= 4) ok++;
     }
-    out.push({ ...r, avg: yds / N, rate: ok / N });
     if (job !== chartJob) return;
-    drawBars(out, rows.length);
+    r.avg = yds / N; r.rate = ok / N;
+    drawBars();
     await new Promise(res => setTimeout(res, 0));
   }
   $('runChart').disabled = false;
 }
 
-function drawBars(rows, total) {
+// The row for the other side's call is marked only once that call is out.
+function drawBars() {
   const host = $('bars');
   host.textContent = '';
-  const max = Math.max(8, ...rows.map(r => Math.abs(r.avg)));
-  const neg = rows.some(r => r.avg < 0);
-  for (const r of rows) {
+  const done = chart.rows.filter(r => r.avg !== undefined);
+  const max = Math.max(8, ...done.map(r => Math.abs(r.avg)));
+  const neg = done.some(r => r.avg < 0);
+  const mineId = hidden() ? null : state.side === 'O' ? state.def.coverage : state.off.play;
+  const tag = state.auto ? 'their call' : 'this call';
+  if (done.length) host.insertAdjacentHTML('beforeend', '<div class="bar-head" aria-hidden="true">avg yards · success</div>');
+  for (const r of done) {
+    const mine = r.id === mineId;
     const row = document.createElement('div');
-    row.className = 'bar-row' + (r.mine ? ' mine' : '');
+    row.className = 'bar-row' + (mine ? ' mine' : '');
     row.setAttribute('role', 'listitem');
     const w = Math.abs(r.avg) / max * (neg ? 50 : 100);
     const left = neg ? (r.avg < 0 ? 50 - w : 50) : 0;
-    row.innerHTML = `<span class="bar-name">${esc(r.name)}${r.mine ? ' <em>this look</em>' : ''}</span>
+    row.innerHTML = `<span class="bar-name"><span>${esc(r.name)}</span>${mine ? `<em>${tag}</em>` : ''}</span>
       <span class="bar-track${neg ? ' split' : ''}"><span class="bar ${r.avg < 0 ? 'neg' : ''}" style="left:${left}%;width:${Math.max(0.6, w)}%"></span></span>
       <span class="bar-val">${r.avg >= 0 ? '' : '−'}${Math.abs(r.avg).toFixed(1)} <small>${Math.round(r.rate * 100)}%</small></span>`;
-    row.title = `${r.name}: ${r.avg.toFixed(1)} yards a play, ${Math.round(r.rate * 100)}% successful`;
+    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${r.avg.toFixed(1)} yards a play, ${Math.round(r.rate * 100)}% successful`;
     host.append(row);
   }
-  for (let k = rows.length; k < total; k++) {
+  for (let k = done.length; k < chart.rows.length; k++) {
     const row = document.createElement('div');
     row.className = 'bar-row waiting';
     row.innerHTML = '<span class="bar-name">…</span><span class="bar-track"></span><span class="bar-val"></span>';

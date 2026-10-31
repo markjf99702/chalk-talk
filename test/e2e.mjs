@@ -54,8 +54,28 @@ page.on('request', r => { if (!r.url().startsWith(base)) problems.push('left the
 await page.goto(base);
 await page.evaluate(() => document.fonts.ready);
 
-// Snap a play: it runs, and the result card explains it.
+// Before the snap the other coach's call is hidden everywhere: the board says so, the chart marks none of its rows, and
+// a defender's card keeps his job back.
+const tapOn = label => page.evaluate(label => {
+  const { board, state } = window.chalkTalk;
+  const i = state.play.players.findIndex(p => p.label === label);
+  const r = board.cv.getBoundingClientRect(), p = board.pos(board.t, i);
+  return { x: r.left + board.sx(p.x), y: r.top + board.sy(p.y) };
+}, label).then(at => page.mouse.click(at.x, at.y));
+assert.match(await page.textContent('#matchup'), /coverage hidden/, 'the board says the coverage is hidden');
+await page.click('#runChart');
+await page.waitForFunction(() => !document.getElementById('runChart').disabled && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
+assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
+await tapOn('FS');
+assert.match(await page.textContent('#whoPos'), /Free safety/, 'tapping the free safety opens his card');
+assert.match(await page.textContent('#whoJob'), /hidden until the snap/, 'a defender\'s job is hidden before the snap');
+
+// Snap a play: it runs, and the result card explains it. Their call is out: the chart marks it, and the card says
+// what the tapped defender is doing.
 await page.click('#snap');
+assert.equal(await page.locator('#bars .bar-row.mine').count(), 1, 'the chart marks their coverage once it is out');
+assert.match(await page.textContent('#whoJob'), /^On this play:/, 'the card shows his job once the play is snapped');
+await page.click('#whoClose');
 // Part way through, the scrubber is part way along too.
 const mid = await page.waitForFunction(() => {
   const { state, board } = window.chalkTalk, s = document.getElementById('scrub');
@@ -86,13 +106,7 @@ assert.ok(end.result, 'the result shows at the far end of the scrubber');
 // Tap a player: his card says who he is and what he did. (At the snap: the board follows the ball, so after a long
 // gain the quarterback can be off the board.)
 await scrub(0);
-const qb = await page.evaluate(() => {
-  const { board, state } = window.chalkTalk;
-  const i = state.play.players.findIndex(p => p.label === 'QB');
-  const r = board.cv.getBoundingClientRect(), p = board.pos(board.t, i);
-  return { x: r.left + board.sx(p.x), y: r.top + board.sy(p.y) };
-});
-await page.mouse.click(qb.x, qb.y);
+await tapOn('QB');
 assert.match(await page.textContent('#whoPos'), /Quarterback/, 'tapping the quarterback opens his card');
 await page.click('#whoClose');
 
