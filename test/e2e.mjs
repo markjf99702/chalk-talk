@@ -447,6 +447,29 @@ for (const width of [320, 360, 375]) {
   assert.ok(tech.gaps.every(g => g >= 12), `the diagram's 5, 7 and 6 are ${tech.gaps} apart`);
 }
 
+// A phone turned sideways: the board, Snap and the scrubber all on screen at once, with the calls beside the board,
+// and they stay there while the calls scroll.
+for (const [width, height] of [[844, 390], [667, 375]]) {
+  const side = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const p = await side.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const at = () => p.evaluate(() => {
+    const box = sel => { const b = document.querySelector(sel).getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+    return { board: box('#board'), transport: box('.transport'), panel: box('#mine'), wide: document.documentElement.scrollWidth - innerWidth };
+  });
+  const check = (m, when) => {
+    assert.equal(m.wide, 0, `${width}x${height} ${when}: the page scrolls sideways`);
+    assert.ok(m.board.t >= 0 && m.transport.b <= height && m.transport.r <= width, `${width}x${height} ${when}: the board and its controls don't fit on screen (${JSON.stringify(m.transport)})`);
+    assert.ok(m.panel.l >= m.board.r, `${width}x${height} ${when}: the calls aren't beside the board`);
+    assert.ok(m.board.b - m.board.t > height * 0.55, `${width}x${height} ${when}: the board is ${Math.round(m.board.b - m.board.t)} px tall`);
+  };
+  check(await at(), 'at the top');
+  await p.evaluate(() => scrollTo(0, 600));
+  check(await at(), 'scrolled down');
+  await side.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
