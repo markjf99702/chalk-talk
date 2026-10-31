@@ -99,6 +99,8 @@ export function prepare(call, seed = 1) {
   buildDefense(S);
   assignOffense(S);
   S.pre = S.P.map(p => ({ x: p.x, y: p.y }));
+  // Who is in the protection at the snap: blockers, and backs who check for a blitzer before they go out.
+  S.protection = S.play.type === 'pass' ? S.O.filter(p => ['pro', 'screenOL', 'fake'].includes(p.job.kind) || (p.job.kind === 'route' && p.job.delay && p.job.route !== 'screen')) : [];
   S.box = boxCount(S);
   S.jobText = S.P.map(pl => describeJob(S, pl));
   S.overlay = overlay(S);
@@ -201,7 +203,7 @@ function buildDefense(S) {
       d.job.gap = opts[0] ?? d.x;
       taken.push(d.job.gap);
     }
-    d.blitzer = true;
+    d.blitzer = !front.rush.includes(d.label); // the 3-4's Jack rushes on every down; a blitzer is anyone extra
   }
 
   // Final alignment, from each man's job.
@@ -412,9 +414,12 @@ export function simulate(call, seed = 1) {
     if (S.t >= S.endAt) S.over = true;
   }
   if (!S.result) finish(S, 'time');
+  // Of the rushers the protection left over before the snap, the ones nobody blocked before the throw or the sack.
+  const cut = Math.min(S.throwT, S.result.t) + 1e-9;
+  const cameFree = S.play.type === 'pass' ? (S.freeRushers || []).filter(d => !frames.some(f => f.t <= cut && f.eng[d.i] >= 0)).map(d => d.i) : [];
   return {
     seed, call: S.call, frames, events: S.events, result: S.result, box: S.box,
-    unblocked: (S.unblocked || []).map(d => d.i), free: (S.freeRushers || []).map(d => d.i),
+    unblocked: (S.unblocked || []).map(d => d.i), free: (S.freeRushers || []).map(d => d.i), cameFree, protection: S.protection.map(p => p.i),
     players: S.P.map(pl => ({ i: pl.i, team: pl.team, label: pl.label, cls: pl.cls, info: pl.info, x: S.pre[pl.i].x, y: S.pre[pl.i].y })),
     jobs: S.jobText, overlay: S.overlay,
   };

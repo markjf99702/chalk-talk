@@ -416,8 +416,13 @@ function coachNote(P) {
   reads.push(`Box: ${P.box.box} defenders near the line against ${P.box.blockers} blockers.`);
   const rushers = P.overlay.filter(o => o.kind === 'rush').length;
   if (pl.type === 'pass') {
-    const pro = P.overlay.filter(o => o.kind === 'pro').length;
-    reads.push(`Rush: ${rushers} rushers against ${pro} in protection${P.free.length ? `; ${P.free.map(i => nm(P, i)).join(' and ')} came unblocked` : ''}.`);
+    const pro = P.protection.map(i => P.players[i].cls);
+    // Who blocks: "5 linemen and 2 backs". Came unblocked: nobody got a hand on him before the throw or the sack.
+    const count = (n, one, many) => (n === 1 ? `a ${one}` : `${n} ${many}`);
+    const parts = [[pro.filter(c => c === 'ol').length, 'lineman', 'linemen'], [pro.filter(c => c === 'te').length, 'tight end', 'tight ends'],
+      [pro.filter(c => c === 'rb' || c === 'fb').length, 'back', 'backs']].filter(([n]) => n).map(([n, one, many]) => count(n, one, many));
+    const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
+    reads.push(`Rush: ${rushers} rushers against ${pro.length} in protection (${who})${P.cameFree.length ? `; ${P.cameFree.map(i => nm(P, i)).join(' and ')} came unblocked` : ''}.`);
   } else if (P.unblocked.length) {
     reads.push(`Unblocked by design: ${P.unblocked.map(i => nm(P, i)).join(', ')}.`);
   }

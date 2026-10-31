@@ -99,6 +99,28 @@ test('on the screen the linemen let the rushers go, and in man coverage the back
   }
 });
 
+test('the rush read tells the truth: only blitzers are drawn as blitzers, and only rushers nobody blocked came unblocked', () => {
+  let seed = 500, picked = 0;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const pl of PLAYS.filter(p => p.type === 'pass')) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
+    const r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    for (const o of r.overlay.filter(o => o.kind === 'rush')) {
+      const p = r.players[o.i], own = fr.rush.includes(p.label);
+      assert.equal(o.blitz, !own, `${what}: the ${p.label} ${own ? 'is one of the front\'s rushers but is drawn as a blitzer' : 'blitzes but is drawn as a rusher'}`);
+      assert.ok(r.jobs[o.i].includes(own ? 'Rushes' : 'Blitzes'), `${what}: the ${p.label}'s card says "${r.jobs[o.i]}"`);
+    }
+    const cut = (r.events.find(e => e.kind === 'throw' || e.kind === 'away') || r.result).t;
+    const blocked = i => r.frames.some(f => f.t <= cut + 1e-9 && f.eng[i] >= 0);
+    assert.ok(Array.isArray(r.cameFree), `${what}: no list of the rushers who came free`);
+    assert.equal(r.protection.filter(i => r.players[i].cls === 'ol').length, 5, `${what}: the protection is missing a lineman`);
+    for (const i of r.protection) assert.ok(r.players[i].team === 'O' && r.players[i].cls !== 'qb' && r.players[i].cls !== 'wr', `${what}: the ${r.players[i].label} is counted in the protection`);
+    for (const i of r.cameFree) assert.ok(r.free.includes(i) && !blocked(i), `${what}: the ${r.players[i].label} is said to have come unblocked, but he was blocked`);
+    for (const i of r.free) if (!r.cameFree.includes(i)) { assert.ok(blocked(i), `${what}: the ${r.players[i].label} came free but isn't named`); picked++; }
+  }
+  assert.ok(picked > 0, 'no unassigned rusher was ever picked up, so the check above proved nothing');
+});
+
 test('a back\'s flat route and check-down end past the line, and Flood sends one back to the flat', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) {
     const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip }, 5);
