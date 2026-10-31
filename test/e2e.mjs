@@ -186,6 +186,18 @@ const close = await page.evaluate(() => {
 assert.ok(close, 'no 3.5-yard run in 3,000 snaps of Inside Zone');
 assert.equal(close.head, 'Gain of 4 yards', `seed ${close.seed}`);
 assert.equal(close.kicker, 'A win for the offense', `"Gain of 4 yards" under "${close.kicker}" (seed ${close.seed})`);
+// A gain short of that says why it's a win for the defense, so it doesn't look like a mistake.
+const short = await page.evaluate(() => {
+  const { state, board, simulate, lineUp, finish } = window.chalkTalk;
+  for (let seed = 1; seed < 3000; seed++) {
+    const res = simulate({ ...state.off, ...state.def }, seed).result;
+    if (res.kind !== 'run' || res.yards !== 3) continue;
+    state.seed = seed; lineUp(); state.t = board.duration(); finish();
+    return { seed, head: document.getElementById('resHead').textContent, kicker: document.getElementById('resKicker').textContent };
+  }
+});
+assert.equal(short?.head, 'Gain of 3 yards');
+assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards that make a play a success', `"Gain of 3 yards" under "${short.kicker}" (seed ${short.seed})`);
 
 // A shared link opens the exact same play. Copying it says so on the button.
 await page.click('[data-side="O"]');

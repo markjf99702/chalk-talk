@@ -610,7 +610,9 @@ function headline(res) {
 function showResult() {
   const P = state.play, res = P.result;
   const offWin = success(res);
-  $('resKicker').textContent = offWin ? 'A win for the offense' : 'A win for the defense';
+  // A gain short of 4 yards counts for the defense, which looks like a mistake unless it says why.
+  const short = (res.kind === 'run' || res.kind === 'catch') && gained(res) >= 0 && !offWin;
+  $('resKicker').textContent = offWin ? 'A win for the offense' : `A win for the defense${short ? ': short of the 4\u00a0yards that make a play a success' : ''}`;
   $('resKicker').dataset.win = offWin ? 'O' : 'D';
   $('resHead').textContent = headline(res);
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
