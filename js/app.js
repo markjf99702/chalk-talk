@@ -712,7 +712,7 @@ function badLink(link) {
 // Another play link opened in a tab that's already open.
 addEventListener('hashchange', () => {
   const link = fromLink();
-  if (link === 'ok') { renderChoosers(); clearChart(); lineUp(); play(); }
+  if (link === 'ok') { redo = null; renderChoosers(); clearChart(); lineUp(); play(); }
   else if (link) badLink(link);
 });
 

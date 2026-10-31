@@ -710,6 +710,12 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.match(await p.textContent('#chartHint'), /Run it again for Flood\.$/, 'the word about the chart lasts through the snap');
   await p.click('#runChart');
   assert.doesNotMatch(await p.textContent('#chartHint'), /Run it again/, 'the word about the chart stays once it runs again');
+  // A shared link opened in the same tab is somebody else's play: no word about you changing the call.
+  await ready();
+  await p.getByRole('radio', { name: 'Mesh' }).click();
+  await p.evaluate(() => { location.hash = '#p=O.trips.smash.0.nickel.c2.four.15'; });
+  await p.waitForFunction(() => window.chalkTalk.state.linked);
+  assert.doesNotMatch(await p.textContent('#chartHint'), /Run it again/, 'a shared link kept the word about the chart');
   await p.context().close();
 }
 
