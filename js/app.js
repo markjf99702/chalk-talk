@@ -641,6 +641,12 @@ function coachNote(P) {
   const reads = [];
   const high = P.box.high;
   reads.push(high >= 2 ? 'Safeties: two deep before the snap, a Cover 2 or Cover 4 look.' : high === 1 ? 'Safeties: one deep in the middle, a Cover 1 or Cover 3 look.' : 'Safeties: nobody deep. Expect man coverage and a blitz.');
+  // How far off the corners stood before the snap: on this board they're pressed in man coverage, about 5 yards off in
+  // Cover 2 and 7 or more in Cover 3 and 4 (see the corners' depths in js/sim.js), so this and the safeties name it.
+  const corner = Math.min(...P.players.filter(p => p.label === 'CB').map(p => p.y));
+  reads.push(corner < 2.5 ? 'Corners: pressed up on the receivers. Corners press in man coverage.'
+    : corner < 6 ? 'Corners: about 5 yards off and outside the receivers. Cover 2 corners sit there to take the flat.'
+      : 'Corners: 7 yards or more off. They drop deep, to a third or a quarter of the field.');
   reads.push(`Box: ${P.box.box} defenders near the line against ${P.box.blockers} blockers.`);
   const rushers = P.overlay.filter(o => o.kind === 'rush').length;
   if (pl.type === 'pass') {
@@ -864,7 +870,7 @@ function playbook() {
   sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb])));
   sec('Fronts and techniques', false, `<p>Technique numbers tell a defensive lineman where to line up against the offensive line. Gaps between the blockers are lettered from the center out: A between the center and a guard, B between guard and tackle, C outside the tackle, D outside the tight end.</p>`
     + techDiagram() + dl([...TECHNIQUES, ...FRONTS.map(f => [f.name, f.blurb])]));
-  sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. Defenses disguise it, so the read is a guess until the snap.']]));
+  sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. The corners help too: up close and pressing means man; about five yards off means Cover 2; seven or more means a deep zone, thirds or quarters. Real defenses disguise it, rotating a safety down or back at the snap. The defenses on this board line up in what they\'ll play.']]));
   sec('Run plays', false, dl(PLAYS.filter(p => p.type === 'run').map(p => [p.name, p.blurb])));
   sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation.']]));
   // drag6 and bflat are the same routes as drag and flat at another depth or from the backfield, so they're listed once.

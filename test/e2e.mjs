@@ -670,6 +670,30 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// The read after the snap says what the corners showed: pressed in man, about 5 yards off in Cover 2, 7 or more off in
+// the deep zones. And the playbook says the board's defenses line up in what they play, as they do.
+{
+  const p = await phone();
+  const reads = await p.evaluate(() => {
+    const { state, lineUp, snap, finish } = window.chalkTalk, out = {};
+    for (const coverage of ['c1', 'c2', 'c3', 'c4']) {
+      Object.assign(state.def, { front: 'nickel', coverage, pressure: 'four' });
+      lineUp(); snap(); finish();
+      out[coverage] = [...document.querySelectorAll('#reads li')].map(li => li.textContent).find(t => t.startsWith('Corners:'));
+    }
+    const d = [...document.querySelectorAll('.pb')].find(x => x.querySelector('summary').textContent === 'Coverages');
+    out.shell = [...d.querySelectorAll('dt')].find(dt => dt.textContent === 'Reading the shell').nextElementSibling.textContent;
+    return out;
+  });
+  assert.equal(reads.c1, 'Corners: pressed up on the receivers. Corners press in man coverage.');
+  assert.equal(reads.c2, 'Corners: about 5 yards off and outside the receivers. Cover 2 corners sit there to take the flat.');
+  assert.equal(reads.c3, 'Corners: 7 yards or more off. They drop deep, to a third or a quarter of the field.');
+  assert.equal(reads.c4, reads.c3);
+  assert.doesNotMatch(reads.shell, /the read is a guess/, 'the playbook says the read is a guess, which it never is on this board');
+  assert.match(reads.shell, /The corners help too/);
+  await p.context().close();
+}
+
 // Calling the defense, their call says where the strength is on the board as you see it: turned around, the
 // offense's right is on your left.
 {
