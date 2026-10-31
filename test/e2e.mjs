@@ -189,6 +189,7 @@ assert.deepEqual(await page.evaluate(() => { const box = document.activeElement;
 const page2 = await ctx.newPage();
 page2.on('pageerror', e => problems.push(e.message));
 page2.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+page2.on('requestfailed', r => problems.push('failed: ' + r.url()));
 await page2.goto(base + link.slice(link.indexOf('#')));
 await page2.waitForSelector('#result:not([hidden])', { timeout: 15000 });
 assert.equal(await page2.textContent('#resHead'), head, 'the shared link replays the same result');
@@ -210,6 +211,10 @@ await page2.close();
 
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
+
+// Nothing went wrong while using it: no errors, no failed requests, nothing loaded from anywhere else. (From here on
+// the connection goes down on purpose, so failed requests are expected.)
+assert.deepEqual(problems, [], 'problems while using it');
 
 // Works offline once it has been opened. The server goes down as well as the browser: in some Chromium builds the
 // browser's offline switch alone doesn't stop the service worker's own requests, and this passed with no copy at all.
@@ -240,7 +245,7 @@ await until(() => page.evaluate(async () => !!(await (await caches.match('index.
   10000, "the new release's offline copy kept the old index.html");
 release = false;
 
-assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while using it');
+assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems offline or in the new release');
 await browser.close();
 server.close();
 
