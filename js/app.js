@@ -689,7 +689,7 @@ function playbook() {
   sec('Defense positions', false, dl(pos(['DE', 'DT', 'NT', 'S', 'M', 'W', 'J', 'CB', 'NB', 'FS', 'SS'])));
   sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb])));
   sec('Fronts and techniques', false, `<p>Technique numbers tell a defensive lineman where to line up against the offensive line. Gaps between the blockers are lettered from the center out: A between the center and a guard, B between guard and tackle, C outside the tackle, D outside the tight end.</p>`
-    + techDiagram() + dl([...Object.entries(TECHNIQUES).map(([k, v]) => [`${k === 'w5' ? 'Wide 5' : k}-technique`, v.replace(/^an? /, '').replace(/^\w/, c => c.toUpperCase()) + '.']), ...FRONTS.map(f => [f.name, f.blurb])]));
+    + techDiagram() + dl([...TECHNIQUES, ...FRONTS.map(f => [f.name, f.blurb])]));
   sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. Defenses disguise it, so the read is a guess until the snap.']]));
   sec('Run plays', false, dl(PLAYS.filter(p => p.type === 'run').map(p => [p.name, p.blurb])));
   sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation.']]));
@@ -708,13 +708,14 @@ function playbook() {
 }
 
 function techDiagram() {
-  // The offensive line with the technique numbers over it.
-  const ol = [-3, -1.5, 0, 1.5, 3, 4.6], lab = ['T', 'G', 'C', 'G', 'T', 'TE'];
-  const techs = [['0', 0], ['1', 0.7], ['2', 1.5], ['3', 2.2], ['4', 3], ['5', 3.75], ['7', 4.05], ['6', 4.6], ['9', 5.4]];
-  const X = x => 150 + x * 24;
+  // The offensive line with the technique numbers over it. The tight end stands a little wide, so the 5, 7 and 6 between
+  // the tackle and him read as three numbers rather than "57".
+  const ol = [-3, -1.5, 0, 1.5, 3, 5], lab = ['T', 'G', 'C', 'G', 'T', 'TE'];
+  const techs = [['0', 0], ['1', 0.7], ['2', 1.5], ['3', 2.2], ['4', 3], ['5', 3.6], ['7', 4.3], ['6', 5], ['9', 5.7]];
+  const X = x => 128 + x * 27;
   let s = '<svg class="tech" viewBox="0 0 300 92" role="img" aria-label="The offensive line with technique numbers: 0 on the center, 1 on his shoulder, 2 on the guard, 3 outside the guard, 4 on the tackle, 5 outside the tackle, 7 inside the tight end, 6 on him, 9 outside him.">';
   for (const [t, x] of techs) s += `<text x="${X(x)}" y="22" text-anchor="middle">${t}</text>`;
-  for (const [g, x] of [['A', 0.75], ['B', 2.25], ['C', 3.8], ['D', 5.6]]) s += `<text class="gap" x="${X(x)}" y="44" text-anchor="middle">${g}</text>`;
+  for (const [g, x] of [['A', 0.75], ['B', 2.25], ['C', 4], ['D', 5.85]]) s += `<text class="gap" x="${X(x)}" y="44" text-anchor="middle">${g}</text>`;
   ol.forEach((x, n) => {
     s += n === 2 ? `<rect x="${X(x) - 8}" y="56" width="16" height="16" rx="2"/>` : `<circle cx="${X(x)}" cy="64" r="8"/>`;
     s += `<text class="pos" x="${X(x)}" y="88" text-anchor="middle">${lab[n]}</text>`;

@@ -125,7 +125,7 @@ export const PLAYS = [
 export const FRONTS = [
   {
     id: 'over', name: '4-3 Over', db: 'base',
-    blurb: 'Four linemen and three linebackers. The line shifts toward the strong side: the 3-technique tackle lines up over the strong-side guard.',
+    blurb: 'Four linemen and three linebackers. The line shifts toward the strong side: the 3-technique tackle lines up on the strong-side guard\'s outside shoulder.',
     dl: [['DE', '5', 'S'], ['DT', '3', 'S'], ['NT', '1', 'W'], ['DE', 'w5', 'W']],
     lb: [['S', 'sam'], ['M', [0.6, 4.8]], ['W', [-3.2, 4.6]]],
     rush: ['DE', 'DT', 'NT', 'DE'], blitz: 'M',
@@ -207,14 +207,20 @@ export const PRESSURES = [
   { id: 'blitz', name: 'Blitz', blurb: 'The Mike linebacker rushes too: five rushers, one fewer in coverage.' },
 ];
 
-export const TECHNIQUES = {
-  '0': 'a 0-technique, head-up on the center',
-  '1': 'a 1-technique, on the center\'s shoulder in the A gap',
-  '3': 'a 3-technique, on the guard\'s outside shoulder in the B gap',
-  '5': 'a 5-technique, on the tackle\'s outside shoulder in the C gap',
-  'w5': 'a wide 5-technique, outside the tackle',
-  '9': 'a 9-technique, outside the tight end',
-};
+// Technique numbers, in order across the line from the center out (the playbook lists them this way).
+export const TECHNIQUES = [
+  ['0-technique', 'Head-up on the center.'],
+  ['1-technique', 'On the center\'s shoulder, in the A gap.'],
+  ['2-technique', 'Head-up on a guard.'],
+  ['3-technique', 'On the guard\'s outside shoulder, in the B gap.'],
+  ['4-technique', 'Head-up on a tackle.'],
+  ['5-technique', 'On the tackle\'s outside shoulder, in the C gap.'],
+  ['Wide 5-technique', 'Outside the tackle, wider than a 5.'],
+  ['7-technique', 'On the tight end\'s inside shoulder. It sits inside the 6 because the usual numbering keeps odd numbers for lining up on a man\'s shoulder and even numbers for head-up.'],
+  ['6-technique', 'Head-up on the tight end.'],
+  ['9-technique', 'Outside the tight end.'],
+  ['2i and 4i', 'On the inside shoulder of a guard (2i) or a tackle (4i).'],
+];
 
 // What each position is. Defense labels are the shorthand coaches draw on the board.
 export const POSITIONS = {

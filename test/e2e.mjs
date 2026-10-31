@@ -424,6 +424,20 @@ for (const width of [320, 360, 375]) {
   assert.deepEqual(sizes, { coarse: true, chips: 0, buttons: 0, reach: true }, 'tap targets on a touch screen');
 }
 
+// The playbook's technique numbers: listed in order across the line, each one explained once without repeating its
+// name, and the diagram's 5, 7 and 6 far enough apart not to read as "57".
+{
+  const tech = await page.evaluate(() => {
+    const d = [...document.querySelectorAll('.pb')].find(x => x.querySelector('summary').textContent === 'Fronts and techniques');
+    const rows = [...d.querySelectorAll('dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]).filter(([t]) => /technique|2i/.test(t));
+    const x = Object.fromEntries([...d.querySelectorAll('svg text:not(.gap):not(.pos)')].map(t => [t.textContent, +t.getAttribute('x')]));
+    return { terms: rows.map(([t]) => t), repeats: rows.filter(([t, v]) => v.toLowerCase().includes(t.toLowerCase())).map(([t]) => t), gaps: [x[7] - x[5], x[6] - x[7]] };
+  });
+  assert.deepEqual(tech.terms, ['0-technique', '1-technique', '2-technique', '3-technique', '4-technique', '5-technique', 'Wide 5-technique', '7-technique', '6-technique', '9-technique', '2i and 4i']);
+  assert.deepEqual(tech.repeats, [], 'a technique explained by its own name');
+  assert.ok(tech.gaps.every(g => g >= 12), `the diagram's 5, 7 and 6 are ${tech.gaps} apart`);
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
