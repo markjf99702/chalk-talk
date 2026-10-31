@@ -517,7 +517,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   const changes = [
     ['a play', () => p.getByRole('radio', { name: 'Four Verticals' }).click()],
     ['the side', () => p.click('[data-side="D"]')],
-    ['New look', () => p.evaluate(() => document.getElementById('newLook').click())],
+    ['New look', () => p.click('#theirsLook')],
   ];
   for (const [what, change] of changes) {
     await p.click('#snap');
@@ -577,9 +577,15 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
 }
 
 // A call you've seen stays seen. Change your play after a snap and their call is still shown, as the same one as last
-// snap, until New look has him pick again: that one is hidden until the next snap.
+// snap, until New look has him pick again: that one is hidden until the next snap. New look is in their card before the
+// snap too, whenever he's picking.
 {
   const p = await phone();
+  const def = () => p.evaluate(() => ({ ...window.chalkTalk.state.def }));
+  const first = await def();
+  await p.click('#theirsLook');
+  assert.notDeepEqual(await def(), first, 'New look before the snap kept their call');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.phase), 'pre');
   await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); });
   const called = (await p.textContent('#theirsHint')).match(/^They called: (.*)\.$/)?.[1];
   assert.ok(called, 'their call is out after the snap');
@@ -587,9 +593,11 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.equal(await p.textContent('#theirsHint'), `Same call as last snap: ${called}. New look gets you a new one.`);
   assert.doesNotMatch(await p.textContent('#matchup'), /hidden/, 'a call you have seen is hidden again on the board');
   assert.equal(await p.evaluate(() => window.chalkTalk.board.showTheirs), true, 'their drawn-up play is hidden again');
-  await p.evaluate(() => document.getElementById('newLook').click());
+  await p.click('#theirsLook');
   assert.match(await p.textContent('#matchup'), /coverage hidden/, 'a new look is hidden until the snap');
   assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap/);
+  await p.click('#auto');
+  assert.equal(await p.isVisible('#theirsLook'), false, 'New look is there when you call both sides');
   await p.context().close();
 }
 

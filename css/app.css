@@ -347,6 +347,7 @@ button:disabled { cursor: default; }
 .theirs-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
 .switch input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.theirs .look { margin-top: 10px; }
 
 .result .kicker {
   display: inline-block;

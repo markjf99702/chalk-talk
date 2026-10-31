@@ -423,7 +423,7 @@ function renderChoosers() {
   $('auto').checked = state.auto;
   if (!state.auto) (state.side === 'O' ? defenseChooser : offenseChooser)(theirs, false);
   for (const b of document.querySelectorAll('[data-side]')) b.setAttribute('aria-checked', String(b.dataset.side === state.side));
-  $('newLook').hidden = !state.auto;
+  $('newLook').hidden = $('theirsLook').hidden = !state.auto;
   syncTheirs();
 }
 
@@ -474,7 +474,10 @@ $('auto').addEventListener('change', e => {
   if (state.auto) rollTheirs();
   afterChange();
 });
-$('newLook').addEventListener('click', () => { rollTheirs(); afterChange(); $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+// New look: the other coach picks again. It's in the result card after a play, and in his card before the snap.
+function newLook() { rollTheirs(); afterChange(); $('board').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+$('newLook').addEventListener('click', newLook);
+$('theirsLook').addEventListener('click', newLook);
 
 // ---------------------------------------------------------------- the result
 
