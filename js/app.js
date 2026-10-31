@@ -85,6 +85,7 @@ function rollTheirs() {
 const board = new Board($('board'));
 
 function lineUp() {
+  cancelAnimationFrame(raf); // a frame of the last play still to come would run its clock on into this one
   state.play = simulate(call(), state.seed);
   state.phase = 'pre';
   state.t = 0;

@@ -499,6 +499,37 @@ for (const [width, height] of [[844, 390], [667, 375]]) {
   await side.close();
 }
 
+// A phone of its own, with its own saved calls, watched for problems like the first.
+const phone = async () => {
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  return p;
+};
+const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+// Changing the call in the middle of a play lines the new one up from the start: none of the old play's clock is left
+// over, so the new call isn't drawn faded as if it had been snapped.
+{
+  const p = await phone();
+  const changes = [
+    ['a play', () => p.getByRole('radio', { name: 'Four Verticals' }).click()],
+    ['the side', () => p.click('[data-side="D"]')],
+    ['New look', () => p.evaluate(() => document.getElementById('newLook').click())],
+  ];
+  for (const [what, change] of changes) {
+    await p.click('#snap');
+    await p.waitForFunction(() => window.chalkTalk.state.t > 1, null, { timeout: 10000 });
+    await change();
+    await frames(p);
+    const at = await p.evaluate(() => { const { state, board } = window.chalkTalk; return { phase: state.phase, t: state.t, board: board.t, scrub: document.getElementById('scrub').value }; });
+    assert.deepEqual(at, { phase: 'pre', t: 0, board: 0, scrub: '0' }, `changing ${what} mid-play`);
+  }
+  await p.context().close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
