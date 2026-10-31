@@ -84,6 +84,8 @@ assert.match(await page.textContent('#whoJob'), /hidden until the snap/, 'a defe
 // tapped player's card closes, so the play can be seen (on a bigger board it says what he's doing: see below).
 await page.click('#snap');
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 1, 'the chart marks their coverage once it is out');
+// A screen reader hears what the eye gets from the board: their call at the snap, and how the play came out at the end.
+assert.match(await page.textContent('#say'), /^They called: .+\.$/, 'their call is said at the snap');
 assert.equal(await page.isVisible('#who'), false, 'on a phone the card closes at the snap');
 assert.equal(await page.evaluate(() => window.chalkTalk.board.selected), -1, 'and nobody is picked out');
 // Part way through, the scrubber is part way along too.
@@ -98,6 +100,7 @@ assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result ha
 assert.ok(await page.$$eval('#story li', li => li.length) >= 1, 'the play-by-play has at least one line');
 assert.ok((await page.textContent('#note')).trim().length > 40, 'the coach\'s note is there');
 assert.match(await page.textContent('#theirsHint'), /They called/, 'their call is shown after the snap');
+assert.equal(await page.textContent('#say'), `${await page.textContent('#resHead')}. ${await page.textContent('#resKicker')}. Why it worked is under the board.`);
 // One name for one thing: Snap again is a new snap of the same calls, here and in the result card, and it says so. The
 // play button watches this one again.
 assert.equal(await page.textContent('#snap'), 'Snap again');
@@ -218,6 +221,7 @@ assert.equal(await page2.evaluate(() => location.hash), '', 'the link leaves the
 await page2.evaluate(() => { location.hash = '#p=O.trips.nosuch.0.nickel.c2.four.15'; });
 await page2.waitForFunction(() => location.hash === '', null, { timeout: 5000 }).catch(() => assert.fail('a bad link stays in the address'));
 assert.equal(await page2.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
+assert.equal(await page2.textContent('#say'), 'That link is for a play this version doesn\'t have.', 'a screen reader hears it too');
 assert.equal(await page2.evaluate(() => window.chalkTalk.state.off.play), 'power', 'a bad link changes the play');
 await page2.click('#snap');
 assert.doesNotMatch(await page2.textContent('#theirsHint'), /That link/, 'the word about the bad link stays after the next snap');

@@ -107,6 +107,7 @@ function lineUp() {
   hideWho();
   $('why').hidden = true;
   $('result').hidden = true;
+  say('');
   syncBoard();
   syncTransport();
   syncTheirs();
@@ -143,6 +144,8 @@ function play() {
   const snapped = state.phase === 'pre';
   if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
   if (snapped && state.auto) state.seen = true;
+  // Said again at the end of each run of the play, so a replay is heard too.
+  if (snapped && state.auto) say(`They called: ${theirSummary()}.`); else if (!snapped) say('');
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   $('why').hidden = true;
@@ -179,6 +182,15 @@ function finish() {
   syncTransport();
   showResult();
   showWhy();
+  sayResult();
+}
+
+// What a screen reader hears of what the eye gets from the board: the other coach's call at the snap, how the play came
+// out at the end, and a word about a link that couldn't open.
+function say(text) { $('say').textContent = text; }
+function sayResult() {
+  const beside = $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
+  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. Why it worked is ${beside ? 'beside' : 'under'} the board.`);
 }
 
 // At the end of the play, the headline and a way down to the explanation, where the caption was.
@@ -271,7 +283,7 @@ $('scrub').addEventListener('input', e => {
   state.t = (+e.target.value / 1000) * board.duration();
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
   draw(); caption(); syncTransport();
-  if (state.phase === 'done') { showResult(); showWhy(); } else $('why').hidden = true;
+  if (state.phase === 'done') { showResult(); showWhy(); sayResult(); } else $('why').hidden = true;
 });
 for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { state.speed = +b.dataset.speed; save(); syncTransport(); });
 $('labels').addEventListener('click', () => { state.labels = !state.labels; board.labels = state.labels; save(); syncTransport(); draw(); });
@@ -657,6 +669,7 @@ function fromLink() {
 function badLink() {
   linkNote = 'That link is for a play this version doesn\'t have.';
   syncTheirs();
+  say(linkNote);
   if (state.phase === 'pre') setCaption(linkNote);
 }
 // Another play link opened in a tab that's already open.
