@@ -694,6 +694,39 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Before the snap a defender's card says what his spot gives away, not the same sentence for all eleven: a pressed
+// corner, the lone deep safety, a Mike creeping up to blitz.
+{
+  const p = await phone();
+  await p.evaluate(() => {
+    const { state, lineUp } = window.chalkTalk;
+    Object.assign(state.off, { formation: 'doubles', play: 'verts', flip: false });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz' });
+    lineUp();
+  });
+  const spots = await p.evaluate(() => {
+    const { board, state } = window.chalkTalk, r = board.cv.getBoundingClientRect();
+    return state.play.players.filter(q => q.team === 'D').map(q => ({ i: q.i, label: q.label, x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) }));
+  });
+  const cards = {};
+  for (const q of spots) {
+    await p.evaluate(() => { window.chalkTalk.board.selected = -1; document.getElementById('who').hidden = true; });
+    await p.mouse.click(q.x, q.y);
+    for (let n = 1; n < 4 && await p.evaluate(() => window.chalkTalk.board.selected) !== q.i; n++) await p.mouse.click(q.x, q.y);
+    cards[`${q.label} ${q.i}`] = await p.textContent('#whoJob');
+  }
+  const said = Object.values(cards);
+  assert.ok(said.every(t => t.endsWith(' His job is hidden until the snap.')), `a card before the snap reads: ${said.find(t => !t.endsWith(' His job is hidden until the snap.'))}`);
+  assert.ok(new Set(said).size >= 6, `${new Set(said).size} different cards for eleven defenders`);
+  const card = label => Object.entries(cards).find(([k]) => k.startsWith(label + ' '))[1];
+  assert.match(card('CB'), /^Up in the receiver's face, pressed: corners press in man coverage\./);
+  assert.match(card('FS'), /^Alone in the middle, 1\d yards deep: one deep safety, so Cover 1 or Cover 3\./);
+  assert.match(card('M'), /often blitzing\./);
+  assert.match(card('NB'), /^Over the slot receiver \(/);
+  assert.match(card('DE'), /^Down linemen rush on almost every play\./);
+  await p.context().close();
+}
+
 // Calling the defense, their call says where the strength is on the board as you see it: turned around, the
 // offense's right is on your left.
 {

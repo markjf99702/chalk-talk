@@ -343,7 +343,9 @@ function showWho(i) {
   const fresh = $('who').hidden || $('who').dataset.i !== String(i);
   $('who').dataset.i = i;
   $('whoPos').textContent = `${p.label} · ${title}`;
-  $('whoJob').textContent = hiddenJob ? 'His job on this play is hidden until the snap. Read the alignment: where he stands gives some of it away.' : `On this play: ${state.play.jobs[i]}`;
+  $('whoJob').textContent = !hiddenJob ? `On this play: ${state.play.jobs[i]}`
+    : p.team === 'D' ? `${tell(state.play, i)} His job is hidden until the snap.`
+      : 'His job on this play is hidden until the snap. Read the alignment: where he stands gives some of it away.';
   $('whoAbout').textContent = about;
   $('whoMore').textContent = `More about the ${p.label}`;
   $('whoMore').hidden = !about;
@@ -352,6 +354,40 @@ function showWho(i) {
   placeWho(fresh);
 }
 function hideWho() { $('who').hidden = true; }
+
+// What a defender's spot before the snap gives away, from what anyone can see on the board: how deep he is, what he's
+// over, whether he's in the box. On this board the tells are exact (corners pressed only in man, a Mike only creeps up
+// to blitz), but they're worded the way they'd hold on a real field.
+function tell(P, i) {
+  const p = P.players[i], { x, y } = p, yd = n => `${Math.round(n)} yards`;
+  const recv = P.players.filter(q => q.team === 'O' && (q.cls === 'wr' || q.cls === 'te'));
+  const over = recv.reduce((a, q) => (Math.abs(q.x - x) < Math.abs(a.x - x) ? q : a));
+  const slot = q => recv.some(o => Math.sign(o.x) === Math.sign(q.x) && Math.abs(o.x) > Math.abs(q.x));
+  const him = `the ${over.cls === 'te' ? 'tight end' : slot(over) ? 'slot receiver' : 'receiver'} (${over.label})`;
+  const inBox = P.box.in.includes(i);
+  if (p.label === 'CB') {
+    return y < 2.5 ? 'Up in the receiver\'s face, pressed: corners press in man coverage.'
+      : y < 6 ? 'About 5 yards off, outside the receiver: where a Cover 2 corner sits to take the flat.'
+        : 'Seven yards or more off: ready to drop deep, to a third or a quarter of the field.';
+  }
+  if (p.cls === 's') {
+    if (!P.box.high) return 'Nobody is deep: both safeties are up, inside 10 yards. Expect man coverage and a blitz.';
+    if (y > 10.5) {
+      return P.box.high === 1 ? `Alone in the middle, ${yd(y)} deep: one deep safety, so Cover 1 or Cover 3.`
+        : 'Deep over his half of the field, with the other safety deep too: two deep, so Cover 2 or Cover 4.';
+    }
+    return `Down at ${yd(y)}, not deep${inBox ? ', in the box' : ''}: an extra man against the run, or he's covering a tight end, a slot receiver or an area underneath.`;
+  }
+  if (p.label === 'NB') return `Over ${him}: a nickel back usually covers him, man or zone.`;
+  if (p.cls === 'lb') {
+    if (Math.abs(x) < 3.5 && y < 4) return 'Walked up close to the line between the tackles: a linebacker creeping up like this is often blitzing.';
+    if (y < 1.5) return 'Standing up on the end of the line: he may rush the passer or drop into coverage.';
+    if (y < 2.5) return `Up close over ${him}: a linebacker this tight on a receiver is usually playing man coverage on him.`;
+    if (inBox) return `About ${yd(y)} off the ball, in the box: count him when you count the box.`;
+    return `Out over ${him}, outside the box: he'll cover him or the area around him, man or zone.`;
+  }
+  return 'Down linemen rush on almost every play. What\'s hidden is who joins them.';
+}
 function syncMore() {
   $('who').classList.toggle('more', moreAbout);
   $('whoMore').setAttribute('aria-expanded', String(moreAbout));
