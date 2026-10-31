@@ -386,6 +386,27 @@ for (const side of ['O', 'D']) {
   await wide.close();
 }
 
+// The smallest phones (320 px wide): after the first snap, when the button reads "Run it again", every control under
+// the board still fits, and nothing scrolls sideways.
+for (const width of [320, 360, 375]) {
+  const small = await browser.newContext({ viewport: { width, height: 568 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const p = await small.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  for (const when of ['before', 'after']) {
+    if (when === 'after') await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); scrollTo(0, 0); });
+    const fit = await p.evaluate(() => ({
+      wide: document.documentElement.scrollWidth - innerWidth,
+      out: [...document.querySelectorAll('.transport > *')].filter(el => { const b = el.getBoundingClientRect(); return b.left < 0 || b.right > innerWidth || b.width < 24; }).map(el => el.id || el.className),
+      scrub: document.getElementById('scrub').getBoundingClientRect().width,
+    }));
+    assert.equal(fit.wide, 0, `${width} px wide, ${when} the snap: the page scrolls sideways`);
+    assert.deepEqual(fit.out, [], `${width} px wide, ${when} the snap: controls cut off`);
+    assert.ok(fit.scrub > width / 2, `${width} px wide, ${when} the snap: the scrubber is ${Math.round(fit.scrub)} px`);
+  }
+  await small.close();
+}
+
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 

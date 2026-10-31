@@ -435,5 +435,8 @@ button:disabled { cursor: default; }
   .side-pick { width: 100%; }
   .side-pick button { flex: 1; padding: 8px 10px; }
   .snap { padding: 8px 14px; font-size: 17px; }
-  .transport { gap: 6px; }
+  /* the scrubber on a row of its own under the buttons: room for "Run it again", and a longer scrubber to drag */
+  .transport { flex-wrap: wrap; gap: 6px; }
+  .transport .seg { margin-left: auto; }
+  #scrub { order: 1; flex: 1 0 100%; margin: 0; height: 22px; }
 }
