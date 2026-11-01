@@ -179,7 +179,16 @@ test('the words match the board: zones by strong and weak side, a run in every d
     const story = r.events.map(e => e.text).join(' ');
     assert.doesNotMatch(story, /\b1 yards\b/, `${what}: "${story}"`);
     assert.doesNotMatch(story, /'s block|his last option|The corner on/, `${what}: "${story}"`);
-    if (r.events.some(e => e.kind === 'throw')) assert.match(r.events.find(e => e.kind === 'throw').text, /on (a|an) [a-z ]+ route|on the (check-down|screen)/, `${what}: "${r.events.find(e => e.kind === 'throw').text}"`);
+    // Said once: "the cornerback on the X" is already chasing the X. And the catch is 18 yards downfield, not at it.
+    assert.doesNotMatch(story, /cornerback on the (\w+) runs into traffic chasing the \1\b/, `${what}: "${story}"`);
+    assert.doesNotMatch(story, /Caught by [^.]* at \d/, `${what}: "${story}"`);
+    const thrown = r.events.find(e => e.kind === 'throw')?.text;
+    if (thrown) {
+      assert.match(thrown, /on (a|an) [a-z ]+ route|on the (check-down|screen)/, `${what}: "${thrown}"`);
+      // The caption over the deep field takes two lines at most: the reads he passed up are counted, not listed. (The
+      // longest is a tight end's read after the other tight end's: 21 words.)
+      assert.ok(thrown.split(' ').length <= 21, `${what}: the throw takes ${thrown.split(' ').length} words: "${thrown}"`);
+    }
     if (pl.type === 'run' && r.result.carrier === S.QB.i && !r.events.some(e => e.kind === 'hand')) {
       qbDown++;
       assert.match(r.events.at(-1).text, /drops the quarterback before the handoff/, `${what}: the quarterback goes down before the handoff, and the story says "${story}"`);

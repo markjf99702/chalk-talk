@@ -553,7 +553,7 @@ function arrive(S) {
   S.caught = true;
   r.job = { kind: 'run' };
   S.catchY = r.y;
-  ev(S, 'catch', `Caught by ${name(S, r)} at ${yardText(r.y)}${nd < 1.6 ? ', with ' + name(S, near) + ' right there' : ''}.`, { who: r.i });
+  ev(S, 'catch', `Caught by ${name(S, r)} ${yardText(r.y)}${nd < 1.6 ? ', with ' + name(S, near) + ' right there' : ''}.`, { who: r.i });
   for (const pl of S.O) if (pl !== r && pl.job.kind === 'route') pl.job = { kind: 'convoy' };
 }
 
@@ -706,10 +706,14 @@ function qb(S, pl) {
   if (rd < 1.5) hurry(S, pl);
 }
 
+// Why he threw to read k: the reads before it are counted, not listed, so the caption stays short ("read 4, with the
+// first three covered"); one before it is named ("read 2, after the H was covered").
+const COUNT = ['none', 'one', 'two', 'three', 'four', 'five', 'six'];
 function readNote(S, k) {
   const passed = (S.passed || []).filter(r => r !== S.reads[k]);
   if (k === 0) return 'his first read';
-  return `read ${k + 1}, after ${passed.map(r => name(S, r)).join(' and ') || 'the first look'} ${passed.length > 1 ? 'were' : 'was'} covered`;
+  if (k === 1 && passed.length === 1) return `read 2, after ${name(S, passed[0])} was covered`;
+  return `read ${k + 1}, with ${passed.length === k ? 'the first' : `${COUNT[passed.length]} of the first`} ${COUNT[k]} covered`;
 }
 
 function isReady(S, r) {
@@ -1133,7 +1137,11 @@ function integrate(S) {
     for (const [X, Y] of [[A, B], [B, A]]) {
       if (X.team === 'D' && X.job.kind === 'man' && Y.team === 'O' && Y !== X.job.r && Y.job.kind === 'route') {
         X.vx *= 0.55; X.vy *= 0.55;
-        if (!S.pickNoted && !S.dead && dist(X, X.job.r) > 1.5 && S.t < 3) { S.pickNoted = true; ev(S, 'pick', `${cap(name(S, X))} runs into traffic chasing ${name(S, X.job.r)}.`, { who: X.i }); }
+        if (!S.pickNoted && !S.dead && dist(X, X.job.r) > 1.5 && S.t < 3) {
+          S.pickNoted = true;
+          // A cornerback's name already says whose man he is ("the cornerback on the X"), so it isn't said twice.
+          ev(S, 'pick', `${cap(name(S, X))} runs into traffic ${X.label === 'CB' ? 'and loses his man' : `chasing ${name(S, X.job.r)}`}.`, { who: X.i });
+        }
       }
     }
   }
@@ -1302,7 +1310,8 @@ export function name(S, pl, plain) {
 }
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const yardWord = n => (n === 1 ? '1 yard' : `${n} yards`);
-export const yardText = y => (y >= 0.5 ? `${yardWord(Math.round(y))} downfield` : y <= -0.5 ? `${yardWord(Math.round(-y))} behind the line` : 'the line of scrimmage');
+// Where something happened: "18 yards downfield", "2 yards behind the line", or "at the line of scrimmage".
+export const yardText = y => (y >= 0.5 ? `${yardWord(Math.round(y))} downfield` : y <= -0.5 ? `${yardWord(Math.round(-y))} behind the line` : 'at the line of scrimmage');
 // "a corner route", "an out route"; the check-down and the screen are what they are.
 const routeText = id => { const n = ROUTES[id]?.name; return !n ? 'his route' : id === 'check' || id === 'screen' ? `the ${n}` : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n} route`; };
 
