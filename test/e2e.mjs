@@ -1074,6 +1074,43 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.equal(await caption(), 'The other coach has his call. It\'s hidden until the snap.', 'turning his picking back on');
   await p.context().close();
 }
+// Calling both sides draws both choosers, each with all its calls, and New look goes; letting the other coach pick
+// again leaves his card with only his hidden call. The same calling the defense.
+{
+  const p = await phone();
+  const cards = () => p.evaluate(() => ({
+    mine: [...document.querySelectorAll('#mineBody [role="radiogroup"]')].map(g => g.getAttribute('aria-label')),
+    theirs: [...document.querySelectorAll('#theirsBody [role="radiogroup"]')].map(g => g.getAttribute('aria-label')),
+    newLook: !document.getElementById('theirsLook').hidden,
+  }));
+  const OFF = ['Formation', 'Strong side', 'Play'], DEF = ['Front', 'Coverage', 'Pressure'];
+  assert.deepEqual(await cards(), { mine: OFF, theirs: [], newLook: true });
+  await p.click('#auto');
+  assert.deepEqual(await cards(), { mine: OFF, theirs: DEF, newLook: false }, 'calling both sides');
+  await p.click('[data-side="D"]');
+  assert.deepEqual(await cards(), { mine: DEF, theirs: OFF, newLook: false }, 'calling both sides, on defense');
+  await p.click('#auto');
+  assert.deepEqual(await cards(), { mine: DEF, theirs: [], newLook: true }, 'letting him pick again, on defense');
+  await p.context().close();
+}
+
+// The labels button: off, the board draws no labels and the button says it's off; on, they're back.
+{
+  const p = await phone();
+  const labels = () => p.evaluate(() => {
+    const { state, board } = window.chalkTalk, drawn = [], fillText = board.ctx.fillText;
+    board.ctx.fillText = function (t, ...rest) { if (state.play.players.some(q => q.label === t)) drawn.push(t); return fillText.call(this, t, ...rest); };
+    board.render();
+    board.ctx.fillText = fillText;
+    return { state: state.labels, board: board.labels, drawn: drawn.length, pressed: document.getElementById('labels').getAttribute('aria-pressed') };
+  });
+  assert.deepEqual(await labels(), { state: true, board: true, drawn: 22, pressed: 'true' });
+  await p.click('#labels');
+  assert.deepEqual(await labels(), { state: false, board: false, drawn: 0, pressed: 'false' }, 'labels off');
+  await p.click('#labels');
+  assert.deepEqual(await labels(), { state: true, board: true, drawn: 22, pressed: 'true' }, 'labels on again');
+  await p.context().close();
+}
 
 // A call you've seen stays seen. Change your play after a snap and their call is still shown, as the same one as last
 // snap, until New look has him pick again: that one is hidden until the next snap. New look is in their card before the
@@ -1373,6 +1410,8 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
 
 // Contrast, by WCAG 2.2: the yard numbers (text, 1.4.3) at 4.5:1 or more on the board as they're drawn, the sidelines and
 // 10-yard lines on the whiteboard at 3:1 (graphics, 1.4.11), and the small grey words on and beside the board at 4.5:1.
+// And the board takes its colours from the look it's opened in: chalk on a chalkboard, marker on a whiteboard.
+const schemes = {};
 for (const colorScheme of ['light', 'dark']) {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme });
   const p = await c.newPage();
@@ -1408,8 +1447,16 @@ for (const colorScheme of ['light', 'dark']) {
   assert.ok(seen.count >= 4 && seen.nums >= 4.5, `${colorScheme}: the yard numbers are ${seen.nums.toFixed(2)}:1`);
   if (colorScheme === 'light') assert.ok(seen.lines.every(r => r >= 3), `light: the sidelines and 10-yard lines are ${seen.lines.map(r => r.toFixed(2))}:1`);
   for (const k of ['dim', 'matchup', 'group']) assert.ok(seen[k] >= 4.5, `${colorScheme}: ${k} is ${seen[k].toFixed(2)}:1`);
+  schemes[colorScheme] = await p.evaluate(() => {
+    const { board } = window.chalkTalk, x = document.createElement('canvas').getContext('2d');
+    const norm = c => { x.fillStyle = '#000'; x.fillStyle = c; return x.fillStyle; };
+    return { colors: { ...board.colors }, board: norm(board.colors.board), wrap: norm(getComputedStyle(board.cv.parentElement).backgroundColor) };
+  });
+  assert.equal(schemes[colorScheme].board, schemes[colorScheme].wrap, `${colorScheme}: the labels' knock-outs aren't the board's colour`);
   await c.close();
 }
+for (const k of ['board', 'line', 'off', 'def', 'los', 'hot']) assert.notEqual(schemes.light.colors[k], schemes.dark.colors[k], `the board's ${k} colour is the same in both looks`);
+assert.deepEqual([schemes.light.colors.chalk, schemes.dark.colors.chalk], [false, true], 'chalk dust on the whiteboard, or none on the chalkboard');
 
 // In forced colours (Windows High Contrast), which replace every background, what's picked still shows: a picked chip,
 // side and speed, and the labels toggle when it's on, against the ones that aren't (WCAG 2.2, 1.4.11).
