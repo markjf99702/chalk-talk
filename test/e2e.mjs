@@ -43,6 +43,15 @@ const until = async (ok, ms, what) => {
 };
 
 const browser = await pw.chromium.launch();
+// Every file of this site a page asks for, in every context the test opens (the service worker's own requests aside).
+// Each one has to be in the offline copy (see the end).
+const asked = new Set();
+const newContext = browser.newContext.bind(browser);
+browser.newContext = async options => {
+  const c = await newContext(options);
+  c.on('request', r => { if (r.url().startsWith(base) && !r.serviceWorker()) asked.add(new URL(r.url()).pathname); });
+  return c;
+};
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
 const page = await ctx.newPage();
 const problems = [];
@@ -1336,29 +1345,71 @@ assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= i
 // the connection goes down on purpose, so failed requests are expected.)
 assert.deepEqual(problems, [], 'problems while using it');
 
-// Works offline once it has been opened. The server goes down as well as the browser: in some Chromium builds the
-// browser's offline switch alone doesn't stop the service worker's own requests, and this passed with no copy at all.
-await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
-const title = await page.title();
-net = 'down';
-await ctx.setOffline(true);
-await page.reload();
-assert.equal(await page.title(), title, 'the page did not open offline');
-await ctx.setOffline(false);
+// The offline copy has every file a page asked for. One left out of SHELL is kept anyway once a page under the
+// worker loads it, so a phone that has used it a while has the file, but the copy made on a first visit doesn't, and
+// offline that phone opens without it. sw.js is the worker itself. The PNG icons the manifest and the page's
+// apple-touch-icon name are fetched by the browser when the app is installed, online, never by the page, so they stay
+// out of the copy (and if a browser's install fetch shows up here, it doesn't count).
+const sw = await readFile(join(root, 'sw.js'), 'utf8');
+const shell = [...sw.match(/SHELL = \[([^\]]*)\]/)[1].replace(/\/\/.*/g, '').matchAll(/'([^']*)'/g)].map(m => m[1]);
+const copy = new Set(shell.map(f => '/' + (f === './' ? '' : f)));
+const forInstalling = new Set([
+  ...JSON.parse(await readFile(join(root, 'manifest.webmanifest'), 'utf8')).icons.map(i => '/' + i.src).filter(f => f.endsWith('.png')),
+  '/' + (await readFile(join(root, 'index.html'), 'utf8')).match(/rel="apple-touch-icon" href="([^"]+)"/)[1],
+]);
+assert.ok(asked.has('/fonts/patrick-hand.woff2') && asked.has('/js/sim.js'), `the pages' requests weren't all seen: ${[...asked].join(' ')}`);
+for (const path of asked) {
+  if (path === '/sw.js' || forInstalling.has(path)) continue;
+  assert.ok(copy.has(path), `the page asked for ${path}, which sw.js doesn't keep for offline: add it to SHELL`);
+}
 
-// On a connection that's up but not answering, it opens from the copy too, after the worker's few seconds' wait for
-// the network: the page and every file it loads (were any of them left waiting on the network, it wouldn't open).
-net = 'stalled';
-const t0 = Date.now();
-await page.reload({ timeout: 10000 }).catch(() => {});
-const took = Date.now() - t0;
-assert.ok(took < 8000, `the page took ${took} ms to open on a stalled connection`);
-assert.equal(await page.title(), title, 'the page did not open on a stalled connection');
-net = 'up';
-for (const [req, res] of held.splice(0)) serve(req, res);
+// Works offline after one visit: a phone that opened it once, online, then opens it with no signal, and then on a
+// connection that's up but not answering (a train, a captive wifi), where it opens from the copy after the worker's
+// few seconds' wait for the network. It opens as the app, not just its page: the app runs, the board says the
+// matchup, and every font the page used online is loaded, from the copy. (The server goes down as well as the
+// browser: in some Chromium builds the browser's offline switch alone doesn't stop the service worker's own
+// requests, and this passed with no copy at all.)
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
+  await p.evaluate(() => document.fonts.ready);
+  const title = await p.title();
+  const faces = () => p.evaluate(() => [...document.fonts].map(f => [`${f.family} ${f.weight}`, f.status]));
+  const used = (await faces()).filter(([, st]) => st === 'loaded').map(([f]) => f);
+  assert.ok(used.length >= 4, `only ${used.length} fonts loaded online: ${used.join(', ')}`);
+  const opened = async how => {
+    assert.equal(await p.title(), title, `the page did not open ${how}`);
+    assert.equal(await p.evaluate(() => !!window.chalkTalk), true, `the app didn't start ${how}`);
+    assert.ok((await p.textContent('#matchup')).trim(), `the board doesn't say the matchup ${how}`);
+    let now;
+    for (const end = Date.now() + 5000; ; await new Promise(r => setTimeout(r, 100))) {
+      now = new Map(await faces());
+      if (used.every(f => now.get(f) === 'loaded') || Date.now() > end) break;
+    }
+    assert.ok(used.every(f => now.get(f) === 'loaded'), `${how}, the fonts the page uses didn't all load: ${[...now].map(f => f.join(': ')).join(', ')}`);
+  };
+  net = 'down';
+  await c.setOffline(true);
+  await p.reload();
+  await opened('offline');
+  await c.setOffline(false);
+  net = 'stalled';
+  const t0 = Date.now();
+  await p.reload({ timeout: 10000 }).catch(() => {});
+  const took = Date.now() - t0;
+  assert.ok(took < 8000, `the page took ${took} ms to open on a stalled connection`);
+  await opened('on a stalled connection');
+  net = 'up';
+  for (const [req, res] of held.splice(0)) serve(req, res);
+  await c.close();
+}
 
 // A new release: every file in the new copy comes from the server, though the browser still has its own copies of
 // the old ones for ten minutes. (The next release changes index.html, and so FILES in sw.js, as a real one does.)
+await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
 release = true;
 await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
 await until(() => page.evaluate(async () => !!(await (await caches.match('index.html'))?.text())?.includes('<!-- the next release -->')),
@@ -1372,8 +1423,6 @@ server.close();
 // sw.js changes whenever a file it keeps does, so a release replaces the whole offline copy at once: FILES in sw.js is
 // a fingerprint of every file in SHELL (sha1 of each, in the list's order, an address like './' read as its
 // index.html; the first 8 hex of the sha1 of those).
-const sw = await readFile(join(root, 'sw.js'), 'utf8');
-const shell = [...sw.match(/SHELL = \[([^\]]*)\]/)[1].replace(/\/\/.*/g, '').matchAll(/'([^']*)'/g)].map(m => m[1]);
 const all = createHash('sha1');
 for (const f of shell) all.update(createHash('sha1').update(await readFile(join(root, f.endsWith('/') ? f + 'index.html' : f))).digest());
 const files = all.digest('hex').slice(0, 8);
