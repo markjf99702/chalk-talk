@@ -1090,6 +1090,10 @@ function startDrill(id) {
 function endDrill() {
   drill = null;
   state.auto = ownAuto;
+  // Calling both sides, the drill's call is now his on your board, so it's kept as yours for his side, and a reload
+  // brings it back (with how the drill went) rather than the call you had before.
+  keepOwn();
+  save();
   renderChoosers();
   syncBoard();
   renderMatchup();

@@ -2090,6 +2090,14 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#drillChips button:text-is("Beat Cover 3")');
   assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false });
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), false, 'a drill saved "Let the other coach pick" as on');
+  // Over, it's back to both sides with the drill's call as his, and a reload keeps that and how it went.
+  for (let k = 0; k < 5; k++) await down();
+  assert.deepEqual(await his(), { auto: false, side: 'O', switch: true, newLook: false, ask: false });
+  const after = await card();
+  await p.reload();
+  assert.deepEqual(await card(), after, 'a reload after the drill, calling both sides, lost how it went');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def.coverage), 'c3', 'a reload after the drill, calling both sides, lost the drill\'s call');
+  await p.click('#drillNow button:text-is("Run it again")');
   await p.click('[data-side="D"]');
   assert.deepEqual(await card(), { pressed: [], hint: true, now: null }, 'a change of side ended the drill');
   assert.deepEqual(await his(), { auto: false, side: 'D', switch: true, newLook: false, ask: false });
