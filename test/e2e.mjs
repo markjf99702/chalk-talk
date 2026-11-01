@@ -243,6 +243,19 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
     assert.equal(seen.head, head, `#p=${code} no longer shows this: pick another seed`);
     assert.deepEqual(seen, { head, kicker, win }, `#p=${code}`);
   }
+  // On the RB Screen the line lets the rushers through on purpose, so the pre-snap read doesn't say one came unblocked
+  // as if the protection had failed.
+  for (const code of ['O.trips.screen.0.over.c2.four.77', 'D.iform.screen.1.nickel.c3.blitz.5', 'O.single.screen.0.34.c0.blitz.9']) {
+    await p.evaluate(code => { location.hash = `#p=${code}`; }, code);
+    await p.waitForFunction(seed => { const { state } = window.chalkTalk; return state.seed === seed && state.phase === 'playing'; }, +code.split('.').at(-1), { timeout: 5000 });
+    const reads = await p.evaluate(() => {
+      const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input'));
+      return [...document.querySelectorAll('#reads li')].map(li => li.textContent);
+    });
+    const rush = reads.find(r => r.startsWith('Rush:')) ?? '';
+    assert.match(rush, /^Rush: \d rushers, and the line lets them through on purpose: that's the screen\./, `#p=${code}`);
+    assert.ok(!reads.some(r => /came unblocked|in protection/.test(r)), `#p=${code}: ${reads.join(' | ')}`);
+  }
   await p.close();
 }
 

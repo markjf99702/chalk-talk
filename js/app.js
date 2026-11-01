@@ -834,7 +834,9 @@ function coachNote(P) {
       : 'Corners: 7 yards or more off. They drop deep, to a third or a quarter of the field.');
   reads.push(`Box: ${P.box.box} defenders near the line against ${P.box.blockers} blockers.`);
   const rushers = P.overlay.filter(o => o.kind === 'rush').length;
-  if (pl.type === 'pass') {
+  if (pl.id === 'screen') { // the rushers come free by design: "came unblocked" would read as the protection failing
+    reads.push(`Rush: ${rushers} rushers, and the line lets them through on purpose: that's the screen. The linemen on the back's side block a moment, then run out in front of him.`);
+  } else if (pl.type === 'pass') {
     const pro = P.protection.map(i => P.players[i].cls);
     // Who blocks: "5 linemen and 2 backs". Came unblocked: nobody got a hand on him before the throw or the sack.
     const count = (n, one, many) => (n === 1 ? `a ${one}` : `${n} ${many}`);
