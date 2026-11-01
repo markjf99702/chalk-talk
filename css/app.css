@@ -280,6 +280,9 @@ button:disabled { cursor: default; }
 /* the bottom padding inside the part that scrolls, so the toggle's bigger hit area doesn't make it scroll */
 .narrow .who-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 8px; }
 .narrow .who button, .narrow .who-body.scrolls { pointer-events: auto; }
+/* fitted into the room beside him (see placeNarrow()), the words that are cut off fade out, so they read as more to
+   scroll to rather than as a mistake */
+.narrow .who-body.scrolls { -webkit-mask-image: linear-gradient(#000 calc(100% - 16px), transparent); mask-image: linear-gradient(#000 calc(100% - 16px), transparent); }
 .narrow .who-pos { font-size: 16px; line-height: 1.25; }
 .narrow .who-job { display: inline; }
 /* right after his job, with a hit area bigger than the words */
