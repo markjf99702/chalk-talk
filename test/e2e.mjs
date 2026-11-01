@@ -213,7 +213,7 @@ const looks = await page.evaluate(() => {
   const { state } = window.chalkTalk;
   let same = 0;
   for (let k = 0; k < 30; k++) {
-    Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four' });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: false });
     document.getElementById('newLook').click();
     if (state.def.front === 'nickel' && state.def.coverage === 'c3' && state.def.pressure === 'four') same++;
   }
@@ -241,7 +241,7 @@ await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.
 const close = await page.evaluate(() => {
   const { state, board, simulate, lineUp, finish } = window.chalkTalk;
   Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false });
-  Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four' });
+  Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four', disguise: false });
   for (let seed = 1; seed < 3000; seed++) {
     const res = simulate({ ...state.off, ...state.def }, seed).result;
     if (res.kind !== 'run' || res.yards !== 3.5) continue;
@@ -531,7 +531,7 @@ for (const side of ['O', 'D']) {
     const { state, board, simulate, lineUp } = window.chalkTalk, s = document.getElementById('scrub');
     Object.assign(state, { side: 'O', auto: false });
     Object.assign(state.off, { formation: 'iform', play: 'oz', flip: false });
-    Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four' });
+    Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four', disguise: false });
     let a, b;
     for (let seed = 1; seed < 500 && !b; seed++) {
       const r = simulate({ ...state.off, ...state.def }, seed), evs = r.events.filter(e => e.kind !== 'shed');
@@ -1080,7 +1080,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
     const drawn = t => state.play.players.filter(q => q.team === t).sort((a, b) => board.sx(a.x) - board.sx(b.x) || Math.abs(a.y) - Math.abs(b.y)).map(q => q.label);
     return { open: document.getElementById('jobs').open, tall: document.getElementById('jobs').getBoundingClientRect().height, off: names('O'), def: names('D'), drawnOff: drawn('O'), drawnDef: drawn('D'), words: document.getElementById('boardWords').textContent };
   });
-  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', flip: false }); Object.assign(state.def, { front: 'nickel', coverage: 'c2', pressure: 'four' }); lineUp(); });
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', flip: false }); Object.assign(state.def, { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false }); lineUp(); });
   let j = await jobs();
   assert.ok(!j.open && j.tall < 70, `every player's job takes ${Math.round(j.tall)} px before it's opened`);
   assert.equal(j.off.length, 11);
@@ -1677,7 +1677,7 @@ for (const colorScheme of ['light', 'dark']) {
     const { state, board, lineUp } = window.chalkTalk;
     document.querySelector('[data-side="D"]').click();
     Object.assign(state.off, { formation: 'doubles', play: 'verts', flip: false });
-    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz' });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', disguise: false });
     lineUp();
     const drawn = [], ctx = board.ctx, poly = board.poly, arrow = board.arrow;
     board.poly = function (pts) { drawn.push({ kind: 'line', w: ctx.lineWidth, pts: pts.length }); return poly.call(this, pts); };
@@ -1757,7 +1757,7 @@ for (const colorScheme of ['light', 'dark']) {
     let n = 0;
     for (let k = 0; k < 30; k++) {
       chip('Gun Trips').click();
-      Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four' });
+      Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: false });
       chip('I-Form').click();
       if (state.def.front === 'nickel') n++;
     }
@@ -1795,7 +1795,7 @@ for (const colorScheme of ['light', 'dark']) {
     theirs: [...document.querySelectorAll('#theirsBody [role="radiogroup"]')].map(g => g.getAttribute('aria-label')),
     newLook: !document.getElementById('theirsLook').hidden,
   }));
-  const OFF = ['Formation', 'Strong side', 'Play'], DEF = ['Front', 'Coverage', 'Pressure'];
+  const OFF = ['Formation', 'Strong side', 'Play'], DEF = ['Front', 'Coverage', 'Pressure', 'Disguise'];
   assert.deepEqual(await cards(), { mine: OFF, theirs: [], newLook: true });
   await p.click('#auto');
   assert.deepEqual(await cards(), { mine: OFF, theirs: DEF, newLook: false }, 'calling both sides');
@@ -1877,7 +1877,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.goto(base);
   const COVS = ['Cover 0', 'Cover 1', 'Cover 2', 'Cover 3', 'Cover 4'];
   const buttons = host => p.$$eval(`${host} button`, b => b.map(x => x.textContent));
-  const theirs = def => p.evaluate(def => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, def); lineUp(); }, def);
+  const theirs = def => p.evaluate(def => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { disguise: false }, def); lineUp(); }, def);
   const whistle = () => p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); });
   const saved = () => p.evaluate(() => { const s = JSON.parse(localStorage.getItem('chalk-talk.v1')); return { quiz: s.quiz, streak: s.streak, best: s.best }; });
   const verdict = host => p.textContent(`${host} .ask-verdict`);
@@ -1985,6 +1985,77 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// A disguise. Calling the defense, the Disguise row under Pressure is off to start with and only Cover 1 and Cover 3
+// take it; picked, the board shows two deep, the play-by-play names the rotation, and the coach's note says what it
+// showed and what it played. Calling the offense, a disguised call from the other coach is asked about like any other:
+// the rotation line doesn't name the coverage until it's answered, and the answer says what gave it away. A shared
+// link carries it, and one from before there were disguises still opens.
+{
+  const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const row = () => p.evaluate(() => {
+    const pick = [...document.querySelectorAll('#mineBody .pick')].find(x => x.querySelector('.pick-label').textContent === 'Disguise');
+    return { on: pick.querySelector('[aria-checked="true"]').textContent, disabled: pick.querySelector('.chip').disabled, blurb: pick.querySelector('.blurb').textContent };
+  });
+  await p.click('[data-side="D"]');
+  await p.getByRole('radio', { name: 'Cover 2' }).click();
+  assert.deepEqual(await row(), { on: 'None', disabled: true, blurb: 'Only Cover 1 and Cover 3 disguise here: they can line up two deep, the way Cover 4 does, and rotate a safety down at the snap.' });
+  await p.getByRole('radio', { name: 'Cover 3' }).click();
+  assert.deepEqual(await row(), { on: 'None', disabled: false, blurb: 'Cover 3 lines up the way it plays. Or disguise it: show two deep, the way Cover 4 lines up, and rotate a safety down at the snap.' }, 'the honest look is the default');
+  await p.getByRole('radio', { name: 'Show two deep' }).click();
+  assert.equal((await row()).on, 'Show two deep');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.play.box.high), 2, 'a disguised Cover 3 lines up two deep');
+  assert.match(await p.textContent('#matchup'), /Cover 3 \(disguised\)/);
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#story'), /The strong safety rotates down at the snap: Cover 3\./);
+  assert.match(await p.textContent('#resVs'), /, disguised Cover 3\.$/);
+  assert.equal(await p.textContent('#reads li:first-child'), 'Safeties: showed two deep, played Cover 3. The strong safety rotated down at the snap, and the free safety went to the middle.');
+  assert.match(await p.textContent('#note'), /Disguised, the strong safety starts (12 yards )?deep and has to come down at the snap/);
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).def.disguise), true, 'the disguise is kept with your call');
+  // The link carries it; one cut at the seed opens without it.
+  await c.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await p.click('#share');
+  const link = await p.evaluate(() => navigator.clipboard.readText());
+  assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.four\.\d+\.1$/, `the link is ${link}`);
+  await p.goto(base + link.slice(link.indexOf('#')));
+  await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: true });
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.1$/, ''));
+  await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.def.disguise), false, 'a link from before disguises opens without one');
+  // The other coach's disguise, asked about.
+  await p.click('[data-side="O"]');
+  await p.click('#auto');
+  if (!(await p.isChecked('#auto'))) await p.click('#auto');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'four', disguise: true }); lineUp(); });
+  assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap\./);
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#story'), /The strong safety rotates down at the snap\./);
+  assert.ok(!(await p.textContent('#story')).includes('Cover 1'), 'the rotation names the coverage before it is answered');
+  assert.match(await p.textContent('#theirsAsk .ask-how'), /what the safeties did at the snap/);
+  await p.click('#noteAsk button:text-is("Cover 4")');
+  assert.equal(await p.textContent('#noteAsk .ask-verdict'), 'It was Cover 1, disguised: it showed two deep and the corners 7 yards or more off, the way Cover 4 lines up, then the strong safety rotated down at the snap and the corners ran with their receivers.');
+  assert.match(await p.textContent('#story'), /The strong safety rotates down at the snap: Cover 1\./, 'the coverage is named once it is answered');
+  assert.equal(await p.textContent('#theirsHint'), 'They called: Nickel, disguised Cover 1, rush four.');
+  await p.click('#theirsLook');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: true }); lineUp(); });
+  await p.click('#snap');
+  await p.click('#theirsAsk button:text-is("Cover 3")');
+  assert.equal(await p.textContent('#theirsAsk .ask-verdict'), 'Right: it showed two deep, then the strong safety rotated down at the snap and the corners dropped into deep thirds: Cover 3.');
+  // About one of his calls in four is a disguise, always Cover 1 or Cover 3.
+  const share = await p.evaluate(() => {
+    const { state, rollTheirs } = window.chalkTalk;
+    let n = 0, dis = 0;
+    for (let k = 0; k < 800; k++) { rollTheirs(); n++; if (state.def.disguise && ['c1', 'c3'].includes(state.def.coverage)) dis++; }
+    return dis / n;
+  });
+  assert.ok(share > 0.19 && share < 0.31, `${Math.round(share * 100)}% of his calls are disguised`);
+  await c.close();
+}
+
 // Drills: a button for each above Your call. One takes the other coach's picking over for five snaps: his call is the
 // drill's (his front set to your personnel), hidden until the first snap, with his switch, New look and the question
 // after the snap out of the way. Each snap counts once at the whistle, however often it's watched or scrubbed to the
@@ -2018,12 +2089,12 @@ for (const colorScheme of ['light', 'dark']) {
   const D = DRILLS[0];
   assert.deepEqual(await card(), { pressed: ['Beat Cover 2'], hint: false, now: `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill` });
   assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false }, 'in a drill');
-  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four' });
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false });
   assert.equal(await p.textContent('#caption'), 'Drill: Beat Cover 2. Call a play, then Snap.');
   assert.match(await p.textContent('#matchup'), /coverage hidden$/, 'the drill\'s call isn\'t hidden before the first snap');
   // New personnel: he sets his front to it, and keeps the drill's coverage.
   await p.getByRole('radio', { name: 'I-Form' }).click();
-  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'over', coverage: 'c2', pressure: 'four' }, 'against two backs');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'over', coverage: 'c2', pressure: 'four', disguise: false }, 'against two backs');
   await p.getByRole('radio', { name: 'Gun Trips' }).click();
   let ok = 0;
   for (let k = 1; k <= 2; k++) {
@@ -2173,13 +2244,14 @@ for (const colorScheme of ['light', 'dark']) {
 }
 
 // The read after the snap says what the corners showed: pressed in man, about 5 yards off in Cover 2, 7 or more off in
-// the deep zones. And the playbook says the board's defenses line up in what they play, as they do.
+// the deep zones (an honest look: a disguise has its own test). And the playbook's read of the shell doesn't call it a
+// guess.
 {
   const p = await phone();
   const reads = await p.evaluate(() => {
     const { state, lineUp, snap, finish } = window.chalkTalk, out = {};
     for (const coverage of ['c1', 'c2', 'c3', 'c4']) {
-      Object.assign(state.def, { front: 'nickel', coverage, pressure: 'four' });
+      Object.assign(state.def, { front: 'nickel', coverage, pressure: 'four', disguise: false });
       lineUp(); snap(); finish();
       out[coverage] = [...document.querySelectorAll('#reads li')].map(li => li.textContent).find(t => t.startsWith('Corners:'));
     }
@@ -2203,7 +2275,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => {
     const { state, lineUp } = window.chalkTalk;
     Object.assign(state.off, { formation: 'doubles', play: 'verts', flip: false });
-    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz' });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', disguise: false });
     lineUp();
   });
   const spots = await p.evaluate(() => {
@@ -2411,7 +2483,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#labels');
   await p.click('[data-speed="0.5"]');
   const want = {
-    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true }, def: { front: '34', coverage: 'c4', pressure: 'blitz' }, labels: false, speed: 0.5,
+    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true }, def: { front: '34', coverage: 'c4', pressure: 'blitz', disguise: false }, labels: false, speed: 0.5,
     shown: { side: 'D', auto: false, labels: 'false', speed: '0.5' },
   };
   assert.deepEqual(await kept(p), want, 'the calls and settings picked');
