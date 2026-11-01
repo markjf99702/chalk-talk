@@ -351,7 +351,7 @@ export class Board {
     const { ctx, play } = this, r = this.radius(), fs = this.labelSize(), half = fs * 0.38;
     ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     const P = play.players, w = P.map(p => ctx.measureText(p.label).width);
-    // How far each mark's ink reaches from its middle: a circle's round, an X's and the center's square straight across.
+    // How far each mark's ink reaches from its middle: round a circle, straight across an X or the center's square.
     const reach = P.map(p => (p.team === 'D' ? r * 0.8 : p.label === 'C' ? r * 0.9 : r) + lw / 2);
     const box = (i, [x, y], pad = 0) => ({ l: x - w[i] / 2 - pad, r: x + w[i] / 2 + pad, t: y - half - pad, b: y + half + pad });
     const area = (a, b) => Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));

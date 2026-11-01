@@ -228,9 +228,9 @@ const short = await page.evaluate(() => {
 });
 assert.equal(short?.head, 'Gain of 3 yards');
 assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards that make a play a success', `"Gain of 3 yards" under "${short.kicker}" (seed ${short.seed})`);
-// The verdict says a big play (a run of 10 yards or more, a catch of 20 or more) and a takeaway for what they are, and a
-// 3-yard gain why it's the defense's. Each is a shared play: one that no longer comes out this way (after a change to
-// the simulator) needs another seed that does.
+// The verdict says a big play (a run of 10 yards or more, a catch of 20 or more) and a takeaway for what they are,
+// and a 3-yard gain why it's the defense's. Each is a shared play: one that no longer comes out this way (after a
+// change to the simulator) needs another seed that does.
 {
   const p = await ctx.newPage();
   p.on('pageerror', e => problems.push(e.message));
