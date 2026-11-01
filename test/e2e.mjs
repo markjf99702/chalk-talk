@@ -1208,6 +1208,36 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// "Your last calls stay in your browser": the side you call, both calls (calling both sides, with the other coach's
+// picking turned off), the position labels and the speed all come back after a reload, and in a new tab, which has
+// only what was saved and not the tab's own play.
+{
+  const p = await phone();
+  const kept = q => q.evaluate(() => {
+    const { state } = window.chalkTalk, on = sel => document.querySelector(sel);
+    return {
+      side: state.side, auto: state.auto, off: { ...state.off }, def: { ...state.def }, labels: state.labels, speed: state.speed,
+      shown: { side: on('[data-side][aria-checked="true"]').dataset.side, auto: on('#auto').checked, labels: on('#labels').getAttribute('aria-pressed'), speed: on('[data-speed][aria-checked="true"]').dataset.speed },
+    };
+  });
+  await p.click('[data-side="D"]');
+  await p.click('#auto');
+  for (const name of ['3-4', 'Cover 4', 'Blitz', 'Gun Doubles', 'Left', 'Mesh']) await p.getByRole('radio', { name }).click();
+  await p.click('#labels');
+  await p.click('[data-speed="0.5"]');
+  const want = {
+    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true }, def: { front: '34', coverage: 'c4', pressure: 'blitz' }, labels: false, speed: 0.5,
+    shown: { side: 'D', auto: false, labels: 'false', speed: '0.5' },
+  };
+  assert.deepEqual(await kept(p), want, 'the calls and settings picked');
+  await p.reload();
+  assert.deepEqual(await kept(p), want, 'a reload lost a call or a setting');
+  const tab = await p.context().newPage();
+  await tab.goto(base);
+  assert.deepEqual(await kept(tab), want, 'a new tab lost a call or a setting');
+  await p.context().close();
+}
+
 // Contrast, by WCAG 2.2: the yard numbers (text, 1.4.3) at 4.5:1 or more on the board as they're drawn, the sidelines and
 // 10-yard lines on the whiteboard at 3:1 (graphics, 1.4.11), and the small grey words on and beside the board at 4.5:1.
 for (const colorScheme of ['light', 'dark']) {
@@ -1344,6 +1374,25 @@ assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= i
 // Nothing went wrong while using it: no errors, no failed requests, nothing loaded from anywhere else. (From here on
 // the connection goes down on purpose, so failed requests are expected.)
 assert.deepEqual(problems, [], 'problems while using it');
+
+// Installable, as the browser sees it: Chromium finds nothing in the way of installing it to a home screen, and reads
+// the manifest without an error, as an app of its own (by name, opening on its own screen at the start page) with
+// the 192 and 512 px icons a home screen asks for, all there. (Chromium would install almost any page now, so the
+// manifest is what says it installs as the app. Asked after the page has been used: what the check fetches is seen
+// below.)
+{
+  const cdp = await ctx.newCDPSession(page);
+  assert.deepEqual((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors, [], 'Chromium says it can\'t be installed');
+  const manifest = await cdp.send('Page.getAppManifest'), app = manifest.manifest;
+  assert.equal(manifest.url, base + 'manifest.webmanifest', 'the manifest Chromium found');
+  assert.deepEqual(manifest.errors, [], 'Chromium found errors in the manifest');
+  assert.equal(app.name, 'Chalk Talk');
+  assert.match(app.display, /standalone/i, `it opens as ${app.display}, not on a screen of its own`);
+  assert.equal(app.startUrl, base, 'it starts somewhere else');
+  for (const size of ['192x192', '512x512']) assert.ok(app.icons.some(i => i.sizes === size && i.type === 'image/png'), `no ${size} PNG icon`);
+  for (const i of app.icons) assert.equal((await fetch(i.url)).status, 200, `the manifest's icon ${i.url} isn't there`);
+  await cdp.detach();
+}
 
 // The offline copy has every file a page asked for. One left out of SHELL is kept anyway once a page under the
 // worker loads it, so a phone that has used it a while has the file, but the copy made on a first visit doesn't, and
