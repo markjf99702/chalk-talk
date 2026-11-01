@@ -250,14 +250,17 @@ function placeWhy() {
   const best = [middle, side, cv.width - side - b.width].reduce((a, c) => (covers(c) < covers(a) ? c : a));
   if (best !== middle) { why.style.left = `${best}px`; why.style.transform = 'none'; }
 }
-// The result card, just under the board where the board stays at the top of a phone, or near the top.
+// The result card, just under the board where the board stays at the top of a phone, or near the top (the page's
+// scroll-padding-top, in css/app.css).
 $('why').addEventListener('click', () => {
-  const stage = document.querySelector('.stage');
-  const under = innerWidth < 960 && getComputedStyle(stage).position === 'sticky' ? stage.offsetHeight + 8 : 12;
-  const top = $('result').getBoundingClientRect().top + scrollY - under;
-  scrollTo({ top, behavior: smooth() });
+  $('result').scrollIntoView({ block: 'start', behavior: smooth() });
   $('resHead').focus({ preventScroll: true });
 });
+// A phone held upright, tall enough that the board stays at the top of the screen (the same query as in css/app.css).
+const stuckBoard = () => matchMedia('(max-width: 959px) and (min-height: 700px)').matches;
+// The board back into view after a button down the page, unless it's there anyway, stuck at the top: scrolled "into
+// view" there, it would go below the page's scroll padding, which is the board's own height.
+function toBoard() { if (!stuckBoard()) $('board').scrollIntoView({ block: 'nearest', behavior: smooth() }); }
 
 function snap() {
   if (state.phase !== 'pre') { // Snap again: same calls, a new roll of the dice
@@ -325,7 +328,7 @@ function syncScrub() {
 $('snap').addEventListener('click', snap);
 // The result card's buttons go away with it as the next play lines up, so the focus goes on to Snap.
 const toSnap = () => $('snap').focus({ preventScroll: true });
-$('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(max-width: 959px)').matches) $('board').scrollIntoView({ block: 'nearest', behavior: smooth() }); });
+$('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(max-width: 959px)').matches) toBoard(); });
 $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() : play()));
 $('scrub').addEventListener('input', e => {
   if (!state.play) return;
@@ -704,7 +707,7 @@ function newLook(e) {
   rollTheirs();
   afterChange();
   setCaption(state.side === 'D' && formation() === was ? 'New look: same formation, a new play.' : 'New look: they\'ve changed their call.');
-  $('board').scrollIntoView({ block: 'nearest', behavior: smooth() });
+  toBoard();
 }
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);
@@ -1068,6 +1071,9 @@ if (link && link !== 'ok') badLink(link);
 // A board under about 620 px wide (a phone, or the two-column layout on a small laptop) gets the compact player card.
 function narrow() { return $('board').parentElement.classList.contains('narrow'); }
 const fit = () => {
+  // The board's height, which the page keeps clear when it scrolls something into view while the board is stuck at the
+  // top of a phone (scroll-padding-top in css/app.css).
+  document.documentElement.style.setProperty('--stage-h', `${document.querySelector('.stage').offsetHeight}px`);
   board.resize();
   $('board').parentElement.classList.toggle('narrow', board.w < 620);
   draw();
@@ -1075,7 +1081,9 @@ const fit = () => {
   if (!$('who').hidden) { syncMore(); placeWho(true); } // placed again for the board's new size
 };
 fit();
-new ResizeObserver(fit).observe($('board'));
+const resized = new ResizeObserver(fit);
+resized.observe($('board'));
+resized.observe(document.querySelector('.stage')); // the controls under the board can take another row on their own
 // A window dragged to a screen with another pixel density keeps its size in CSS pixels, so the ResizeObserver doesn't
 // see it: a query for the density it has now says when that changes, once, and then the new density is watched.
 const density = () => matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => { fit(); density(); }, { once: true });

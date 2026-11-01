@@ -658,6 +658,25 @@ for (const [width, height] of [[844, 390], [667, 375]]) {
   await side.close();
 }
 
+// A tablet held upright keeps the board at the top too, over more than half the screen. Tabbing down the page, the
+// focus doesn't go behind it (WCAG 2.2, 2.4.11 Focus Not Obscured): the page scrolls a focused chip to below the board.
+{
+  const c = await browser.newContext({ viewport: { width: 768, height: 1024 } });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.focus('#snap');
+  let on = null;
+  for (let k = 0; k < 20 && !on; k++) {
+    await p.keyboard.press('Tab');
+    on = await p.evaluate(() => { const el = document.activeElement; return el.dataset.key?.startsWith('Play:') && el.getAttribute('aria-checked') === 'true' ? el.dataset.key : null; });
+  }
+  assert.ok(on, 'Tab from Snap never reached the play picked');
+  const seen = await p.evaluate(() => ({ chip: document.activeElement.getBoundingClientRect().top, stage: document.querySelector('.stage').getBoundingClientRect().bottom }));
+  assert.ok(seen.chip >= seen.stage, `at 768x1024 the focused chip (${on}) is at ${Math.round(seen.chip)} px, behind the board, which ends at ${Math.round(seen.stage)} px`);
+  await c.close();
+}
+
 // A phone of its own, with its own saved calls, watched for problems like the first.
 const phone = async () => {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
@@ -1082,9 +1101,10 @@ for (const colorScheme of ['light', 'dark']) {
 }
 
 // Names a screen reader says, from the accessibility tree: the labels toggle, the speeds, a formation with its personnel,
-// the card's close button and the board as a picture. And with reduced motion asked for, nothing scrolls smoothly.
-{
-  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, reducedMotion: 'reduce' });
+// the card's close button and the board as a picture. And with reduced motion asked for, nothing scrolls smoothly, with
+// the board stuck at the top of a phone or on one too short for that.
+for (const [width, height] of [[390, 844], [375, 667]]) {
+  const c = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: true, reducedMotion: 'reduce' });
   const p = await c.newPage();
   await p.goto(base);
   const named = async (role, name) => (await p.getByRole(role, { name, exact: true }).count()) === 1;
@@ -1105,7 +1125,8 @@ for (const colorScheme of ['light', 'dark']) {
     Element.prototype.scrollIntoView = into; window.scrollTo = to;
     return asked;
   });
-  assert.ok(smooth.length >= 3 && smooth.every(b => b !== 'smooth'), `with reduced motion the page scrolled: ${smooth}`);
+  // Where the board stays at the top, Snap again and New look leave the page where it is; the Why button scrolls it.
+  assert.ok(smooth.length >= (height < 700 ? 3 : 1) && smooth.every(b => b !== 'smooth'), `${width}x${height}: with reduced motion the page scrolled: ${smooth}`);
   await c.close();
 }
 
