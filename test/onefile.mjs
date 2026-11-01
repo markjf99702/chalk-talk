@@ -91,15 +91,18 @@ try {
   } finally { server.close(); }
 
   // The copy without its document wrapper, for hosts that supply their own <html>, <head> and <body>: in a bare one, a
-  // snap plays out.
+  // snap plays out. The host's own stylesheet (one the page can't read, as a file beside it can't be) doesn't make the
+  // copy say it didn't finish loading.
   const fragment = await readFile(join(root, 'dist/artifact.html'), 'utf8');
-  await writeFile(join(dir, 'artifact.html'), `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>A host</title>\n</head>\n<body>\n${fragment}</body>\n</html>\n`);
+  await writeFile(join(dir, 'host.css'), 'body { margin: 0; }\n');
+  await writeFile(join(dir, 'artifact.html'), `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>A host</title>\n<link rel="stylesheet" href="host.css">\n</head>\n<body>\n${fragment}</body>\n</html>\n`);
   const host = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   const a = await host.newPage();
   const wrong = [];
   a.on('pageerror', e => wrong.push(e.message));
   a.on('console', m => { if (m.type() === 'error') wrong.push(m.text()); });
   await a.goto(pathToFileURL(join(dir, 'artifact.html')).href);
+  assert.equal(await a.evaluate(() => document.getElementById('unloaded').hidden), true, 'in a host with a stylesheet of its own, the copy says it didn\'t finish loading');
   await a.click('#snap');
   await a.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
   assert.equal(await a.evaluate(() => getComputedStyle(document.querySelector('.stage')).position), 'sticky', 'in a host, the board doesn\'t stay at the top of a phone');

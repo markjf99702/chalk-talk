@@ -139,7 +139,8 @@
     // A page caught half-loaded (the signal went partway through loading a new version) says so, with a way to try
     // again: by the time the page has loaded, the app hasn't started, or its stylesheet didn't come.
     addEventListener('load', () => {
-      const css = document.querySelector('link[rel="stylesheet"]');
+      // (its own stylesheet: a page that hosts the one-file copy can have stylesheets of its own, which may not be readable)
+      const css = document.querySelector('link[rel="stylesheet"][href="css/app.css"]');
       let styled = !css; // the one-file copy has its styles in the page
       try { styled = styled || css.sheet.cssRules.length > 0; } catch { /* one that didn't come can't be read */ }
       if (window.chalkTalk && styled) return;
