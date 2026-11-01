@@ -528,6 +528,26 @@ test('Cover 0 looks like Cover 0: the extra blitzer walks up over his gap, and n
   }
 });
 
+test('on a run in man coverage the man on the back runs with him to the line, rather than chasing him from behind', () => {
+  // Outside Zone from Singleback against Cover 0 gained 30-32 yards a carry, half of them 20 or more: the back's man
+  // chased him into the backfield, and when the back turned up outside the tight end he was a yard or two behind him
+  // and never caught up (in 70-78 of about 110 runs that got to the line). From six start seeds, 120 snaps each, it now
+  // gains 10-14 yards a carry, and the man is never behind the back when he gets to the line.
+  let seed = 1, y = 0, n = 0, behind = 0, holes = 0;
+  for (const fr of FRONTS) for (let k = 0; k < 30; k++) {
+    const call = { formation: 'single', play: 'oz', front: fr.id, coverage: 'c0', pressure: 'blitz', flip: k % 2 === 1 };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    n++; y += r.result.yards;
+    const hole = r.events.find(e => e.kind === 'hole'), man = S.D.find(d => d.job.kind === 'man' && d.job.r === S.RB);
+    if (!hole || !man) continue;
+    holes++;
+    const f = r.frames.find(f => f.t >= hole.t - 1e-9);
+    if (f.xy[2 * man.i + 1] < f.xy[2 * f.c + 1] - 1) behind++;
+  }
+  assert.ok(behind <= holes / 10, `the man on the back was a yard or more behind him when he got to the line in ${behind} of ${holes} runs`);
+  assert.ok(y / n < 20, `Outside Zone from Singleback against Cover 0: ${(y / n).toFixed(1)} yards a carry over ${n} snaps`);
+});
+
 test('NFL timing: on five-step and play-action drops he starts reading later, and only once a route is out of its break', () => {
   // A read throw (his first read, read 2 and on, or the best left after them) on a five-step drop comes out no sooner
   // than 1.55 s from the shotgun or 1.95 s under center (2.0 and 2.35 s after a play-action fake), half a second later

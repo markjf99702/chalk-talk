@@ -1032,6 +1032,7 @@ function defense(S, d) {
   const t = S.t, j = d.job, c = S.carrier;
   d.want = null;
   const ballOut = S.ball.state === 'air';
+  if (j.kind === 'man' && j.r === S.RB && S.play.type === 'run' && S.play.scheme !== 'draw') return scrape(S, d, S.RB);
   // After a catch or a handoff seen: everyone runs to the ball.
   if (c && c.team === 'O' && (S.caught || (c !== S.QB && runLook(S, t - d.lag)) || (c !== S.QB && c.y > -0.5))) {
     if (j.kind === 'man' && !S.caught && c !== j.r && c.y < 0 && t < 2 && d.cls === 'cb') { cover(S, d); return; }
@@ -1058,6 +1059,21 @@ function pursue(S, d, c) {
   // Deep defenders keep the ball in front of them until they're close.
   if (d.y > c.y + 4 && dd > 6) d.ty = Math.max(d.ty, c.y + 2);
   d.ts = d.top;
+  d.want = c;
+}
+
+// On a run the man covering the back keys him from the snap. He reads him for a moment, shuffling with him, then runs
+// with him level with the line, a step outside the spot he's heading for, rather than chasing into the backfield after
+// him and being left behind when he turns up the field. Close to him once he has the ball, or once he's past the line,
+// he goes for him like anyone else.
+function scrape(S, d, c) {
+  if (c.y > -0.5 || (S.carrier === c && dist(d, c) < 2)) return pursue(S, d, c);
+  // Where the back will be when he gets to the line, from the way he's running now: three yards to the side at most,
+  // since he'll turn up the field.
+  const T = clamp((0.5 - c.y) / Math.max(2, c.vy), 0, 1.2);
+  d.tx = c.x + clamp(c.vx * T, -3, 3) + (Math.sign(c.vx) || S.p) * 0.8;
+  d.ty = clamp(c.y + 2.5, 0.5, Math.max(0.5, d.y));
+  d.ts = d.top * (S.t < d.lag ? 0.5 : 1);
   d.want = c;
 }
 
@@ -1525,6 +1541,7 @@ function describeJob(S, pl) {
   // On a run his pass job comes first, as what he'd have done, then what he does about the run (see defense() and bite()).
   const run = S.play.type === 'run', draw = run && S.play.scheme === 'draw';
   const onRun = !run ? '' : draw ? ' On this draw he plays it as a pass until he sees the handoff, then comes up to the ball.'
+    : j.kind === 'man' && j.r === S.RB ? ' On this run his man has the ball: he runs with him to the line, a step outside him, and meets him there.'
     : j.kind === 'man' && pl.cls === 'cb' ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
     : ' On this run he reads it and comes downhill to the ball.';
   if (j.kind === 'man') {
