@@ -254,7 +254,7 @@ function placeWhy() {
 }
 // The result card, just under the board where the board stays at the top of a phone, or near the top (the page's
 // scroll-padding-top, in css/app.css).
-$('why').addEventListener('click', () => {
+onButton($('why'), () => {
   $('result').scrollIntoView({ block: 'start', behavior: smooth() });
   $('resHead').focus({ preventScroll: true });
 });
@@ -360,20 +360,43 @@ $('labels').addEventListener('click', () => { state.labels = !state.labels; boar
 let down = null;
 $('board').addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
 $('board').addEventListener('pointerup', e => {
-  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;
+  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 8) pick(e.clientX, e.clientY);
+});
+// A tap on the board at this point in the window.
+function pick(x, y) {
   const r = $('board').getBoundingClientRect();
-  const near = board.hit(e.clientX - r.left, e.clientY - r.top);
+  const near = board.hit(x - r.left, y - r.top);
   if (!near.length) { board.selected = -1; hideWho(); } else {
     const i = near[(near.indexOf(board.selected) + 1) % near.length];
     board.selected = i; dropHint(); showWho(i);
   }
   draw();
-});
+}
+// The buttons on the board (Why, and More about on the player's card). A finger that comes down just off one, on a
+// player, can still be sent to the button: the browser takes a tap near a button as meant for it (Chromium's touch
+// adjustment), and a real fingertip touches more than a point. Where the finger came down outside the button and its
+// hit area, it's a tap on the board there instead.
+function onButton(el, act) {
+  let at = null;
+  el.addEventListener('pointerdown', e => { at = { x: e.clientX, y: e.clientY, t: e.timeStamp }; });
+  el.addEventListener('click', e => {
+    const p = at;
+    at = null;
+    if (p && e.detail && e.timeStamp - p.t < 1500 && !within(hitArea(el), p.x, p.y)) { el.blur(); pick(p.x, p.y); } else act();
+  });
+}
+// A button's box with the bigger hit area some are given round them (a ::before, in css/app.css).
+function hitArea(el) {
+  const b = el.getBoundingClientRect(), s = getComputedStyle(el, '::before');
+  const out = side => (s.content === 'none' || s.position !== 'absolute' ? 0 : Math.max(0, -parseFloat(s[side]) || 0));
+  return { l: b.left - out('left'), r: b.right + out('right'), t: b.top - out('top'), b: b.bottom + out('bottom') };
+}
+const within = (b, x, y) => x >= b.l && x <= b.r && y >= b.t && y <= b.b;
 $('whoClose').addEventListener('click', () => { board.selected = -1; hideWho(); draw(); });
 // On a narrow board the card leaves out what the position is in general until it's asked for, and keeps it open for
 // the next player once it has been.
 let moreAbout = false;
-$('whoMore').addEventListener('click', () => { moreAbout = !moreAbout; syncMore(); placeWho(); });
+onButton($('whoMore'), () => { moreAbout = !moreAbout; syncMore(); placeWho(); });
 
 function showWho(i) {
   const p = state.play.players[i];

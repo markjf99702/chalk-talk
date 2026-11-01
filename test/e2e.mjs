@@ -484,6 +484,56 @@ for (const side of ['O', 'D']) {
   }
   await p.close();
 }
+// A tap just off a button on the board, on a player, picks the player: 4 px under More about with the card at the top
+// end, and 4 px under the Why button. (Chromium sends a tap that near a button to the button, and a real fingertip
+// covers more than a point.) A tap on either button still works.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
+  const players = () => p.evaluate(() => {
+    const { board, state } = window.chalkTalk, cv = board.cv.getBoundingClientRect();
+    return state.play.players.map(q => { const z = board.pos(board.t, q.i); return { i: q.i, label: q.label, x: cv.left + board.sx(z.x), y: cv.top + board.sy(z.y) }; });
+  });
+  const box = sel => p.evaluate(sel => { const b = document.querySelector(sel).getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; }, sel);
+  const lg = (await players()).find(q => q.label === 'LG');
+  for (let n = 0; n < 4 && await p.evaluate(() => window.chalkTalk.board.selected) !== lg.i; n++) await p.mouse.click(lg.x, lg.y);
+  assert.equal(await p.evaluate(() => document.getElementById('who').classList.contains('top')), true, 'the LG\'s card is at the top end');
+  let more = await box('#whoMore');
+  const card = await box('#who');
+  const under = (await players()).filter(q => q.i !== lg.i && q.x > more.l + 6 && q.x < more.r - 6 && q.y > card.b).sort((a, b) => a.y - b.y)[0];
+  assert.ok(under, 'nobody under More about');
+  // the card moved down the few pixels that put him 4 px under the button
+  await p.evaluate(dy => { const w = document.getElementById('who'); w.style.top = `${parseFloat(getComputedStyle(w).top) + dy}px`; }, under.y - 4 - more.b);
+  more = await box('#whoMore');
+  await p.touchscreen.tap(under.x, more.b + 4);
+  assert.deepEqual(await p.evaluate(() => ({ picked: window.chalkTalk.board.selected, more: document.getElementById('whoMore').getAttribute('aria-expanded') })),
+    { picked: under.i, more: 'false' }, `a tap 4 px under More about, on the ${under.label}`);
+  more = await box('#whoMore');
+  await p.touchscreen.tap((more.l + more.r) / 2, (more.t + more.b) / 2);
+  assert.equal(await p.getAttribute('#whoMore', 'aria-expanded'), 'true', 'a tap on More about');
+  await p.touchscreen.tap((more.l + more.r) / 2, (more.t + more.b) / 2);
+  await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input')); window.chalkTalk.board.selected = -1; document.getElementById('who').hidden = true; });
+  const why = await box('#why'), w = why.r - why.l;
+  const q = (await players()).filter(o => o.y > why.b + 20 && o.x > w / 2 + 20 && o.x < 370 - w / 2).sort((a, b) => a.y - b.y)[0];
+  assert.ok(q, 'nobody to put under the Why button');
+  // the button moved to just over him
+  await p.evaluate(([x, y]) => {
+    const el = document.getElementById('why'), b = el.getBoundingClientRect(), cv = document.getElementById('board').getBoundingClientRect();
+    el.style.transform = 'none'; el.style.left = `${x - cv.left - b.width / 2}px`; el.style.top = `${y - 4 - b.height - cv.top}px`;
+  }, [q.x, q.y]);
+  const at = await box('#why');
+  await p.touchscreen.tap(q.x, at.b + 4);
+  await new Promise(r => setTimeout(r, 500));
+  assert.deepEqual(await p.evaluate(() => ({ picked: window.chalkTalk.board.selected, scrolled: scrollY, focus: document.activeElement.id })),
+    { picked: q.i, scrolled: 0, focus: '' }, `a tap 4 px under the Why button, on the ${q.label}`);
+  await p.touchscreen.tap((at.l + at.r) / 2, (at.t + at.b) / 2);
+  await until(() => p.evaluate(() => document.activeElement.id === 'resHead' && scrollY > 0), 3000, 'a tap on the Why button did nothing');
+  await c.close();
+}
 // On a crowded line a fingertip covers two or three players: tapping the same spot again picks the next one there,
 // nearest first, instead of closing the card. A tap that lands a little off a lineman reaches him in two taps, or three
 // where two others are nearer still (under center the quarterback is 4.5 px behind the center on a phone).

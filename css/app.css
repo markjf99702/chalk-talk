@@ -292,6 +292,8 @@ button:disabled { cursor: default; }
   white-space: nowrap;
 }
 .narrow .who-more::before { content: ''; position: absolute; inset: -8px -6px; }
+/* none below it with the card at the top end, where the field and the players are just below (see onButton()) */
+.narrow .who.top .who-more::before { inset: -8px -6px 0; }
 .narrow .who-more::after { content: ' ▾'; }
 .narrow .who-more[aria-expanded="true"]::after { content: ' ▴'; }
 .narrow .who:not(.more) .who-about { display: none; }
