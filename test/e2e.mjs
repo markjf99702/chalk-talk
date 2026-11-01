@@ -753,6 +753,58 @@ const phone = async () => {
 };
 const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 
+// Playback: Pause holds the clock where it is, and ▶ goes on from there. Half speed plays about half a second of the play
+// each second, and Snap again from the result card snaps the same two calls with a new roll of the dice.
+{
+  const p = await phone();
+  await p.click('#snap');
+  await p.waitForFunction(() => window.chalkTalk.state.t > 0.8, null, { timeout: 10000 });
+  await p.click('#play');
+  const held = await p.evaluate(() => window.chalkTalk.state.t);
+  await new Promise(r => setTimeout(r, 400));
+  assert.deepEqual(await p.evaluate(() => ({ t: window.chalkTalk.state.t, phase: window.chalkTalk.state.phase, button: document.getElementById('play').getAttribute('aria-label') })),
+    { t: held, phase: 'paused', button: 'Play' }, 'Pause doesn\'t hold the play where it is');
+  await p.click('#play');
+  const resumed = await p.evaluate(() => window.chalkTalk.state.t);
+  assert.ok(resumed >= held && resumed < held + 0.5, `▶ after a pause at ${held.toFixed(2)} s went on from ${resumed.toFixed(2)} s`);
+  await p.waitForFunction(t => window.chalkTalk.state.t > t, held, { timeout: 5000 });
+  // how many seconds of the play go by in a second, at each speed
+  const rate = speed => p.evaluate(async speed => {
+    const { state, lineUp, play } = window.chalkTalk, wait = ms => new Promise(r => setTimeout(r, ms));
+    document.querySelector(`[data-speed="${speed}"]`).click();
+    lineUp(); play();
+    await wait(300);
+    const t0 = state.t, w0 = performance.now();
+    await wait(1000);
+    return (state.t - t0) / ((performance.now() - w0) / 1000);
+  }, speed);
+  const [half, full] = [await rate(0.5), await rate(1)];
+  assert.ok(half > 0.3 && half < 0.6 && full / half > 1.6 && full / half < 2.5, `half speed played ${half.toFixed(2)} s of the play a second, and full speed ${full.toFixed(2)} s`);
+  await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); });
+  const calls = () => p.evaluate(() => { const { state } = window.chalkTalk; return { off: { ...state.off }, def: { ...state.def }, seed: state.seed, phase: state.phase }; });
+  const before = await calls();
+  await p.click('#again');
+  const after = await calls();
+  assert.deepEqual({ off: after.off, def: after.def, phase: after.phase }, { off: before.off, def: before.def, phase: 'playing' }, 'Snap again changed a call');
+  assert.notEqual(after.seed, before.seed, 'Snap again replayed the same snap');
+  await p.context().close();
+}
+
+// Calling the defense, the offense's play is hidden until the snap: the board says so, and a receiver's card keeps
+// his job back.
+{
+  const p = await phone();
+  await p.click('[data-side="D"]');
+  assert.match(await p.textContent('#matchup'), /^[^·]+ · play hidden  vs  /, 'calling the defense, the board gives the play away');
+  const wr = await p.evaluate(() => {
+    const { board, state } = window.chalkTalk, q = state.play.players.find(o => o.cls === 'wr'), r = board.cv.getBoundingClientRect(), z = board.pos(0, q.i);
+    return { i: q.i, x: r.left + board.sx(z.x), y: r.top + board.sy(z.y) };
+  });
+  for (let n = 0; n < 4 && await p.evaluate(() => window.chalkTalk.board.selected) !== wr.i; n++) await p.mouse.click(wr.x, wr.y);
+  assert.equal(await p.textContent('#whoJob'), 'His job on this play is hidden until the snap. Read the alignment: where he stands gives some of it away.');
+  await p.context().close();
+}
+
 // The scrubber counts the play's frames, so an arrow key steps one frame (a twentieth of a second) and the far end is
 // the end of the play; a screen reader hears the time and what's happening ("1.9 of 4.1 seconds: The quarterback
 // throws..."), not "one thousand".
