@@ -218,6 +218,33 @@ const short = await page.evaluate(() => {
 });
 assert.equal(short?.head, 'Gain of 3 yards');
 assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards that make a play a success', `"Gain of 3 yards" under "${short.kicker}" (seed ${short.seed})`);
+// The verdict says a big play (a run of 10 yards or more, a catch of 20 or more) and a takeaway for what they are, and a
+// 3-yard gain why it's the defense's. Each is a shared play: one that no longer comes out this way (after a change to
+// the simulator) needs another seed that does.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  for (const [code, head, kicker, win] of [
+    ['O.single.iz.0.over.c3.four.25', 'Gain of 3 yards', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
+    ['O.trips.smash.0.nickel.c2.four.48', 'Intercepted', 'A takeaway for the defense', 'D'],
+    ['O.trips.smash.0.nickel.c2.four.15', 'Gain of 19 yards', 'A win for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c2.four.74', 'Gain of 20 yards', 'A big play for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.69', 'Gain of 9 yards', 'A win for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.367', 'Gain of 10 yards', 'A big play for the offense', 'O'],
+  ]) {
+    await p.evaluate(code => { location.hash = `#p=${code}`; }, code);
+    await p.waitForFunction(seed => { const { state } = window.chalkTalk; return state.seed === seed && state.phase === 'playing'; }, +code.split('.').at(-1), { timeout: 5000 });
+    const seen = await p.evaluate(() => {
+      const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input'));
+      const k = document.getElementById('resKicker');
+      return { head: document.getElementById('resHead').textContent, kicker: k.textContent, win: k.dataset.win };
+    });
+    assert.equal(seen.head, head, `#p=${code} no longer shows this: pick another seed`);
+    assert.deepEqual(seen, { head, kicker, win }, `#p=${code}`);
+  }
+  await p.close();
+}
 
 // A shared link opens the exact same play. Copying it says so on the button.
 await page.click('[data-side="O"]');
@@ -708,7 +735,7 @@ for (const width of [320, 360, 375]) {
   assert.match(said['Gun Trips'].strong ?? '', /^The strong side is the tight end's side, or the side with more receivers\./, 'the strong side is explained');
   assert.match(said['Gun Doubles'].strong ?? '', /^Gun Doubles is balanced, two receivers on each side, so the strong side is whichever side you call\./);
   assert.match(said.Singleback.strong ?? '', /^Singleback is balanced, a tight end and a receiver on each side, so/);
-  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Three-step and five-step drop', 'Check-down', 'Deep thirds, halves and quarters', 'Success']) {
+  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Three-step and five-step drop', 'Check-down', 'Deep thirds, halves and quarters', 'Success', 'Big play']) {
     assert.ok(said.words.includes(w), `the playbook's words don't explain "${w}"`);
   }
   for (const z of said.zones) assert.ok(said.words.some(w => w.toLowerCase().startsWith(z.replace(/ \(.*/, ''))), `the playbook's words don't explain the ${z}`);

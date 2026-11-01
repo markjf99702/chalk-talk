@@ -766,6 +766,16 @@ $('theirsLook').addEventListener('click', newLook);
 // zero, so a 3.5-yard run is a gain of 4 and a success in the headline, the verdict over it and the chart alike.
 const gained = res => Math.sign(res.yards) * Math.round(Math.abs(res.yards));
 const success = res => (res.kind === 'run' || res.kind === 'catch') && gained(res) >= 4;
+// The verdict over the headline, and which side's colour it's in. A big play is a run of 10 yards or more or a catch of
+// 20 or more (see "Big play" in the playbook), and a gain short of 4 yards counts for the defense, which looks like a
+// mistake unless it says why.
+function kicker(res) {
+  const n = gained(res), carried = res.kind === 'run' || res.kind === 'catch';
+  if (res.kind === 'int') return ['A takeaway for the defense', 'D'];
+  if (success(res)) return [n >= (res.kind === 'run' ? 10 : 20) ? 'A big play for the offense' : 'A win for the offense', 'O'];
+  if (carried && n >= 0) return ['A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'];
+  return ['A win for the defense', 'D'];
+}
 
 function headline(res) {
   const n = Math.abs(gained(res));
@@ -783,11 +793,7 @@ function headline(res) {
 
 function showResult() {
   const P = state.play, res = P.result;
-  const offWin = success(res);
-  // A gain short of 4 yards counts for the defense, which looks like a mistake unless it says why.
-  const short = (res.kind === 'run' || res.kind === 'catch') && gained(res) >= 0 && !offWin;
-  $('resKicker').textContent = offWin ? 'A win for the offense' : `A win for the defense${short ? ': short of the 4\u00a0yards that make a play a success' : ''}`;
-  $('resKicker').dataset.win = offWin ? 'O' : 'D';
+  [$('resKicker').textContent, $('resKicker').dataset.win] = kicker(res);
   $('resHead').textContent = headline(res);
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
@@ -1079,6 +1085,7 @@ function playbook() {
     ['Short middle, "the rat"', 'The middle of the field up to about 10 yards. In Cover 1 the defender left over sits there to take away crossing routes.'],
     ['Deep thirds, halves and quarters', 'The deep field, from about 9 yards on, split between the deep defenders: in thirds in Cover 3 (the corners and the free safety), in halves in Cover 2 (the two safeties), in quarters in Cover 4 (the corners and the safeties). The deep middle third is the middle one of the three; an inside quarter is one of the two nearest the middle.'],
     ['Success', 'A play that gains 4 yards or more. Coaches judge a gain by the down and the distance to go; with no downs on this board, 4 yards, a good start on 1st and 10, is the line. The chart\'s success rate counts these.'],
+    ['Big play', 'A run of 10 yards or more, or a pass play that gains 20 or more: a common way analysts count explosive plays (Sharp Football Analysis, for one). Teams draw the line in different places.'],
   ]));
 }
 
