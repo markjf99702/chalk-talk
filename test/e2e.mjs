@@ -1334,6 +1334,31 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   assert.ok(run.kind === 'run' && Math.abs(run.k - run.k0) < 1e-9, `after a short run the camera moved: ${JSON.stringify(run)}`);
   await p.context().close();
 }
+// After a man still running when the board stops counting, the pull back takes in the ball where he ran on to, past
+// the spot, and the writing at the whistle stays out from under the words along the top (72 px: WORDS in js/board.js),
+// on a computer too, where the board is wide and the view tall.
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const got = await p.evaluate(() => {
+    const { state, board, lineUp } = window.chalkTalk;
+    state.auto = false;
+    Object.assign(state, { off: { formation: 'doubles', play: 'verts', flip: false }, def: { front: 'nickel', coverage: 'c0', pressure: 'blitz' }, seed: 9 });
+    lineUp();
+    const spot = board.markSpot;
+    let placed = null;
+    board.markSpot = function (X, Y, w, fs) { const r = spot.apply(this, arguments); placed = { fs, y: r[1] }; return r; };
+    board.t = board.duration(); board.render();
+    board.markSpot = spot;
+    return { long: !!state.play.result.long, text: board.mark.text, ball: board.sy(state.play.frames.at(-1).ball[1]), ...placed };
+  });
+  assert.ok(got.long && got.text === '60+', `not a play still running at the end: ${JSON.stringify(got)}`);
+  assert.ok(got.ball >= 80 - 1e-6, `the ball is ${got.ball} px from the top, under the words there`);
+  assert.ok(got.y - got.fs / 2 > 72, `"60+" is written ${got.y - got.fs / 2} px from the top, under the words there`);
+  await c.close();
+}
 
 // A blitzer's arrow is told apart by its shape as well as its colour (WCAG 2.2, 1.4.1 Use of Color): a thicker line and
 // a double head, against one head on every other rusher's.

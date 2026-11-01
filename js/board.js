@@ -117,15 +117,16 @@ export class Board {
   }
 
   // Where the camera pulls back to at the whistle, the yard at the top of the view, or null where it stays. Once a
-  // play has ended past the line (the spot, where an incomplete pass came down, or the man who picked it off), the view
-  // goes from just behind the backfield, as before the snap, to at least 3 yards past that, with the spot clear of the
-  // words over the deep end of the board. Where the view at the end already shows all that, it stays.
+  // play has ended past the line (the spot, or the ball where a man still running ran on past it, where an incomplete
+  // pass came down, or the man who picked it off), the view goes from just behind the backfield, as before the snap, to
+  // at least 3 yards past that, with it clear of the words over the deep end of the board. Where the view at the end
+  // already shows all that, it stays.
   pullTop() {
     const P = this.play, res = P.result, F = P.frames;
     let end;
     if (res.kind === 'int' && res.by >= 0) end = F[F.length - 1].xy[2 * res.by + 1];
     else if (res.kind === 'incomplete' || res.kind === 'throwaway') { let b = F.length - 1; while (b > 0 && !F[b - 1].air) b--; end = F[b].ball[1]; }
-    else end = res.yards;
+    else end = res.long ? Math.max(res.yards, F[F.length - 1].ball[1]) : res.yards; // a man still running runs on past it
     if (!(end > 0)) return null;
     const a = end - Y_LOW, room = Math.min(0.6, (WORDS + 8) / this.h);
     const top = Y_LOW + Math.max(this.rangeY, a + 3, a / (1 - room));
@@ -425,7 +426,9 @@ export class Board {
       const best = tries.find(([x, y]) => clear(x, y)) || tries.find(([x, y]) => clear(x, y, false));
       if (best) return best;
     }
-    return [Math.max(6, Math.min(this.w - 6 - w, first > 0 ? X + gap : X - gap - w)), Y - 0.6 * fs];
+    // Nowhere clear: just beside it anyway, over the line or under it, whichever keeps it out from under the words.
+    const up = Y - 0.6 * fs, inBand = y => y + fs / 2 >= band[0] && y - fs / 2 <= band[1];
+    return [Math.max(6, Math.min(this.w - 6 - w, first > 0 ? X + gap : X - gap - w)), inBand(up) ? Y + 0.6 * fs : up];
   }
 
   // Where the ball is on the ground at time t: [x, y].
