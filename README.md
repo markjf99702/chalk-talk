@@ -32,7 +32,7 @@ It's a static site: plain HTML, CSS and JavaScript, with no build step.
 
 ```sh
 npx serve .                   # or any static file server, then open the printed address
-npm test                      # unit tests for the simulator, then the page in Chromium (needs Playwright)
+npm test                      # unit tests for the simulator, the page in Chromium (needs Playwright), then the one-file copy
 node tools/screenshots.mjs    # redraws docs/*.png and og.png
 node tools/make-icons.mjs     # redraws the PNG icons from icon.svg
 npm run build                 # dist/chalk-talk.html, the whole app in one file (needs esbuild: npm install)
@@ -49,5 +49,5 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/rng.js`: a seeded random source, so a snap replays exactly from its seed.
 - `fonts/`: Barlow, Barlow Condensed, Permanent Marker and Patrick Hand (SIL Open Font License), served from here so nothing loads from elsewhere.
 - `sw.js`: keeps a copy for using offline, and opens from it when the connection isn't answering. `FILES` in it is a fingerprint of the files it keeps: change one and `npm test` says what to set it to, so a release never leaves the copy half old.
-- `test/sim.test.mjs`: every call against every defense runs to a finish, formations are legal, coverages count right, and the numbers look like football. `test/e2e.mjs`: uses the real page in Chromium.
+- `test/sim.test.mjs`: every call against every defense runs to a finish, formations are legal, coverages count right, and the numbers look like football. `test/e2e.mjs`: uses the real page in Chromium. `test/onefile.mjs`: builds the one-file copy and uses it, opened from a file and from a web address, and without its document wrapper (skipped without esbuild).
 - `scripts/build.mjs`: bundles everything into one HTML file.
