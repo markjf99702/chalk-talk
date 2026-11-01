@@ -434,6 +434,20 @@ test('a back\'s flat route and check-down end past the line, and Flood sends one
   }
 });
 
+test('the drawn-up play numbers the quarterback\'s reads on their routes, in the order his card lists them, and only on a pass', () => {
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const pressure of ['four', 'blitz']) {
+    const P = simulate({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c1', pressure, flip: pressure === 'blitz' }, 11);
+    const numbered = P.overlay.filter(o => o.read !== undefined);
+    if (pl.type === 'run') { assert.equal(numbered.length, 0, `${fm.id} ${pl.id}: a run has read numbers`); continue; }
+    assert.ok(numbered.every(o => o.kind === 'route'), `${fm.id} ${pl.id}: a read number on something that isn't a route`);
+    const order = numbered.sort((a, b) => a.read - b.read).map(o => `${o.read}. ${P.players[o.i].label}`);
+    const qb = P.players.find(p => p.cls === 'qb');
+    const card = P.jobs[qb.i].match(/His reads: (.+)\.$/)?.[1].split(', ').map(r => r.replace(/ \(.+\)$/, ''));
+    assert.ok(numbered.length > 0, `${fm.id} ${pl.id}: no reads numbered`);
+    assert.deepEqual(order, card, `${fm.id} ${pl.id} ${pressure}: the numbers on the routes aren't the reads in the quarterback's card`);
+  }
+});
+
 test('the Cover 2 corner stays in the flat: he lets a slant go inside and widens with the man coming out into it', () => {
   // Slant-Flat against Cover 2, 96 looks: a moment after the throw (0.3 s), the corner is outside the slant on his side
   // in 80% of them. When he followed the slant inside, leaving the flat route to run, it was 6%.

@@ -1586,12 +1586,13 @@ function describeJob(S, pl) {
   return '';
 }
 
-// Lines for the board before the snap: routes, blocks, rush lanes, zone drops and man assignments.
+// Lines for the board before the snap: routes, blocks, rush lanes, zone drops and man assignments. On a pass, a route
+// the quarterback reads has its place in his reads (read: 1 for his first), which the board writes past its end.
 function overlay(S) {
   const out = [];
   for (const pl of S.O) {
-    const j = pl.job;
-    if (j.kind === 'route') out.push({ team: 'O', kind: 'route', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, ...pl.path.map(w => ({ x: w.x, y: Math.min(w.y, pl.y0 + 28) }))], delay: j.delay, settle: !!ROUTES[j.route]?.settle });
+    const j = pl.job, read = S.play.type === 'pass' ? (S.reads || []).indexOf(pl) + 1 : 0;
+    if (j.kind === 'route') out.push({ team: 'O', kind: 'route', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, ...pl.path.map(w => ({ x: w.x, y: Math.min(w.y, pl.y0 + 28) }))], delay: j.delay, settle: !!ROUTES[j.route]?.settle, ...(read ? { read } : {}) });
     else if (j.kind === 'block' || j.kind === 'stalk') {
       const tg = j.target;
       if (j.pull && j.scheme === 'kick' && tg) { // along the line behind it, then out at the end man from inside him

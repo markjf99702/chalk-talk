@@ -1311,6 +1311,63 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// Before the snap the quarterback's reads are numbered in chalk on his routes, 1 for his first, in the order his card
+// lists them: past the arrowhead, or beside the route where its end is up under the words over the deep end (a go
+// route), and always on the board, clear of those words and of every player's mark. Not once the play runs, not on a
+// run, and not on a play that's still hidden (calling the defense, before the snap), at any width.
+{
+  const p = await phone();
+  const numbers = () => p.evaluate(() => {
+    const { board, state } = window.chalkTalk, ctx = board.ctx, fill = ctx.fillText, seen = [];
+    ctx.fillText = function (text, x, y) { if (/Patrick Hand/.test(ctx.font) && /^\d$/.test(text)) seen.push({ text, x, y, fs: parseFloat(ctx.font.replace(/^\d+ /, '')) }); return fill.apply(this, arguments); };
+    board.render();
+    ctx.fillText = fill;
+    const r = board.radius(), P = state.play;
+    const marks = P.players.map(q => { const at = board.pos(board.t, q.i); return [board.sx(at.x), board.sy(at.y)]; });
+    const routes = Object.fromEntries(P.overlay.filter(o => o.read).map(o => [o.read, { who: P.players[o.i].label, pts: o.pts.map(q => [board.sx(q.x), board.sy(q.y)]) }]));
+    const qb = P.players.find(q => q.cls === 'qb');
+    return { seen, r, marks, routes, w: board.w, h: board.h, flip: board.flip, card: P.jobs[qb.i] };
+  });
+  // the distance from a point to a polyline
+  const off = (pts, [x, y]) => Math.min(...pts.slice(1).map((b, n) => {
+    const a = pts[n], dx = b[0] - a[0], dy = b[1] - a[1], u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(a[0] + u * dx - x, a[1] + u * dy - y);
+  }));
+  for (const [link, width] of [['p=O.trips.smash.0.nickel.c2.four.15', 390], ['p=O.doubles.verts.0.nickel.c3.four.3', 390], ['p=D.iform.flood.1.over.c3.four.9', 390], ['p=O.trips.smash.0.nickel.c2.four.15', 1280]]) {
+    await p.setViewportSize({ width, height: width > 900 ? 800 : 844 });
+    await p.evaluate(link => { location.hash = link; }, link);
+    await p.waitForFunction(() => window.chalkTalk.state.phase === 'playing');
+    await p.evaluate(() => window.chalkTalk.lineUp());
+    const d = await numbers();
+    const card = d.card.match(/His reads: (.+)\.$/)[1].split(', ').map(r => r.replace(/ \(.+\)$/, ''));
+    assert.deepEqual(Object.entries(d.routes).map(([n, r]) => `${n}. ${r.who}`), card, `${link}: the routes aren't numbered as the quarterback's card lists his reads`);
+    assert.deepEqual(d.seen.map(s => s.text), Object.keys(d.routes), `${link} at ${width}: the numbers drawn aren't his reads`);
+    const band = d.flip ? [d.h - 72, d.h] : [0, 72];
+    for (const s of d.seen) {
+      const route = d.routes[s.text], end = route.pts.at(-1), half = s.fs * 0.42;
+      assert.ok(s.x > 3 && s.x < d.w - 3 && s.y - half > 2 && s.y + half < d.h - 2, `${link} at ${width}: read ${s.text} is off the board at ${s.x.toFixed(0)}, ${s.y.toFixed(0)}`);
+      assert.ok(s.y + half < band[0] || s.y - half > band[1], `${link} at ${width}: read ${s.text} is under the words at the deep end (y ${s.y.toFixed(0)})`);
+      for (const [x, y] of d.marks) assert.ok(Math.abs(x - s.x) > d.r + 1 || Math.abs(y - s.y) > d.r + 1, `${link} at ${width}: read ${s.text} is on a player at ${x.toFixed(0)}, ${y.toFixed(0)}`);
+      const inBand = end[1] < band[1] + 4 && end[1] > band[0] - 4;
+      assert.ok(inBand ? off(route.pts, [s.x, s.y]) < s.fs * 1.6 : Math.hypot(end[0] - s.x, end[1] - s.y) < s.fs * 2, `${link} at ${width}: read ${s.text} (the ${route.who}) is ${Math.hypot(end[0] - s.x, end[1] - s.y).toFixed(0)} px from the end of his route`);
+    }
+    await p.evaluate(() => { window.chalkTalk.play(); window.chalkTalk.pause(); const s = document.getElementById('scrub'); s.value = '10'; s.dispatchEvent(new Event('input')); });
+    assert.equal((await numbers()).seen.length, 0, `${link}: the reads are still numbered once the play runs`);
+  }
+  // a run, and a hidden play
+  await p.evaluate(() => { location.hash = 'p=O.iform.power.0.over.c3.four.41'; });
+  await p.waitForFunction(() => window.chalkTalk.state.play.call.play === 'power');
+  await p.evaluate(() => window.chalkTalk.lineUp());
+  assert.equal((await numbers()).seen.length, 0, 'a run has its reads numbered');
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.click('[data-side="D"]');
+  await p.click('#auto');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; state.off.play = 'smash'; lineUp(); });
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.auto && window.chalkTalk.state.side === 'D'), true);
+  assert.equal((await numbers()).seen.length, 0, 'a hidden pass play has its reads numbered before the snap');
+  await p.context().close();
+}
+
 // The end of the play is chalked on the board: at the whistle (not before) the gain is written in marker by the ball,
 // as the headline counts it ("+30", "Sack −7", "Incomplete" by an × where it came down, "Picked off"), bigger for a big
 // play, with a line across the field at the spot of a run, a catch or a sack. The throw leaves a dotted line from his

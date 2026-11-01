@@ -1341,6 +1341,7 @@ function playbook() {
   sec('How to read the board', false, dl([
     ['O and X', 'The offense is drawn as circles (the center as a square) and the defense as Xs, the way coaches draw them.'],
     ['Lines with arrows', 'Routes for receivers and the path for a ball carrier. A dashed route starts late: the back blocks first.'],
+    ['Numbers on routes', 'The order the quarterback reads them: 1 is the first receiver he looks at, then 2, and so on. They\'re up before the snap, on your own pass play, or theirs once it\'s out.'],
     ['A line with a bar across the end', 'A block.'],
     ['Dashed line to a bubble', 'A zone drop: the defender goes to that area.'],
     ['Dotted line to a receiver', 'Man-to-man coverage on that receiver.'],

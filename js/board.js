@@ -150,6 +150,7 @@ export class Board {
     if (!pre) { this.trails(); this.throwLine(); }
     if (over) this.spotLine();
     this.players(pre);
+    if (pre) this.readNumbers();
     this.ballDraw();
     if (over) this.endMark();
     if (this.grain) {
@@ -271,6 +272,63 @@ export class Board {
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // Before the snap, the quarterback's reads numbered in chalk in the order he reads them, the way play art in a
+  // playbook has them: past the arrowhead of each route he reads, with the board's colour knocked out round the figure
+  // like a label's. Only where the routes are shown, so a hidden call stays hidden.
+  readNumbers() {
+    const routes = this.play.overlay.filter(o => o.kind === 'route' && o.read).sort((a, b) => a.read - b.read);
+    if (!routes.length || !(this.mineTeam === 'O' ? this.showMine : this.showTheirs)) return;
+    const { ctx } = this, fs = this.readSize();
+    ctx.save();
+    ctx.font = `400 ${fs}px "Patrick Hand", "Marker Felt", "Comic Sans MS", cursive`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    const spots = this.readSpots(routes, fs);
+    routes.forEach((o, n) => {
+      const [x, y] = spots[n], text = String(o.read);
+      ctx.globalAlpha = this.selected >= 0 && this.selected !== o.i ? 0.3 : 1;
+      ctx.lineWidth = 3.5; ctx.strokeStyle = this.colors.board; ctx.strokeText(text, x, y);
+      ctx.fillStyle = this.teamColor('O'); ctx.fillText(text, x, y);
+    });
+    ctx.restore();
+  }
+  readSize() { return Math.max(13, Math.min(17, this.k * 1.05)); }
+
+  // Where each read's number goes, in the order given: [x, y], the middle of the figure. Just past the arrowhead, along
+  // the route's last leg; or else beside the arrowhead; or else beside the route farther back along it: the first of
+  // those that's on the board, clear of the words over its deep end (the matchup line, and the caption under it), and
+  // clear of the players' marks, their labels and the numbers already placed. A go route runs up under the words, so
+  // its number comes back down beside it to just under them. A route stays on the board, so there's always a place
+  // clear of the edges and the words.
+  readSpots(routes, fs) {
+    const { ctx } = this, r = this.radius(), ls = this.labelSize(), P = this.play.players;
+    const band = this.flip ? [this.h - WORDS, this.h] : [0, WORDS];
+    const box = (x, y, w, pad) => ({ l: x - w / 2 - pad, r: x + w / 2 + pad, t: y - fs * 0.42 - pad, b: y + fs * 0.42 + pad });
+    const meets = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+    const taken = P.map(p => { const q = this.pos(this.t, p.i), x = this.sx(q.x), y = this.sy(q.y); return { l: x - r - 1, r: x + r + 1, t: y - r - 1, b: y + r + 1 }; });
+    if (this.drawn) for (const p of P) { const [x, y] = this.drawn[p.i], half = ls * 0.32 * p.label.length + 1; taken.push({ l: x - half, r: x + half, t: y - ls / 2, b: y + ls / 2 }); }
+    return routes.map(o => {
+      const w = ctx.measureText(String(o.read)).width;
+      const clear = (x, y, all = true) => {
+        const b = box(x, y, w, 1);
+        return b.l >= 3 && b.r <= this.w - 3 && b.t >= 2 && b.b <= this.h - 2 && (b.b < band[0] || b.t > band[1]) && !(all && taken.some(t => meets(b, t)));
+      };
+      const S = o.pts.map(p => [this.sx(p.x), this.sy(p.y)]);
+      const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1; return [dx / d, dy / d]; };
+      const end = S[S.length - 1], [ux, uy] = unit(S[S.length - 2], end), side = fs * 0.75, past = Math.max(w, fs * 0.8) / 2 + 4;
+      const tries = [[end[0] + ux * past, end[1] + uy * past]];
+      for (const sd of [1, -1]) tries.push([end[0] - ux * this.head() * 0.5 - uy * side * sd, end[1] - uy * this.head() * 0.5 + ux * side * sd]);
+      // back along the route, a few pixels at a time, on either side of it
+      for (let n = S.length - 1; n > 0; n--) {
+        const a = S[n - 1], b = S[n], [vx, vy] = unit(a, b), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        for (let s = len; s >= 0; s -= 4) for (const sd of [1, -1]) tries.push([a[0] + vx * s - vy * side * sd, a[1] + vy * s + vx * side * sd]);
+      }
+      // nowhere clear of everything: clear of the edges and the words at least, over a mark if it must be
+      const spot = tries.find(([x, y]) => clear(x, y)) || tries.find(([x, y]) => clear(x, y, false)) || tries[0];
+      taken.push(box(spot[0], spot[1], w, 1));
+      return spot;
+    });
   }
 
   poly(pts) {
