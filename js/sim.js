@@ -1128,6 +1128,7 @@ function integrate(S) {
   // Nobody runs through anybody. A man defender who runs into somebody else's receiver gets picked off (said only while
   // the play is live: the frames after the whistle still move everyone, and their bumps aren't news).
   const P = S.P;
+  const c = S.carrier, cx = c ? c.x : 0, cy = c ? c.y : 0;
   for (let a = 0; a < P.length; a++) for (let b = a + 1; b < P.length; b++) {
     const A = P[a], B = P[b];
     if (A.eng === B.i || B.eng === A.i) continue;
@@ -1154,6 +1155,9 @@ function integrate(S) {
       }
     }
   }
+  // The ball carrier in a pile is squeezed out of it at a walk: a quarter of a yard a frame, however many push on him,
+  // not thrown clear in one.
+  if (c) { const mx = c.x - cx, my = c.y - cy, m = hyp(mx, my); if (m > 0.25) { c.x = cx + mx * 0.25 / m; c.y = cy + my * 0.25 / m; } }
   // Only the man with the ball goes out of bounds; everyone else stays a step inside the sideline.
   for (const pl of P) {
     const m = pl === S.carrier ? SIDELINE + 1 : SIDELINE - 0.3;

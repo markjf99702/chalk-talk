@@ -240,7 +240,7 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
     ['O.trips.smash.0.nickel.c2.four.48', 'Intercepted', 'A takeaway for the defense', 'D'],
     ['O.trips.smash.0.nickel.c2.four.15', 'Gain of 19 yards', 'A win for the offense', 'O'],
     ['O.trips.smash.0.nickel.c2.four.74', 'Gain of 20 yards', 'A big play for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.69', 'Gain of 9 yards', 'A win for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.11', 'Gain of 9 yards', 'A win for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.367', 'Gain of 10 yards', 'A big play for the offense', 'O'],
   ]) {
     await p.evaluate(code => { location.hash = `#p=${code}`; }, code);

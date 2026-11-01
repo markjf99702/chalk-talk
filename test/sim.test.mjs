@@ -66,6 +66,24 @@ test('while the play is live nobody stands on the quarterback after the throw, a
   }
 });
 
+test('a ball carrier in a pile is squeezed out of it, not thrown clear in one frame', () => {
+  // Bodies that overlap push apart, and a back with five of them around him used to be pushed by each, three quarters
+  // of a yard or more in a twentieth of a second (from this seed, Gun Trips Power into a nickel Cover 2 blitz).
+  let seed = 1;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip };
+    const r = simulate(call, seed++);
+    const hand = r.events.find(e => e.kind === 'hand');
+    if (!hand) continue;
+    for (let k = 1; k < r.frames.length; k++) {
+      const a = r.frames[k - 1], b = r.frames[k], c = b.c;
+      if (a.t < hand.t + 0.1 || b.t > r.result.t + 1e-9 || a.c !== c || c < 0) continue;
+      const d = Math.hypot(b.xy[2 * c] - a.xy[2 * c], b.xy[2 * c + 1] - a.xy[2 * c + 1]);
+      assert.ok(d < 0.75, `${JSON.stringify(call)} seed ${seed - 1}: the ball carrier moves ${d.toFixed(2)} yards in one frame at ${b.t.toFixed(2)}s`);
+    }
+  }
+});
+
 test('a play still going when the board\'s clock runs out ends with a tackle or says the board stopped counting', () => {
   // Outside Zone from the I against the Under in Cover 3: the back breaks five tackles and is still running at 10 seconds.
   const r = simulate({ formation: 'iform', play: 'oz', front: 'under', coverage: 'c3', pressure: 'four', flip: true }, 404);
