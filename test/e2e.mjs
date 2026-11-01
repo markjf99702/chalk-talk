@@ -1222,12 +1222,13 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
 }
 
 // Each time in the play-by-play is a button that watches that moment again: from a second before it to a second after,
-// at half speed whatever the speed is set to, and then it stops there with that line on the board. Where two more lines
-// would come up within the second and push it off, it stops short of the second of them; a line about a block shed,
-// which the board doesn't put up as it plays, is up while it's the moment watched. ▶ then plays on at your speed. Once
-// the play has been seen to the whistle (not as it first runs, when it would give away how it comes out, nor before the
-// snap, when it would give away a hidden play), the scrubber has a mark at the handoff, the throw and the catch. The
-// board's frames are stepped by hand here, a tenth of a second each, so the speeds can be counted.
+// at half speed whatever the speed is set to, and then it stops there with that line on the board and its man ringed.
+// Where two more lines would come up within the second and push it off, it stops short of the second of them (and where
+// they come in the same frame, it stays up with the newest); a line about a block shed, which the board doesn't put up
+// as it plays, is up while it's the moment watched. ▶ then plays on at your speed. Once the play has been seen to the
+// whistle (not as it first runs, when it would give away how it comes out, nor before the snap, when it would give away
+// a hidden play), the scrubber has a mark at the handoff, the throw and the catch. The board's frames are stepped by hand
+// here, a tenth of a second each, so the speeds can be counted.
 {
   const p = await phone();
   await p.evaluate(() => {
@@ -1306,6 +1307,8 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   const short = await untilStopped();
   assert.ok(Math.abs(short.t - (run[cut + 2].t - 0.05)) < 1e-3, `the cut at ${run[cut].t} s, watched again, stopped at ${short.t} s, not a frame before the hole at ${run[cut + 2].t} s`);
   assert.deepEqual(short.caption, [run[cut].text, run[cut + 1].text], 'the cut isn\'t on the board where it stopped');
+  // the man the watched line names is the one ringed, not the newer line's (the man who missed the tackle)
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.spot), await p.evaluate(i => window.chalkTalk.state.play.events[i].who, cut), 'the back who cut isn\'t ringed where the cut stopped');
   assert.ok(shed > 0, 'no shed block in the play');
   await p.locator('#story .t').nth(shed).click();
   const shedAt = await untilStopped();
@@ -1313,6 +1316,17 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   assert.equal(await p.evaluate(() => window.chalkTalk.board.spot), await p.evaluate(i => window.chalkTalk.state.play.events[i].who, shed), 'the man who shed the block isn\'t ringed');
   await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = String(+s.value); s.dispatchEvent(new Event('input')); });
   assert.ok(!(await now()).caption.includes(run[shed].text), 'scrubbed to the same place, the shed block is on the board as the play runs');
+
+  // A catch with a missed tackle and the tackle in the same frame: watched again, the catch stays on the board, the
+  // newest line under it, and the receiver is ringed.
+  await open('p=O.single.slants.0.under.c1.blitz.1065');
+  const quick = await p.evaluate(() => window.chalkTalk.state.play.events.map(e => ({ t: e.t, kind: e.kind, text: e.text, who: e.who })));
+  const caught = quick.findIndex(e => e.kind === 'catch');
+  assert.deepEqual(quick.slice(caught, caught + 3).map(e => [e.kind, e.t]), [['catch', quick[caught].t], ['miss', quick[caught].t], ['tackle', quick[caught].t]], `the play changed: ${quick.map(e => `${e.t} ${e.kind}`).join(', ')}`);
+  await p.locator('#story .t').nth(caught).click();
+  const same = await untilStopped();
+  assert.deepEqual(same.caption, [quick[caught].text, quick[caught + 2].text], 'a catch with two more lines in its frame, watched again, isn\'t on the board');
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.spot), quick[caught].who, 'the receiver isn\'t ringed');
   await p.context().close();
 }
 

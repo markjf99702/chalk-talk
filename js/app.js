@@ -346,13 +346,18 @@ function staleResult(on) {
 
 // The last two things that happened in the last 2.2 seconds, the older one above and fainter, so two that happen close
 // together both stay up long enough to read. It follows the clock alone, so scrubbing and pausing show the same words.
-// The man the newest line names is ringed on the board (see Board.players()). A line about a block shed comes up only
-// when it's the moment being watched again from the play-by-play.
+// The man the newest line names is ringed on the board (see Board.players()). A moment being watched again from the
+// play-by-play is the exception: once it has come, its line stays up beside the newest one (even where two more come in
+// the same frame) and its man is the one ringed, and a line about a block shed comes up only when it's that moment.
 function caption() {
-  const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && (e.kind !== 'shed' || e === moment?.e));
-  setCaption(evs.slice(-2).map(e => e.text));
-  board.spot = evs.at(-1)?.who ?? -1;
-  board.spotAll = evs.at(-1)?.all || null;
+  const m = moment?.e;
+  const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && (e.kind !== 'shed' || e === m));
+  let shown = evs.slice(-2);
+  if (m && evs.includes(m) && !shown.includes(m)) shown = [m, evs.at(-1)];
+  setCaption(shown.map(e => e.text));
+  const ringed = m && shown.includes(m) && (m.who >= 0 || m.all) ? m : evs.at(-1);
+  board.spot = ringed?.who ?? -1;
+  board.spotAll = ringed?.all || null;
 }
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
 // A line still up stays as it is, so a screen reader reads each line once, when it's new.
