@@ -440,6 +440,18 @@ button:disabled { cursor: default; }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
 .switch input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
 .theirs .look { margin-top: 10px; }
+/* "What did they play?": in their card after the snap, and in the coach's note's place until it's answered */
+.ask { margin-top: 10px; padding: 10px 12px 12px; border: 1.5px dashed var(--line-strong); border-radius: 12px; }
+.note .ask { margin: 2px 0 10px; }
+.ask-q { margin: 0; font-weight: 600; font-size: 16px; }
+.ask .ask-how { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+.ask .chips { margin-top: 8px; }
+.ask .ask-verdict { margin: 0; font-size: 15px; }
+.ask-verdict b { font-weight: 600; }
+.ask-verdict:focus { outline: none; }
+.ask-verdict:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.ask-streak { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.theirs .ask-switch { display: flex; width: fit-content; margin-top: 12px; }
 
 .result .kicker {
   display: inline-block;

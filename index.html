@@ -96,8 +96,10 @@
           <label class="switch"><input type="checkbox" id="auto" checked> <span>Let the other coach pick</span></label>
         </div>
         <p class="hint" id="theirsHint"></p>
+        <div class="ask" id="theirsAsk" hidden></div>
         <button type="button" class="ghost look" id="theirsLook">New look</button>
         <div id="theirsBody"></div>
+        <label class="switch ask-switch" id="askSwitch"><input type="checkbox" id="quiz" checked> <span>Ask me what they played, after the snap</span></label>
       </section>
 
       <details class="card jobs" id="jobs">
@@ -114,6 +116,7 @@
         <ol class="story" id="story"></ol>
         <div class="note">
           <h3>Coach's note</h3>
+          <div class="ask" id="noteAsk" hidden></div>
           <p id="note"></p>
           <p class="now" id="noteNow"></p>
           <ul class="reads" id="reads"></ul>

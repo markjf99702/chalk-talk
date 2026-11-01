@@ -48,8 +48,19 @@ const browser = await pw.chromium.launch();
 // Each one has to be in the offline copy (see the end).
 const asked = new Set();
 const newContext = browser.newContext.bind(browser);
-browser.newContext = async options => {
+// The question after the snap ("What did they play?", on unless it's turned off) holds the other coach's call back until
+// it's answered. It has a test of its own (with { quiz: true }); everywhere else a fresh visit has it turned off, so his
+// call comes out at the snap, as it does with the switch off.
+browser.newContext = async ({ quiz = false, ...options } = {}) => {
   const c = await newContext(options);
+  if (!quiz) {
+    await c.addInitScript(() => {
+      try {
+        const s = JSON.parse(localStorage.getItem('chalk-talk.v1') || '{}');
+        if (!('quiz' in s)) localStorage.setItem('chalk-talk.v1', JSON.stringify({ ...s, quiz: false }));
+      } catch { /* no storage */ }
+    });
+  }
   c.on('request', r => { if (r.url().startsWith(base) && !r.serviceWorker()) asked.add(new URL(r.url()).pathname); });
   return c;
 };
@@ -1848,6 +1859,117 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#auto');
   assert.equal(await p.isVisible('#theirsLook'), false, 'New look is there when you call both sides');
   await p.context().close();
+}
+
+// What did they play? Calling the offense with the other coach picking, a snap of a call you haven't seen asks, in his
+// card, with the five coverages as buttons, and his call stays hidden until it's answered: the board's matchup line and
+// drawn-up defense, a defender's card, the chart, and at the whistle the result card, whose coach's note gives way to
+// the same question. Cover 0's blitz line doesn't name it. The answer says what gave it away, or what told it from the
+// one named, and keeps a streak on this device. Snap again doesn't ask again; New look does. A reload keeps the question
+// open. The switch turns it off (and lets his call out), and it isn't asked calling the defense.
+{
+  const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const COVS = ['Cover 0', 'Cover 1', 'Cover 2', 'Cover 3', 'Cover 4'];
+  const buttons = host => p.$$eval(`${host} button`, b => b.map(x => x.textContent));
+  const theirs = def => p.evaluate(def => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, def); lineUp(); }, def);
+  const whistle = () => p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); });
+  const saved = () => p.evaluate(() => { const s = JSON.parse(localStorage.getItem('chalk-talk.v1')); return { quiz: s.quiz, streak: s.streak, best: s.best }; });
+  const verdict = host => p.textContent(`${host} .ask-verdict`);
+  const streak = () => p.evaluate(() => document.querySelector('#theirsAsk .ask-streak')?.textContent ?? '');
+  assert.equal(await p.isChecked('#quiz'), true, 'the question is on to start with');
+  assert.equal(await p.isVisible('#askSwitch'), true, 'its switch is in their card');
+  assert.equal(await p.isVisible('#theirsAsk'), false, 'asked before the snap');
+  await theirs({ front: 'nickel', coverage: 'c0', pressure: 'blitz' });
+  await p.click('#snap');
+  assert.deepEqual(await buttons('#theirsAsk'), COVS, 'their card asks what they played, with the five coverages');
+  assert.equal(await p.textContent('#theirsAsk .ask-q'), 'What did they play?');
+  assert.equal(await p.isVisible('#theirsHint'), false, 'the question takes the place of their call in their card');
+  assert.equal(await p.textContent('#say'), 'What did they play? Name their coverage, in their call.');
+  assert.match(await p.textContent('#matchup'), /Nickel · coverage hidden$/, 'the board names the coverage before it is answered');
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.showTheirs), false, 'the board draws their play before it is answered');
+  assert.doesNotMatch(await p.textContent('#chartHint'), /until the snap/);
+  assert.match(await p.textContent('#chartHint'), /Their real call stays hidden until you name their coverage\./);
+  await p.evaluate(() => { window.chalkTalk.pause(); document.querySelector('#jobsBody .jobs-team:last-child button').click(); });
+  assert.match(await p.textContent('#whoJob'), /His job is hidden until you name their coverage\.$/, 'a defender\'s card gives his job away before it is answered');
+  await p.click('#whoClose');
+  await whistle();
+  assert.equal(await p.isVisible('#result'), true);
+  assert.equal(await p.textContent('#resVs'), 'Smash from Gun Trips against Nickel with a blitz.', 'the result card names the coverage before it is answered');
+  assert.deepEqual(await buttons('#noteAsk'), COVS, 'the coach\'s note gives way to the question');
+  assert.deepEqual(await p.$$eval('#note, #noteNow, #reads', els => els.map(e => e.hidden)), [true, true, true], 'the coach\'s note is up before it is answered');
+  assert.ok(!(await p.textContent('#story')).includes('Cover 0'), 'the play-by-play names Cover 0 before it is answered');
+  assert.match(await p.textContent('#story'), /The .+ blitz(es)?\./, 'the blitz line is still there');
+  assert.match(await p.textContent('#say'), /Name their coverage under the board, and the coach's note says why\.$/);
+  // A wrong answer, in the result card: what told it from the one named, and the call is out everywhere.
+  await p.click('#noteAsk button:text-is("Cover 1")');
+  assert.equal(await verdict('#noteAsk'), 'It was Cover 0: the corners were pressed, but nobody was deep. Cover 1 has one deep.');
+  assert.equal(await p.evaluate(() => document.activeElement.className), 'ask-verdict', 'the focus goes to the answer');
+  assert.equal(await verdict('#theirsAsk'), await verdict('#noteAsk'), 'their card says it too');
+  assert.equal(await p.textContent('#theirsHint'), 'They called: Nickel, Cover 0.');
+  assert.match(await p.textContent('#note'), /^How Smash does against Cover 0: /, 'the coach\'s note once it is answered');
+  assert.deepEqual(await p.$$eval('#note, #noteNow, #reads', els => els.map(e => e.hidden)), [false, false, false]);
+  assert.match(await p.textContent('#story'), /Cover 0: the .+ blitz/, 'the play-by-play says Cover 0 once it is answered');
+  assert.match(await p.textContent('#matchup'), /Nickel · Cover 0$/);
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.showTheirs), true);
+  assert.equal(await p.textContent('#resVs'), 'Smash from Gun Trips against Nickel, Cover 0.');
+  assert.equal(await streak(), '', 'a streak before there is one');
+  assert.deepEqual(await saved(), { quiz: true, streak: 0, best: 0 });
+  // Snap again: the call is out, so it isn't asked.
+  await p.click('#again');
+  assert.equal(await p.isVisible('#theirsAsk'), false, 'Snap again asks again');
+  assert.match(await p.textContent('#theirsHint'), /^They called: /);
+  // New look asks again; right answers in a row, and two wrong ones that say what told them apart.
+  const round = async (def, guess) => {
+    await p.click('#theirsLook');
+    await theirs(def);
+    await p.click('#snap');
+    await p.click(`#theirsAsk button:text-is("${guess}")`);
+    return [await verdict('#theirsAsk'), await streak()];
+  };
+  assert.deepEqual(await round({ front: 'nickel', coverage: 'c2', pressure: 'four' }, 'Cover 2'), ['Right: two deep and the corners about 5 yards off, Cover 2.', '1 right in a row.']);
+  assert.deepEqual(await round({ front: 'over', coverage: 'c3', pressure: 'blitz' }, 'Cover 3'), ['Right: one deep and the corners 7 yards or more off, Cover 3.', '2 right in a row.']);
+  assert.deepEqual(await round({ front: 'nickel', coverage: 'c1', pressure: 'four' }, 'Cover 1'), ['Right: one deep and the corners pressed, Cover 1.', '3 right in a row.']);
+  assert.deepEqual(await saved(), { quiz: true, streak: 3, best: 3 });
+  assert.deepEqual(await round({ front: 'nickel', coverage: 'c2', pressure: 'four' }, 'Cover 4'),
+    ['It was Cover 2: two deep, but the corners sat about 5 yards off. Cover 4 has the corners 7 yards or more off.', 'Your best: 3 in a row.']);
+  assert.deepEqual(await round({ front: 'under', coverage: 'c3', pressure: 'four' }, 'Cover 4'),
+    ['It was Cover 3: the corners sat 7 yards or more off, but one safety was deep. Cover 4 has two deep.', 'Your best: 3 in a row.']);
+  assert.deepEqual(await round({ front: 'nickel', coverage: 'c4', pressure: 'four' }, 'Cover 4'), ['Right: two deep and the corners 7 yards or more off, Cover 4.', '1 right in a row. Your best: 3.']);
+  assert.deepEqual(await saved(), { quiz: true, streak: 1, best: 3 });
+  // A reload with the question open keeps it open, and the streak.
+  await p.click('#theirsLook');
+  await p.click('#snap');
+  await p.reload();
+  assert.deepEqual(await buttons('#theirsAsk'), COVS, 'a reload lost the open question');
+  assert.match(await p.textContent('#matchup'), /coverage hidden$/);
+  assert.equal(await streak(), '1 right in a row so far.');
+  // A new play keeps the question (he keeps his call), and the snap after it is still asked.
+  await p.getByRole('radio', { name: 'Mesh' }).click();
+  assert.deepEqual(await buttons('#theirsAsk'), COVS, 'a new play of yours dropped the question');
+  assert.match(await p.textContent('#matchup'), /coverage hidden$/, 'a new play of yours let his coverage out');
+  await p.click('#snap');
+  assert.deepEqual(await buttons('#theirsAsk'), COVS);
+  // The switch off: the question goes and his call is out, it's kept, and the next look isn't asked.
+  await p.click('#quiz');
+  assert.equal(await p.isVisible('#theirsAsk'), false);
+  assert.match(await p.textContent('#theirsHint'), /^They called: /, 'turning the question off let his call out');
+  assert.doesNotMatch(await p.textContent('#matchup'), /hidden/);
+  assert.deepEqual(await saved(), { quiz: false, streak: 1, best: 3 });
+  await p.click('#theirsLook');
+  await p.click('#snap');
+  assert.equal(await p.isVisible('#theirsAsk'), false, 'asked with the question off');
+  await p.click('#quiz');
+  // Calling the defense, it isn't asked, and the switch isn't there.
+  await p.click('[data-side="D"]');
+  assert.equal(await p.isVisible('#askSwitch'), false, 'the switch is there calling the defense');
+  await p.click('#snap');
+  assert.equal(await p.isVisible('#theirsAsk'), false, 'asked calling the defense');
+  assert.match(await p.textContent('#theirsHint'), /^They called: /);
+  await c.close();
 }
 
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback

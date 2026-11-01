@@ -655,6 +655,23 @@ test('coverages put the right number deep and the right number rushing', () => {
   assert.equal(zero.deep, 0); assert.equal(zero.man, 5); assert.equal(zero.rush, 6);
 });
 
+test('every coverage lines up its own way: the safeties deep and the corners\' depth always tell which it is', () => {
+  // The page asks "What did they play?" after the snap (js/app.js, verdict()), and reads the look the way the corners'
+  // and safeties' lines in the coach's note do: safeties past 10.5 yards, and the nearer corner pressed (under 2.5
+  // yards), about 5 off (under 6) or 7 or more. Against every formation, front and pressure, each coverage has one look,
+  // and no two share it, so the question can always be answered from the board.
+  const looks = {};
+  let seed = 3;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const S = prepare({ formation: fm.id, play: 'smash', front: fr.id, coverage: cv.id, pressure, flip }, seed++);
+    const corner = Math.min(...S.D.filter(d => d.label === 'CB').map(d => d.y));
+    (looks[cv.id] ||= new Set()).add(`${S.box.high} deep, corners ${corner < 2.5 ? 'pressed' : corner < 6 ? 'about 5 off' : '7 or more off'}`);
+  }
+  for (const [cv, seen] of Object.entries(looks)) assert.equal(seen.size, 1, `${cv} lines up more than one way: ${[...seen].join('; ')}`);
+  const one = Object.values(looks).map(seen => [...seen][0]);
+  assert.equal(new Set(one).size, COVERAGES.length, `two coverages look the same: ${one.join('; ')}`);
+});
+
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
 const caughtAt = r => { const f = r.frames.find(f => f.t > r.events.find(e => e.kind === 'throw').t && !f.air && f.c === r.result.carrier); return f.xy[2 * r.result.carrier + 1]; };
 

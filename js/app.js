@@ -1,6 +1,6 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES } from './playbook.js';
-import { simulate, name } from './sim.js';
+import { simulate, prepare, name } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
 
@@ -29,6 +29,9 @@ const state = {
   seed: newSeed(),
   linked: false, // showing a shared play: both calls, until the first change
   seen: false, // the other coach's call has been out since he picked it: a snap showed it
+  quiz: true, // calling the offense against the other coach, ask what he played after the snap (see answer())
+  streak: 0, best: 0, // coverages named right in a row, and the most, on this device
+  ask: null, // that question for his call: { guess: null } while it's open, then { guess } once it's answered
   play: null,
   phase: 'pre', // pre, playing, paused, done
   t: 0,
@@ -50,6 +53,7 @@ function load() {
       if (typeof s.auto === 'boolean') state.auto = s.auto;
       if (typeof s.labels === 'boolean') state.labels = s.labels;
       if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
+      takeQuiz(s);
     }
   } catch { /* storage unavailable: start fresh */ }
   ownAuto = state.auto;
@@ -66,7 +70,14 @@ function keepOwn() {
   if (!state.auto || state.side === 'D') own.def = { ...state.def };
 }
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, auto: ownAuto, labels: state.labels, speed: state.speed })); } catch { /* fine */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best })); } catch { /* fine */ }
+}
+// The question's switch and the streak, from a save (this tab's, or another tab's as it saves).
+const tally = n => (Number.isInteger(n) && n >= 0 ? n : null);
+function takeQuiz(s) {
+  if (typeof s.quiz === 'boolean') state.quiz = s.quiz;
+  state.streak = tally(s.streak) ?? state.streak;
+  state.best = Math.max(state.streak, tally(s.best) ?? state.best);
 }
 
 // The play on the board, kept for this tab only: a reload, or a phone dropping the tab while it's in the background,
@@ -74,7 +85,7 @@ function save() {
 // visit gets a fresh look.
 const PLAY_KEY = 'chalk-talk.v1.play';
 function keepPlay() {
-  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
+  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, ask: state.ask, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
 }
 // The kept play, if it's for the calls you have now (after a shared play, say, it isn't).
 function keptPlay() {
@@ -83,14 +94,17 @@ function keptPlay() {
     if (!off || !def || k.side !== state.side || k.auto !== state.auto || !Number.isInteger(k.seed) || k.seed < 0) return null;
     if ((!state.auto || state.side === 'O') && !same(off, own.off)) return null;
     if ((!state.auto || state.side === 'D') && !same(def, own.def)) return null;
-    return { off, def, seed: k.seed, seen: !!k.seen, snapped: !!k.snapped };
+    const ask = k.ask && (k.ask.guess === null || COVERAGES.some(c => c.id === k.ask.guess)) ? { guess: k.ask.guess } : null;
+    return { off, def, seed: k.seed, seen: !!k.seen, ask: k.snapped ? ask : null, snapped: !!k.snapped };
   } catch { return null; }
 }
 
 const call = () => ({ ...state.off, ...state.def });
-// The other coach's call is hidden from the board, the chart and the player cards until the snap. Once a snap has shown
-// it, it stays out until he picks again.
-const hidden = () => state.auto && state.phase === 'pre' && !state.seen;
+// The other coach's call is hidden from the board, the chart and the player cards until the snap, and while you're asked
+// what he played, until you've answered. Once it's out, it stays out until he picks again.
+const hidden = () => state.auto && ((state.phase === 'pre' && !state.seen) || asking());
+// Whether the question "What did they play?" is waiting for an answer.
+const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.ask.guess;
 
 // The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on. It's
 // never the call they had (New look always changes something), short of ten unlucky rolls in a row.
@@ -100,6 +114,7 @@ const hidden = () => state.auto && state.phase === 'pre' && !state.seen;
 const RUN_SHARE = { iform: 0.6, single: 0.55, trips: 0.375, doubles: 0.25 };
 function rollTheirs() {
   state.seen = false;
+  state.ask = null;
   const R = rng(newSeed());
   const w = list => { let x = R() * list.reduce((a, [, p]) => a + p, 0); for (const [v, p] of list) { if ((x -= p) <= 0) return v; } return list[0][0]; };
   const theirs = () => (state.side === 'O'
@@ -189,9 +204,14 @@ function play() {
   moment = null;
   const snapped = state.phase === 'pre';
   if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
-  // His call is out now, and stays out until he picks again. For a replay the status line is cleared, so that its end
-  // is said again.
-  if (snapped && state.auto) { state.seen = true; say(`They called: ${theirSummary()}.`); } else if (!snapped) say('');
+  // His call is out now, and stays out until he picks again, unless you're to say what he played first: then it's
+  // out once you have (see answer()). For a replay the status line is cleared, so that its end is said again.
+  if (snapped && state.auto) {
+    if (!state.seen && state.side === 'O' && state.quiz) state.ask = { guess: null };
+    else if (state.ask?.guess) state.ask = null; // answered last snap: this one shows his call as usual
+    state.seen = true;
+    say(asking() ? 'What did they play? Name their coverage, in their call.' : `They called: ${theirSummary()}.`);
+  } else if (!snapped) say('');
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
   clearTimeout(whyTimer);
@@ -275,7 +295,8 @@ function finish({ hold = false } = {}) {
 // out at the end, and a word about a link that couldn't open.
 function say(text) { $('say').textContent = text; }
 function sayResult() {
-  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. Why it worked is ${resultBeside() ? 'beside' : 'under'} the board.`);
+  const where = resultBeside() ? 'beside' : 'under';
+  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. ${asking() ? `Name their coverage ${where} the board, and the coach's note says why.` : `Why it worked is ${where} the board.`}`);
 }
 const resultBeside = () => $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
 
@@ -354,11 +375,15 @@ function caption() {
   const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && (e.kind !== 'shed' || e === m));
   let shown = evs.slice(-2);
   if (m && evs.includes(m) && !shown.includes(m)) shown = [m, evs.at(-1)];
-  setCaption(shown.map(e => e.text));
+  setCaption(shown.map(words));
   const ringed = m && shown.includes(m) && (m.who >= 0 || m.all) ? m : evs.at(-1);
   board.spot = ringed?.who ?? -1;
   board.spotAll = ringed?.all || null;
 }
+// A line of the play-by-play, as the board and the result card say it. While you're asked what they played, Cover 0's
+// blitz names the blitzers without naming the coverage.
+const words = e => (e.kind === 'blitz' && asking() ? e.text.replace(/^Cover 0: (\w)/, (_, c) => c.toUpperCase()) : e.text);
+
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
 // A line still up stays as it is, so a screen reader reads each line once, when it's new.
 function setCaption(lines) {
@@ -568,7 +593,7 @@ function showWho(i) {
   $('who').dataset.i = i;
   $('whoPos').textContent = `${p.label} · ${title}`;
   $('whoJob').textContent = !hiddenJob ? `On this play: ${state.play.jobs[i]}`
-    : p.team === 'D' ? `${tell(state.play, i)} His job is hidden until the snap.`
+    : p.team === 'D' ? `${tell(state.play, i)} His job is hidden until ${asking() ? 'you name their coverage' : 'the snap'}.`
       : 'His job on this play is hidden until the snap. Read the alignment: where he stands gives some of it away.';
   $('whoAbout').textContent = about;
   $('whoMore').textContent = `More about the ${p.label}`;
@@ -854,6 +879,8 @@ function renderChoosers() {
   for (const b of document.querySelectorAll('[data-side]')) b.setAttribute('aria-checked', String(b.dataset.side === state.side));
   rove(document.querySelector('.side-pick'));
   $('newLook').hidden = $('theirsLook').hidden = !state.auto;
+  $('quiz').checked = state.quiz;
+  $('askSwitch').hidden = !(state.auto && state.side === 'O');
   syncTheirs();
 }
 
@@ -869,13 +896,16 @@ function theirSummary() {
 
 function syncTheirs() {
   const hint = $('theirsHint');
+  renderAsk($('theirsAsk'), true);
+  hint.hidden = asking() && !linkNote; // the question takes its place
   if (linkNote) { hint.textContent = linkNote; return; }
   if (!state.auto) {
     hint.textContent = state.linked ? 'A shared play: both calls are shown. Turn on "Let the other coach pick" to call your own.'
       : 'You\'re calling both sides. Turn on "Let the other coach pick" to be surprised.';
     return;
   }
-  if (hidden()) hint.textContent = state.side === 'O'
+  if (asking()) hint.textContent = '';
+  else if (hidden()) hint.textContent = state.side === 'O'
     ? 'Hidden until the snap. Read their alignment: how many safeties are deep, how far off the corners are, how many defenders are in the box. Then call the play that beats it: change your play and they keep their call; change your personnel and they\'ll substitute.'
     : 'Hidden until the snap. You can see their formation; the play is a surprise. Read their personnel: two backs or two tight ends lean run, four receivers lean pass. Change your call to match it: they keep theirs.';
   else if (state.phase === 'pre') hint.textContent = `Same call as last snap: ${theirSummary()}. New look gets you a new one.`;
@@ -921,6 +951,108 @@ function newLook(e) {
 }
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);
+
+// ---------------------------------------------------------------- what did they play?
+
+// Calling the offense with the other coach picking, a snap of a call you haven't seen asks what he played, with the
+// five coverages as buttons, in his card and, at the whistle, in the coach's note's place: the note says what he played
+// and why it mattered, so it waits for your answer, and so do his call on the board and in words. A change of your play
+// keeps it waiting (he keeps his call); a new call from him (New look, new personnel) drops it. The answer says what
+// gave it away. On this board every coverage lines up its own way, so the look always tells: the safeties deep and how
+// far off the corners are. A streak is kept on this device, and the switch in his card turns the question off.
+$('quiz').addEventListener('change', e => {
+  state.quiz = e.target.checked;
+  save();
+  if (!state.quiz && asking()) reveal(); // the question goes, and his call is out
+});
+
+// The question, or its answer, in its card (his, or the result's). In his card, how many you've named right in a row.
+function renderAsk(host, theirs) {
+  const open = asking(), done = state.auto && state.side === 'O' && state.ask?.guess;
+  host.textContent = '';
+  host.hidden = !open && !done;
+  if (host.hidden) return;
+  const p = (cls, text) => { const el = document.createElement('p'); el.className = cls; el.textContent = text; host.append(el); return el; };
+  if (open) {
+    p('ask-q', 'What did they play?');
+    p('ask-how', theirs ? `Name their coverage from how they lined up: how many safeties were deep, and how far off the corners were.${state.phase === 'pre' ? '' : ' Scrub back to the snap to see it again.'}`
+      : `Name their coverage, in their call or here, and the note on how ${byId(PLAYS, state.off.play).name} does against it comes up.`);
+    const row = document.createElement('div');
+    row.className = 'chips';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'What did they play?');
+    for (const c of COVERAGES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = c.name;
+      b.addEventListener('click', () => answer(c.id, host));
+      row.append(b);
+    }
+    host.append(row);
+  } else {
+    const v = p('ask-verdict', '');
+    v.tabIndex = -1;
+    const [first, ...rest] = verdict(state.play, state.ask.guess).split(/(?<=:) /);
+    v.innerHTML = `<b>${esc(first)}</b> ${esc(rest.join(' '))}`;
+  }
+  if (theirs) { const st = streakWords(); if (st) p('ask-streak', st); }
+}
+function streakWords() {
+  const { streak, best } = state, right = state.ask?.guess === state.def.coverage;
+  if (asking()) return streak ? `${streak} right in a row so far.` : '';
+  if (right) return `${streak} right in a row.${best > streak ? ` Your best: ${best}.` : ''}`;
+  return best ? `Your best: ${best} in a row.` : '';
+}
+
+// An answer: the streak, and then his call is out everywhere it was held back.
+function answer(id, host) {
+  if (!asking()) return;
+  state.ask.guess = id;
+  state.streak = id === state.def.coverage ? state.streak + 1 : 0;
+  state.best = Math.max(state.best, state.streak);
+  save();
+  reveal();
+  host.querySelector('.ask-verdict')?.focus({ preventScroll: true });
+}
+function reveal() {
+  if (!state.quiz && asking()) state.ask = null;
+  keepPlay();
+  syncBoard();
+  renderMatchup();
+  syncTheirs();
+  syncJobs();
+  syncChart();
+  if (board.selected >= 0) showWho(board.selected);
+  if (state.phase === 'playing' || state.phase === 'paused') caption();
+  if (!$('result').hidden && !$('result').classList.contains('stale')) showResult();
+  draw();
+  if (state.phase === 'pre' || !state.auto) return;
+  say(`They called: ${theirSummary()}.`);
+}
+
+// What their look was before the snap: how many safeties were deep (as the board counts them, past 10 and a half yards)
+// and how far off the nearer corner stood, in the bands the corners' read uses (see coachNote()).
+function shell(players, high) {
+  const corner = Math.min(...players.filter(p => p.label === 'CB').map(p => p.y));
+  return { deep: high, corners: corner < 2.5 ? 'press' : corner < 6 ? 'five' : 'deep' };
+}
+const DEEP = ['nobody deep', 'one deep', 'two deep'];
+const DEEP_WAS = ['nobody was deep', 'one safety was deep', 'two safeties were deep'];
+const CORNERS = { press: 'the corners pressed', five: 'the corners about 5 yards off', deep: 'the corners 7 yards or more off' };
+const CORNERS_WAS = { press: 'the corners were pressed', five: 'the corners sat about 5 yards off', deep: 'the corners sat 7 yards or more off' };
+// "Right: two deep and the corners about 5 yards off, Cover 2.", or what told it from the one you named, which is how
+// that one lines up against the same offense on the board.
+function verdict(P, guess) {
+  const cv = byId(COVERAGES, P.call.coverage), was = shell(P.players, P.box.high);
+  if (guess === cv.id) return `Right: ${DEEP[was.deep]} and ${CORNERS[was.corners]}, ${cv.name}.`;
+  const g = byId(COVERAGES, guess), S = prepare({ ...P.call, coverage: guess }, P.seed), would = shell(S.P, S.box.high);
+  const deep = would.deep === was.deep, corners = would.corners === was.corners;
+  if (deep && corners) return `It was ${cv.name}, though it lined up like ${g.name}: ${DEEP[was.deep]} and ${CORNERS[was.corners]}.`;
+  if (deep) return `It was ${cv.name}: ${DEEP[was.deep]}, but ${CORNERS_WAS[was.corners]}. ${g.name} has ${CORNERS[would.corners]}.`;
+  if (corners) return `It was ${cv.name}: ${CORNERS_WAS[was.corners]}, but ${DEEP_WAS[was.deep]}. ${g.name} has ${DEEP[would.deep]}.`;
+  return `It was ${cv.name}: ${DEEP[was.deep]} and ${CORNERS[was.corners]}. ${g.name} has ${DEEP[would.deep]} and ${CORNERS[would.corners]}.`;
+}
 
 // ---------------------------------------------------------------- every player's job
 
@@ -974,7 +1106,7 @@ function renderJobs() {
 }
 function syncJobs() {
   $('jobsHint').textContent = 'Left to right as the board shows them. Each one opens his card on the board, with his job on this play.'
-    + (hidden() ? ' Their jobs stay hidden until the snap, as on the board.' : '');
+    + (hidden() ? ` Their jobs stay hidden until ${asking() ? 'you name their coverage' : 'the snap'}, as on the board.` : '');
 }
 
 // The board in words, as the teams line up: the formation, where the receivers and the backs are, and then what the
@@ -1047,7 +1179,10 @@ function showResult() {
   $('resHead').textContent = headline(res);
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
-  $('resVs').textContent = `${pl.name} from ${fm.name} against ${fr.name}, ${cv.name}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ' with a blitz' : ''}.`;
+  // (While you're asked what they played, the coverage waits: Cover 0 is said as a blitz, as it is.)
+  const blitz = state.def.pressure === 'blitz' || cv.id === 'c0';
+  $('resVs').textContent = asking() ? `${pl.name} from ${fm.name} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
+    : `${pl.name} from ${fm.name} against ${fr.name}, ${cv.name}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.`;
   // Each line's time is a button that watches that moment again on the board (see replay()).
   const story = $('story');
   story.textContent = '';
@@ -1059,16 +1194,19 @@ function showResult() {
     b.setAttribute('aria-label', `${at}: watch it again`);
     b.addEventListener('click', () => replay(e));
     const text = document.createElement('span');
-    text.textContent = e.text;
+    text.textContent = words(e);
     li.append(b, text);
     story.append(li);
   }
+  // The note says what they played, so while you're asked, the question is in its place.
   const { lead, note, now, reads } = coachNote(P);
   $('note').innerHTML = `<b>${esc(lead)}</b> ${esc(note)}`;
   $('noteNow').innerHTML = `<b>This time:</b> ${esc(now)}`;
   const ul = $('reads');
   ul.textContent = '';
   for (const r of reads) { const li = document.createElement('li'); li.textContent = r; ul.append(li); }
+  for (const id of ['note', 'noteNow', 'reads']) $(id).hidden = asking();
+  renderAsk($('noteAsk'), false);
   resetShare();
   $('actionsNote').textContent = `Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
   $('result').hidden = false;
@@ -1219,7 +1357,7 @@ function fromLink() {
   if (!m) return 'bad';
   const [, side, formation, playId, flip, front, coverage, pressure, seed] = m;
   if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
-  Object.assign(state, { side, auto: false, linked: true, seed: +seed >>> 0 });
+  Object.assign(state, { side, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
   state.off = { formation, play: playId, flip: flip === '1' };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four' };
   linkNote = '';
@@ -1285,7 +1423,7 @@ function chartHint() {
   if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure;
   return `How often your play succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}.`
-    + ` Beside each bar, the average yards a play.${hidden() ? ' Their real call stays hidden until the snap.' : ''}${again()}`;
+    + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${again()}`;
 }
 function again() {
   if (!redo) return '';
@@ -1515,7 +1653,7 @@ const link = fromLink();
 const kept = link ? null : keptPlay();
 if (link === 'ok') firstHint = false; // a shared play runs on its own
 if (kept) { // back after a reload: no new look from the other coach
-  Object.assign(state, { off: kept.off, def: kept.def, seed: kept.seed, seen: kept.seen });
+  Object.assign(state, { off: kept.off, def: kept.def, seed: kept.seed, seen: kept.seen, ask: kept.ask });
   firstHint = !kept.snapped;
 } else if (link !== 'ok' && state.auto) rollTheirs();
 renderChoosers();
@@ -1566,6 +1704,8 @@ addEventListener('storage', e => {
     const s = JSON.parse(e.newValue);
     if (typeof s.labels === 'boolean') state.labels = board.labels = s.labels;
     if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
+    takeQuiz(s);
+    $('quiz').checked = state.quiz;
     syncTransport();
     draw();
   } catch { /* something this version can't read: keep ours */ }
