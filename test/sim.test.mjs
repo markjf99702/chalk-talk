@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, prepare, name } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, SIDELINE } from '../js/playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -526,6 +526,38 @@ test('Cover 0 looks like Cover 0: the extra blitzer walks up over his gap, and n
     assert.equal(extra.length, 1, `${what}: one extra blitzer`);
     for (const d of extra) assert.ok(d.y0 <= 5 && Math.abs(d.x0 - d.job.gap) < 1.3, `${what}: the ${d.label} lines up at ${d.x0.toFixed(1)}, ${d.y0.toFixed(1)}, rushing the gap at ${d.job.gap}`);
   }
+});
+
+test('NFL timing: on five-step and play-action drops he starts reading later, and only once a route is out of its break', () => {
+  // A read throw (his first read, read 2 and on, or the best left after them) on a five-step drop comes out no sooner
+  // than 1.55 s from the shotgun or 1.95 s under center (2.0 and 2.35 s after a play-action fake), half a second later
+  // than before; and a route that breaks is a yard out of its break when he lets it go. The quick game and the screen
+  // keep their timing: Slant-Flat's average throw is still out in about a second.
+  let seed = 1, quick = 0, quickN = 0;
+  const READ = /, (his first read|read \d|after nothing else came open)/;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
+    const r = simulate(call, seed), S = prepare(call, seed); seed++;
+    const t = r.events.find(e => e.kind === 'throw');
+    if (!t) continue;
+    if (pl.drop === 'quick') { quick += t.t; quickN++; }
+    if ((pl.drop !== 'five' && pl.drop !== 'pa') || !READ.test(t.text)) continue;
+    const first = { five: fm.under ? 1.95 : 1.55, pa: fm.under ? 2.35 : 2.0 }[pl.drop];
+    assert.ok(t.t >= first - 1e-9, `${JSON.stringify(call)} seed ${seed - 1}: "${t.text}" at ${t.t} s`);
+    const rcv = S.P[t.who], route = ROUTES[rcv.job.route];
+    if (route.readyY || /after nothing else/.test(t.text)) continue;
+    // How far along the line out of the break he is when the ball's thrown; on a route that stops, that he has.
+    const k = route.ready ?? 1, a = rcv.path[k - 1], b = rcv.path[k], at = r.frames.findIndex(f => f.t >= t.t - 1e-9), f = r.frames[at];
+    if (route.settle) {
+      const vy = (f.xy[2 * rcv.i + 1] - r.frames[at - 1].xy[2 * rcv.i + 1]) / 0.05;
+      assert.ok(vy < 1, `${JSON.stringify(call)} seed ${seed - 1}: thrown to the ${rcv.label}'s ${rcv.job.route} while he's still running up the field (${vy.toFixed(1)} yards a second)`);
+      continue;
+    }
+    if (!b) continue;
+    const L = Math.hypot(b.x - a.x, b.y - a.y), past = ((f.xy[2 * rcv.i] - a.x) * (b.x - a.x) + (f.xy[2 * rcv.i + 1] - a.y) * (b.y - a.y)) / L;
+    assert.ok(past > Math.min(0.9, 0.7 * L), `${JSON.stringify(call)} seed ${seed - 1}: thrown to the ${rcv.label}'s ${rcv.job.route} ${past.toFixed(2)} yards out of his break`);
+  }
+  assert.ok(quick / quickN < 1.1, `Slant-Flat's throws come out at ${(quick / quickN).toFixed(2)} s on average`);
 });
 
 test('coverages put the right number deep and the right number rushing', () => {

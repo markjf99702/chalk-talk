@@ -1,5 +1,5 @@
 // Renders the README screenshots (docs/*.png) and the link preview (og.png):  node tools/screenshots.mjs
-// Every picture is one fixed play (Smash from Gun Trips against Nickel Cover 2, seed 15), opened from its share
+// Every picture is one fixed play (Smash from Gun Trips against Nickel Cover 2, seed 262), opened from its share
 // link, so the same pictures come out every time.
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
@@ -21,7 +21,7 @@ const server = createServer(async (req, res) => {
   res.end(body);
 }).listen(0);
 const base = `http://localhost:${server.address().port}/`;
-const PLAY = '#p=O.trips.smash.0.nickel.c2.four.15';
+const PLAY = '#p=O.trips.smash.0.nickel.c2.four.262';
 const browser = await pw.chromium.launch();
 await mkdir(join(root, 'docs'), { recursive: true });
 

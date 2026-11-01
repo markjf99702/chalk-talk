@@ -303,7 +303,10 @@ function assignOffense(S) {
   };
   QB.path = drops[play.drop];
   QB.job = { kind: 'qb' };
-  S.readAt = { quick: under ? 0.75 : 0.55, five: under ? 1.45 : 1.05, pa: under ? 1.85 : 1.5, screen: 1.75 }[play.drop];
+  // When he starts reading. The quick drop gets the ball out at once and the screen waits for the back; on a five-step
+  // drop, or after a play-action fake, he takes his drop and lets the routes get to their breaks, the timing of an NFL
+  // dropback (Next Gen Stats: 2.8 seconds from snap to throw on average in 2023).
+  S.readAt = { quick: under ? 0.75 : 0.55, five: under ? 1.95 : 1.55, pa: under ? 2.35 : 2.0, screen: 1.75 }[play.drop];
   S.dwell = play.drop === 'quick' ? 0.32 : 0.5;
   if (play.drop === 'pa') {
     S.fakeEnd = under ? 0.85 : 0.65;
@@ -313,7 +316,7 @@ function assignOffense(S) {
   passPro(S);
   // His reads, from what's left after the protection: a back who stays in to block isn't one.
   S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
-  S.hold = { quick: 2.4, five: 3.6, pa: 3.9, screen: 2.6 }[play.drop];
+  S.hold = { quick: 2.4, five: 4.1, pa: 4.4, screen: 2.6 }[play.drop];
 }
 
 // Pass protection: every rusher is somebody's if there are the men for it. The line takes the rushers nearest them,
@@ -795,10 +798,20 @@ function readNote(S, k) {
   return `read ${k + 1}, with ${passed.length === k ? 'the first' : `${COUNT[passed.length]} of the first`} ${COUNT[k]} covered`;
 }
 
+// Whether a route has got far enough to throw to: so many yards up the field, or to its break. On a five-step drop or
+// after a fake, the break has to be finished: he's a yard on along the new line out of it, or, on a route that stops
+// and turns back (a hitch, a curl, a sit), he has stopped.
 function isReady(S, r) {
   const R = ROUTES[r.job.route];
   if (S.t < (r.job.delay || 0) + 0.25) return false;
-  return R.readyY ? r.y - r.y0 >= R.readyY : r.wp >= (R.ready ?? 1);
+  if (R.readyY) return r.y - r.y0 >= R.readyY;
+  const k = R.ready ?? 1;
+  if (r.wp < k) return false;
+  if (S.play.drop !== 'five' && S.play.drop !== 'pa') return true;
+  if (R.settle && r.wp >= r.path.length) return r.vy < 0.6;
+  if (r.wp > k || !r.path[k]) return true;
+  const a = r.path[k - 1], b = r.path[k], leg = hyp(b.x - a.x, b.y - a.y), [ux, uy] = unit(b.x - a.x, b.y - a.y);
+  return (r.x - a.x) * ux + (r.y - a.y) * uy >= Math.min(1, 0.8 * leg);
 }
 
 function bestWindow(S) {
