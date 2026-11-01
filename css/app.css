@@ -243,6 +243,10 @@ button:disabled { cursor: default; }
   text-overflow: ellipsis;
 }
 .why-go { color: var(--accent); }
+/* it fades in where the play's last line was (opacity only: placeWhy() in js/app.js moves it with transform) */
+.why { animation: why-in .3s ease-out; }
+@keyframes why-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .why { animation: none; } }
 
 .who {
   position: absolute;

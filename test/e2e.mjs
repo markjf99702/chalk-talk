@@ -105,6 +105,15 @@ const mid = await page.waitForFunction(() => {
 }, null, { timeout: 15000 }).then(h => h.jsonValue());
 assert.ok(Math.abs(mid.at - mid.played) < 0.05, `the scrubber is at ${mid.at.toFixed(2)} of the way with ${mid.played.toFixed(2)} of the play shown`);
 await page.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
+// The line that ended the play stays up on the board a moment, to be read (the board stops 0.7 s after it), while the
+// result card is in under the board at once.
+const ending = await page.evaluate(() => ({
+  caption: document.getElementById('caption').lastElementChild?.textContent,
+  last: window.chalkTalk.state.play.events.filter(e => e.kind !== 'shed').at(-1).text,
+  why: !document.getElementById('why').hidden,
+}));
+assert.equal(ending.caption, ending.last, 'the line that ended the play went from the board as soon as the play ended');
+assert.equal(ending.why, false, 'the button to the explanation came up over the play\'s last line at once');
 assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result has a headline');
 assert.ok(await page.$$eval('#story li', li => li.length) >= 1, 'the play-by-play has at least one line');
 assert.ok((await page.textContent('#note')).trim().length > 40, 'the coach\'s note is there');
@@ -116,8 +125,10 @@ assert.equal(await page.textContent('#snap'), 'Snap again');
 assert.equal(await page.textContent('#again'), 'Snap again');
 assert.equal(await page.getAttribute('#play', 'aria-label'), 'Watch it again', 'at the end the play button watches it again');
 assert.equal(await page.textContent('#actionsNote'), 'Snap again: the same two calls, played out fresh. New look: the other coach changes his call.');
-// The board shows the headline, and a button down to the explanation.
-assert.ok(await page.isVisible('#why'), 'the board points to the explanation when the play ends');
+// Then the board shows the headline, and a button down to the explanation, fading in.
+await until(() => page.isVisible('#why'), 3000, 'the board points to the explanation when the play ends');
+assert.equal(await page.textContent('#caption'), '', 'the button takes the place of the play\'s last line');
+assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('why')).animationName), 'why-in', 'the button to the explanation fades in');
 assert.equal((await page.textContent('#why')).replace(/\s+/g, ' ').trim(), `${await page.textContent('#resHead')} · Why ↓`);
 
 // The scrubber reaches the whole play: halfway is halfway, and the far end is the end of the play.
@@ -444,6 +455,15 @@ for (const side of ['O', 'D']) {
   await tap('RT');
   await p.click('#play');
   await closed('when it is watched again');
+  // Watched again, or scrubbed back, while the play's last line is still up, the button down to the explanation
+  // doesn't come up later over the play.
+  const why = () => p.evaluate(() => ({ phase: window.chalkTalk.state.phase, why: !document.getElementById('why').hidden }));
+  await new Promise(r => setTimeout(r, 1600));
+  assert.deepEqual(await why(), { phase: 'playing', why: false }, 'the button to the explanation came up while the play was watched again');
+  await p.waitForFunction(() => window.chalkTalk.state.phase === 'done', null, { timeout: 15000 });
+  await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = '20'; s.dispatchEvent(new Event('input')); });
+  await new Promise(r => setTimeout(r, 1600));
+  assert.deepEqual(await why(), { phase: 'paused', why: false }, 'the button to the explanation came up after a scrub back into the play');
   await p.close();
 }
 // Where the card goes on a phone: at the end of the play, a lineman's or the quarterback's card stays off the button
@@ -1324,6 +1344,8 @@ for (const [width, height] of [[390, 844], [375, 667]]) {
     return asked;
   });
   // Where the board stays at the top, Snap again and New look leave the page where it is; the Why button scrolls it.
+  // And the Why button comes up without its fade.
+  assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('why')).animationName), 'none', `${width}x${height}: with reduced motion the button to the explanation fades in`);
   assert.ok(smooth.length >= (height < 700 ? 3 : 2) && smooth.every(b => b !== 'smooth'), `${width}x${height}: with reduced motion the page scrolled: ${smooth}`);
   await c.close();
 }

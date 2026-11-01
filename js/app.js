@@ -123,6 +123,7 @@ const board = new Board($('board'));
 // keep: the result card stays where it is, faded, until this play's comes in (see snap()); otherwise it goes.
 function lineUp(keep = false) {
   cancelAnimationFrame(raf); // a frame of the last play still to come would run its clock on into this one
+  clearTimeout(whyTimer);
   state.play = simulate(call(), state.seed);
   state.phase = 'pre';
   state.t = 0;
@@ -176,6 +177,7 @@ function play() {
   if (snapped && state.auto) { state.seen = true; say(`They called: ${theirSummary()}.`); } else if (!snapped) say('');
   if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
   state.phase = 'playing';
+  clearTimeout(whyTimer);
   if (snapped) keepPlay();
   $('why').hidden = true;
   syncBoard();
@@ -203,18 +205,25 @@ function tick(now) {
   caption();
   draw();
   syncScrub();
-  if (state.t >= board.duration()) { finish(); return; }
+  if (state.t >= board.duration()) { finish({ hold: true }); return; }
   if (state.phase === 'playing') raf = requestAnimationFrame(tick);
 }
 
 function pause() { state.phase = 'paused'; cancelAnimationFrame(raf); syncTransport(); }
 
-function finish() {
+// The end of the play. Played out, the line that ended it stays up a moment to be read (the simulator stops the board
+// 0.7 s after it, which is short for "The strong safety makes the tackle." and the catch just before it), and then the
+// button down to the explanation takes its place. The result card under the board, and what a screen reader hears,
+// come at once. Scrubbed to the end, or back after a reload, the button is there at once too.
+let whyTimer = 0;
+const HOLD = 1300; // ms
+function finish({ hold = false } = {}) {
   state.phase = 'done';
   cancelAnimationFrame(raf);
   syncTransport();
   showResult();
-  showWhy();
+  clearTimeout(whyTimer);
+  if (hold) whyTimer = setTimeout(showWhy, HOLD); else showWhy();
   sayResult();
   keepPlay();
 }
@@ -345,6 +354,7 @@ $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() :
 $('scrub').addEventListener('input', e => {
   if (!state.play) return;
   cancelAnimationFrame(raf);
+  clearTimeout(whyTimer);
   const F = state.play.frames;
   state.t = F[Math.max(0, Math.min(F.length - 1, Math.round(+e.target.value)))].t;
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
