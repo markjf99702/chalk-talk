@@ -80,6 +80,9 @@ assert.equal(await page.textContent('#caption'), HINT, 'the board says what to d
 await page.getByRole('radio', { name: 'Four Verticals' }).click();
 assert.equal(await page.textContent('#caption'), HINT, 'the first hint stays when the call changes');
 await page.getByRole('radio', { name: 'Smash' }).click();
+// Before the snap every coverage gets a four-man rush, but Cover 0's row blitzes, as Cover 0 always does: the chart
+// says so.
+assert.match(await page.textContent('#chartHint'), /^Average yards a play, from Gun Trips against a .+ front rushing four \(Cover 0 always blitzes\)\. /);
 await page.click('#runChart');
 assert.match(await page.textContent('#runChart'), /^Running… [1-5] of 5$/, 'the chart says how far along it is');
 await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });

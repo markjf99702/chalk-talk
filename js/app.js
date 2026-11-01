@@ -952,7 +952,7 @@ function chartHint() {
   const fm = byId(FORMATIONS, state.off.formation).name;
   if (state.side === 'D') return `Average yards a play allowed, against ${fm}. A play counts as a success for the offense if it gains 4 yards or more.${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure;
-  return `Average yards a play, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four'}.`
+  return `Average yards a play, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}.`
     + `${hidden() ? ' Their real call stays hidden until the snap.' : ''} A play counts as a success if it gains 4 yards or more.${again()}`;
 }
 function again() {
