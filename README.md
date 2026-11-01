@@ -2,7 +2,7 @@
 
 **Use it: [chalk-talk.junkdrawer.works](https://chalk-talk.junkdrawer.works/)**
 
-**A football coach's board you can run.** Call the offense or the defense, snap it, and watch every route, block, rush and coverage play out in Xs and Os. Afterwards it tells you what happened and why: who came free, which defender was left with two receivers to cover, or how many blockers there were for the defenders in the box. Tap any player to learn his position and his job on that play.
+**A football coach's board you can run.** Call the offense or the defense, snap it, and watch every route, block, rush and coverage play out in Xs and Os. Afterwards it tells you what happened and why: who came free, how the call does against theirs, and how many blockers there were for the defenders in the box. Tap any player to learn his position and his job on that play.
 
 <p align="center">
   <img src="docs/phone-call.png" alt="The board before the snap: Gun Trips against a nickel defense, with the routes for Smash drawn in white chalk and the defense's alignment in yellow Xs" width="250">
@@ -24,7 +24,7 @@
 - **Share a play.** "Copy link to this play" makes a link that replays exactly the same snap for whoever opens it.
 - No account and no server. Your last calls stay in your browser. It works offline and installs to a phone's home screen.
 
-The simulator is a coaching model, not physics. Blocks are pairs that push each other until one wins, coverage is defenders following receivers or guarding spots, and tackling is a dice roll weighted by angle and who's involved. Over many snaps it comes out near real football: about four yards a carry, around 60% of passes complete, sacks on about one dropback in thirty. The classic matchups mostly work the way coaches draw them up: four verticals hurt Cover 2 and Cover 3 and stall against Cover 4's extra deep defender, crossing routes get open against man coverage, and a safety down in the box slows the run.
+The simulator is a coaching model, not physics. Blocks are pairs that push each other until one wins, coverage is defenders following receivers or guarding spots, and tackling is a dice roll weighted by angle and who's involved. Over many snaps it comes out near real football: about four yards a carry, around 60% of passes complete, sacks on about one dropback in twenty-five. The classic matchups mostly work the way coaches draw them up: four verticals hurt Cover 2 and Cover 3 and do least against Cover 4's extra deep defender, crossing routes get open against Cover 1's man coverage, and Cover 3's extra safety in the box slows the run.
 
 ## Running it
 
@@ -49,5 +49,5 @@ To put it online with GitHub Pages: **Settings → Pages → Build and deploymen
 - `js/rng.js`: a seeded random source, so a snap replays exactly from its seed.
 - `fonts/`: Barlow, Barlow Condensed, Permanent Marker and Patrick Hand (SIL Open Font License), served from here so nothing loads from elsewhere.
 - `sw.js`: keeps a copy for using offline, and opens from it when the connection isn't answering. `FILES` in it is a fingerprint of the files it keeps: change one and `npm test` says what to set it to, so a release never leaves the copy half old.
-- `test/sim.test.mjs`: every call against every defense runs to a finish, formations are legal, coverages count right, and the numbers look like football. `test/e2e.mjs`: uses the real page in Chromium. `test/onefile.mjs`: builds the one-file copy and uses it, opened from a file and from a web address, and without its document wrapper (skipped without esbuild).
+- `test/sim.test.mjs`: every call against every defense runs to a finish, formations are legal, coverages count right, the numbers look like football, and the matchups above come out as the README says. `test/e2e.mjs`: uses the real page in Chromium. `test/onefile.mjs`: builds the one-file copy and uses it, opened from a file and from a web address, and without its document wrapper (skipped without esbuild).
 - `scripts/build.mjs`: bundles everything into one HTML file.

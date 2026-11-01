@@ -307,9 +307,9 @@ test('coverages put the right number deep and the right number rushing', () => {
 
 test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, around 60% complete, a sack on about
-  // one dropback in thirty. From twelve start seeds (77 + k * 7919) this recipe gives 3.80-4.90 yards a carry, 57-61%
-  // complete, sacks on 2.6-4.4% of dropbacks and interceptions on 2.0-3.5% of throws; at 700 snaps a carry ranged
-  // from 3.1 to 6.1 yards.
+  // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.80-4.90 yards a carry,
+  // 57-61% complete, sacks on 2.6-4.4% of dropbacks and interceptions on 2.0-3.5% of throws; at 700 snaps a carry
+  // ranged from 3.1 to 6.1 yards.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -324,4 +324,43 @@ test('over many snaps the numbers look like football', () => {
   assert.ok(comp > 0.52 && comp < 0.66, `completion rate ${comp.toFixed(3)}`);
   assert.ok(sack > 0.02 && sack < 0.06, `sack rate ${sack.toFixed(3)}`);
   assert.ok(int > 0.01 && int < 0.05, `interception rate ${int.toFixed(3)}`);
+});
+
+test('the README\'s matchups', () => {
+  // The README says four verticals do least against Cover 4's extra deep defender (of Cover 2, 3 and 4), crossing
+  // routes get open against Cover 1's man coverage, and runs struggle with more defenders in the box than blockers.
+  // Each cell is 240 snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start
+  // seeds (2718, 31415, 16180, 14142) Four Verticals gained 3.9-7.3 yards a dropback fewer against Cover 4 than Cover 3
+  // (and 12.3-13.8 fewer than Cover 2), Mesh threw to its crossers on 41-48% of throws against Cover 1 and 15-22%
+  // against Cover 3, and runs succeeded 40-45% of the time at even numbers in the box and 17-21% with two more
+  // defenders than blockers. A change to the balance that undoes one of these has to change the README with it.
+  let seed = 2718;
+  const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
+  const cell = (play, coverage, each) => {
+    for (const fm of FORMATIONS) for (const fr of FRONTS) for (let k = 0; k < 15; k++) {
+      const call = { formation: fm.id, play, front: fr.id, coverage, pressure: k % 4 ? 'four' : 'blitz', flip: k % 2 === 1 };
+      each(call, seed, simulate(call, seed)); seed++;
+    }
+  };
+  const verts = {};
+  for (const c of ['c2', 'c3', 'c4']) { let y = 0, n = 0; cell('verts', c, (call, s, P) => { y += P.result.yards; n++; }); verts[c] = y / n; }
+  assert.ok(verts.c4 < verts.c3 && verts.c4 < verts.c2, `Four Verticals, yards a dropback: Cover 2 ${verts.c2.toFixed(1)}, Cover 3 ${verts.c3.toFixed(1)}, Cover 4 ${verts.c4.toFixed(1)}`);
+  const crossers = {};
+  for (const c of ['c1', 'c3']) {
+    let throws = 0, cross = 0;
+    cell('mesh', c, (call, s, P) => {
+      const t = P.events.find(e => e.kind === 'throw');
+      if (t) { throws++; if (['drag', 'drag6'].includes(prepare(call, s).P[t.who].job.route)) cross++; }
+    });
+    crossers[c] = cross / throws;
+  }
+  assert.ok(crossers.c1 > crossers.c3, `Mesh's throws to its crossers: Cover 1 ${(100 * crossers.c1).toFixed(0)}%, Cover 3 ${(100 * crossers.c3).toFixed(0)}%`);
+  const box = { 0: [0, 0], 2: [0, 0] };
+  for (const pl of PLAYS.filter(p => p.type === 'run')) for (const cv of COVERAGES) for (const fm of FORMATIONS) for (const fr of FRONTS) for (let k = 0; k < 3; k++) {
+    const P = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: k % 4 ? 'four' : 'blitz', flip: k % 2 === 1 }, seed++);
+    const b = box[P.box.box - P.box.blockers];
+    if (b) { b[0]++; if (won(P.result)) b[1]++; }
+  }
+  const rate = d => box[d][1] / box[d][0];
+  assert.ok(rate(2) < rate(0), `runs that succeed: ${(100 * rate(0)).toFixed(0)}% at even numbers in the box (${box[0][0]} runs), ${(100 * rate(2)).toFixed(0)}% with two more defenders than blockers (${box[2][0]})`);
 });
