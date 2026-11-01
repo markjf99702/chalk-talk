@@ -796,7 +796,7 @@ for (const side of ['O', 'D']) {
     assert.ok(Math.abs(seen.chip - before.chip) <= 2 || (seen.y === 0 && seen.mine >= 0), `the chip just picked went from ${Math.round(before.chip)} px to ${Math.round(seen.chip)} px on the screen (scrolled ${seen.y} px)`);
   }
   await p.setViewportSize({ width: 800, height: 900 }); // (the page hears of it at its next frame)
-  await until(async () => (await where()).after === 'theirs', 3000, 'in a narrow window the result card isn\'t after the calls');
+  await until(async () => (await where()).after === 'jobs', 3000, 'in a narrow window the result card isn\'t after the calls and every player\'s job');
   await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
   assert.match(await p.textContent('#why'), /Why ↓$/, 'in a narrow window the button on the board doesn\'t point down to the result');
   await p.setViewportSize({ width: 1280, height: 800 });
@@ -979,6 +979,70 @@ const phone = async () => {
   return p;
 };
 const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+// Every player's job, without tapping the board: a closed section under Their call, taking no room until it's opened.
+// In it, the board in words (which a screen reader hears as the board's description) and a button for every player,
+// left to right as the board shows them, that opens his card. Before the snap the other side's jobs stay hidden, as on
+// the board. From the keyboard: Enter on a button opens his card with the focus on it, and Escape or × closes it and
+// goes back to the button. Calling the defense turns the board around, and the buttons and the words with it.
+{
+  const p = await phone();
+  const jobs = () => p.evaluate(() => {
+    const { state, board } = window.chalkTalk, team = t => [...document.querySelectorAll('.jobs-team')][t === 'O' ? 0 : 1];
+    const names = t => [...team(t).querySelectorAll('button')].map(b => b.textContent);
+    // the order the board shows them in: by where each man is drawn, left to right
+    const drawn = t => state.play.players.filter(q => q.team === t).sort((a, b) => board.sx(a.x) - board.sx(b.x) || Math.abs(a.y) - Math.abs(b.y)).map(q => q.label);
+    return { open: document.getElementById('jobs').open, tall: document.getElementById('jobs').getBoundingClientRect().height, off: names('O'), def: names('D'), drawnOff: drawn('O'), drawnDef: drawn('D'), words: document.getElementById('boardWords').textContent };
+  });
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', flip: false }); Object.assign(state.def, { front: 'nickel', coverage: 'c2', pressure: 'four' }); lineUp(); });
+  let j = await jobs();
+  assert.ok(!j.open && j.tall < 70, `every player's job takes ${Math.round(j.tall)} px before it's opened`);
+  assert.equal(j.off.length, 11);
+  assert.equal(j.def.length, 11);
+  assert.deepEqual(j.off.map(t => t.split(' · ')[0]), j.drawnOff, 'the offense isn\'t left to right as the board shows it');
+  assert.deepEqual(j.def.map(t => t.split(' · ')[0]), j.drawnDef, 'the defense isn\'t left to right as the board shows it');
+  assert.equal(j.off[0], 'X · Split end (X)');
+  assert.ok(j.off.includes('LT · Left tackle') && j.def.includes('FS · Free safety'), `the buttons: ${j.off.join(', ')} / ${j.def.join(', ')}`);
+  assert.match(j.words, /^Gun Trips, strong right: a tight end and two receivers right, a receiver left; the quarterback in the shotgun, a back beside him\. The defense: two safeties deep, \d in the box against \d blockers, both corners about 5 yards off\.$/, `the board in words: ${j.words}`);
+  // what a screen reader hears for the board: its name, and the same words as its description
+  const cdp = await p.context().newCDPSession(p);
+  const { root } = await cdp.send('DOM.getDocument');
+  const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '#board' });
+  const ax = (await cdp.send('Accessibility.getPartialAXTree', { nodeId, fetchRelatives: false })).nodes[0];
+  assert.equal(ax.description?.value, j.words, 'a screen reader doesn\'t hear the board in words as its description');
+  await cdp.detach();
+  // open it from the keyboard and use a button: the free safety's card, his job hidden before the snap
+  await p.focus('#jobs summary');
+  await p.keyboard.press('Enter');
+  assert.equal((await jobs()).open, true, 'Enter on the summary doesn\'t open every player\'s job');
+  const fs = p.locator('.jobs-team button', { hasText: 'FS · Free safety' });
+  await fs.focus();
+  await p.keyboard.press('Enter');
+  const card = () => p.evaluate(() => ({ open: !document.getElementById('who').hidden, pos: document.getElementById('whoPos').textContent, job: document.getElementById('whoJob').textContent, focus: document.activeElement.id || document.activeElement.textContent }));
+  let seen = await card();
+  assert.deepEqual([seen.open, seen.pos, seen.focus], [true, 'FS · Free safety', 'who'], `the free safety's button: ${JSON.stringify(seen)}`);
+  assert.match(seen.job, /hidden until the snap/, 'the other side\'s job shows before the snap');
+  await p.keyboard.press('Escape');
+  seen = await card();
+  assert.deepEqual([seen.open, seen.focus], [false, 'FS · Free safety'], 'Escape doesn\'t close the card and go back to his button');
+  // after the snap his job is out; × closes the card and goes back to the button too
+  await p.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); });
+  await p.locator('.jobs-team button', { hasText: 'FS · Free safety' }).focus();
+  await p.keyboard.press('Enter');
+  assert.match((await card()).job, /^On this play:/, 'the free safety\'s job isn\'t out after the snap');
+  await p.keyboard.press('Tab');
+  assert.equal(await p.evaluate(() => document.activeElement.id), 'whoClose', 'Tab from the card doesn\'t go to its close button');
+  await p.keyboard.press('Enter');
+  seen = await card();
+  assert.deepEqual([seen.open, seen.focus], [false, 'FS · Free safety'], '× doesn\'t close the card and go back to his button');
+  // calling the defense: the board turned around, the buttons and the words with it
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; document.querySelector('[data-side="D"]').click(); Object.assign(state.off, { formation: 'trips', play: 'smash', flip: false }); lineUp(); });
+  j = await jobs();
+  assert.deepEqual(j.off.map(t => t.split(' · ')[0]), j.drawnOff, 'calling the defense, the offense isn\'t left to right as the board shows it');
+  assert.equal(j.off[0], 'Z · Flanker (Z)', 'calling the defense, the offense\'s right isn\'t on the board\'s left');
+  assert.match(j.words, /^Gun Trips, strong left: a tight end and two receivers left, a receiver right;/, `calling the defense, the board in words: ${j.words}`);
+  await p.context().close();
+}
 
 // Playback: Pause holds the clock where it is, and ▶ goes on from there. Half speed plays about half a second of the
 // play each second, and Snap again from the result card snaps the same two calls with a new roll of the dice.

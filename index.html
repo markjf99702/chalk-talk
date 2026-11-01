@@ -42,11 +42,12 @@
   <main class="grid">
     <section class="stage" aria-label="The board">
       <div class="board-wrap">
-        <canvas id="board" role="img" aria-label="The field, with the offense drawn as circles and the defense as Xs"></canvas>
+        <canvas id="board" role="img" aria-label="The field, with the offense drawn as circles and the defense as Xs" aria-describedby="boardDesc"></canvas>
+        <p id="boardDesc" hidden></p>
         <p class="matchup" id="matchup"></p>
         <p class="caption" id="caption" aria-live="polite"></p>
         <button type="button" class="why" id="why" hidden></button>
-        <div class="who" id="who" hidden>
+        <div class="who" id="who" role="dialog" aria-labelledby="whoPos" aria-describedby="whoJob" tabindex="-1" hidden>
           <button type="button" class="who-x" id="whoClose" aria-label="Close the player card">×</button>
           <div class="who-body" id="whoBody">
             <p class="who-pos" id="whoPos"></p>
@@ -84,6 +85,13 @@
         <button type="button" class="ghost look" id="theirsLook">New look</button>
         <div id="theirsBody"></div>
       </section>
+
+      <details class="card jobs" id="jobs">
+        <summary>Every player's job</summary>
+        <p class="board-words" id="boardWords"></p>
+        <p class="hint" id="jobsHint"></p>
+        <div id="jobsBody"></div>
+      </details>
 
       <section class="card result" id="result" hidden>
         <p class="kicker" id="resKicker"></p>

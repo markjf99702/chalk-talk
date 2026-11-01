@@ -145,6 +145,7 @@ function lineUp(keep = false) {
   syncTransport();
   syncTheirs();
   renderMatchup();
+  renderJobs();
   setCaption(firstHint ? FIRST_HINT : '');
   draw();
   keepPlay();
@@ -187,6 +188,7 @@ function play() {
   $('why').hidden = true;
   syncBoard();
   syncTheirs();
+  syncJobs();
   renderMatchup();
   syncTransport();
   if (board.selected >= 0 && cardClosesOnPlay()) { board.selected = -1; hideWho(); }
@@ -392,6 +394,7 @@ $('board').addEventListener('pointerup', e => {
 function pick(x, y) {
   const r = $('board').getBoundingClientRect();
   const near = board.hit(x - r.left, y - r.top);
+  opener = null;
   if (!near.length) { board.selected = -1; hideWho(); } else {
     const i = near[(near.indexOf(board.selected) + 1) % near.length];
     board.selected = i; dropHint(); showWho(i);
@@ -420,15 +423,27 @@ function hitArea(el) {
   return { l: b.left - out('left'), r: b.right + out('right'), t: b.top - out('top'), b: b.bottom + out('bottom') };
 }
 const within = (b, x, y) => x >= b.l && x <= b.r && y >= b.t && y <= b.b;
-$('whoClose').addEventListener('click', () => { board.selected = -1; hideWho(); draw(); });
+$('whoClose').addEventListener('click', closeWho);
+// Closing the card, with × or Escape, takes the focus back to the button in "Every player's job" that opened it, if
+// the focus was on the card.
+function closeWho() {
+  const back = opener?.isConnected && ($('who').contains(document.activeElement) || document.activeElement === document.body) ? opener : null;
+  board.selected = -1;
+  hideWho();
+  draw();
+  back?.focus();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('who').hidden) closeWho(); });
 // On a narrow board the card leaves out what the position is in general until it's asked for, and keeps it open for
 // the next player once it has been.
 let moreAbout = false;
 onButton($('whoMore'), () => { moreAbout = !moreAbout; syncMore(); placeWho(); });
 
+// What a player's position is called, and what it is in general.
+const position = p => POSITIONS[p.info] || POSITIONS[p.label] || [p.label, ''];
 function showWho(i) {
   const p = state.play.players[i];
-  const [title, about] = POSITIONS[p.info] || POSITIONS[p.label] || [p.label, ''];
+  const [title, about] = position(p);
   const hiddenJob = p.team !== state.side && hidden();
   const fresh = $('who').hidden || $('who').dataset.i !== String(i);
   $('who').dataset.i = i;
@@ -787,6 +802,74 @@ function newLook(e) {
 }
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);
+
+// ---------------------------------------------------------------- every player's job
+
+// Every player as a button, left to right as the board shows them, each opening his card on the board: the way to them
+// from a keyboard or a screen reader, which can't tap the board (WCAG 2.2, 2.1.1 Keyboard). Above them, the board in
+// words, which a screen reader also hears as the board's description. Both are drawn again for each lineup.
+let opener = null; // the button that opened the card (see closeWho())
+function renderJobs() {
+  const P = state.play, host = $('jobsBody');
+  opener = null;
+  host.textContent = '';
+  for (const team of ['O', 'D']) {
+    const wrap = document.createElement('div');
+    wrap.className = 'jobs-team';
+    wrap.innerHTML = `<h3 class="pick-label">${team === 'O' ? 'Offense' : 'Defense'}</h3>`;
+    const row = document.createElement('div');
+    row.className = 'chips';
+    // left to right on the board, and from the line back where two are in a file (the center, the quarterback, the backs)
+    const men = P.players.filter(p => p.team === team).sort((a, b) => board.sx(a.x) - board.sx(b.x) || Math.abs(a.y) - Math.abs(b.y));
+    for (const p of men) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = `${p.label} · ${position(p)[0]}`;
+      b.addEventListener('click', () => {
+        board.selected = p.i;
+        dropHint();
+        showWho(p.i);
+        draw();
+        opener = b;
+        $('who').focus({ preventScroll: true });
+      });
+      row.append(b);
+    }
+    wrap.append(row);
+    host.append(wrap);
+  }
+  // The board's description is a copy of them: a browser doesn't take one from inside a closed section. The copy is out
+  // of sight, and so isn't read twice.
+  $('boardWords').textContent = $('boardDesc').textContent = boardWords(P);
+  syncJobs();
+}
+function syncJobs() {
+  $('jobsHint').textContent = 'Left to right as the board shows them. Each one opens his card on the board, with his job on this play.'
+    + (hidden() ? ' Their jobs stay hidden until the snap, as on the board.' : '');
+}
+
+// The board in words, as the teams line up: the formation, where the receivers and the backs are, and then what the
+// defense shows: the safeties deep, the box count and the corners. Left and right are the board's, as it's shown.
+function boardWords(P) {
+  const fm = byId(FORMATIONS, P.call.formation);
+  const lr = sd => ((sd > 0) !== board.flip ? 'right' : 'left'); // sd: the offense's right (+1) or left (-1)
+  const strong = P.call.flip ? -1 : 1;
+  const many = (n, one, more) => (n === 1 ? `a ${one}` : `${COUNT[n] || n} ${more}`);
+  const side = sd => {
+    const on = P.players.filter(p => p.team === 'O' && Math.sign(p.x) === sd);
+    const parts = [[on.filter(p => p.cls === 'te').length, 'tight end', 'tight ends'], [on.filter(p => p.cls === 'wr').length, 'receiver', 'receivers']];
+    return parts.filter(([n]) => n).map(([n, one, more]) => many(n, one, more)).join(' and ') || 'nobody';
+  };
+  const sides = side(strong) === side(-strong) ? `${side(strong)} each side` : `${side(strong)} ${lr(strong)}, ${side(-strong)} ${lr(-strong)}`;
+  const backs = P.players.filter(p => p.cls === 'rb' || p.cls === 'fb').length;
+  const backfield = fm.under ? `the quarterback under center, ${many(backs, 'back', 'backs')} behind him` : `the quarterback in the shotgun, ${many(backs, 'back', 'backs')} beside him`;
+  const high = P.box.high, deep = high >= 2 ? `${COUNT[high]} safeties deep` : high === 1 ? 'one safety deep' : 'nobody deep';
+  const depth = y => (y < 2.5 ? 'pressed' : y < 6 ? 'about 5 yards off' : '7 yards or more off'); // as the corners' read says
+  const cbs = P.players.filter(p => p.label === 'CB').map(p => depth(p.y));
+  const corners = cbs.length === 2 && cbs[0] === cbs[1] ? `both corners ${cbs[0]}` : cbs.map((d, k) => `${k ? 'the other' : 'one corner'} ${d}`).join(', ');
+  return `${fm.name}, strong ${lr(strong)}: ${sides}; ${backfield}. The defense: ${deep}, ${P.box.box} in the box against ${P.box.blockers} blockers, ${corners}.`;
+}
 
 // ---------------------------------------------------------------- the result
 

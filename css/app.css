@@ -468,6 +468,15 @@ button:disabled { cursor: default; }
 .bar-track.idle { border-bottom: 1px dashed var(--line-strong); }
 .bar-row.idle .bar-val { color: var(--muted); font-weight: 400; }
 
+/* every player's job: closed until it's asked for, like the playbook's sections */
+.card.jobs { padding: 0 16px; }
+.jobs > summary { cursor: pointer; padding: 13px 0; font-family: var(--cond); font-weight: 700; font-size: 21px; letter-spacing: .01em; list-style-position: inside; }
+.jobs[open] > summary { border-bottom: 1px solid var(--line); }
+.board-words { margin: 12px 0 0; font-size: 15px; }
+.jobs-team { margin-top: 12px; }
+.jobs-team:last-child { padding-bottom: 16px; }
+.jobs-team .chip { font-size: 14px; }
+
 /* ---------------------------------------------------------------- playbook */
 
 .playbook { max-width: 1280px; margin: 28px auto 0; padding: 0 var(--gutter); }
