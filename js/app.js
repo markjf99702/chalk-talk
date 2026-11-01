@@ -275,13 +275,13 @@ function sayResult() {
 const resultBeside = () => $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
 
 // On a computer the result card goes at the top of the right-hand column, beside the board, so it's there as the play
-// ends, and when the call changes it goes and the calls are back at the top. On a phone or a tablet it comes after the
+// ends (over the key, if that's open), and when the call changes it goes and the calls are back at the top. On a phone or a tablet it comes after the
 // calls, under the board, with the button on the board to take you down to it. It's moved in the page rather than only
 // drawn somewhere else, so the keyboard and a screen reader come to it where the eye does.
 const wide = matchMedia('(min-width: 960px)');
 function placeResult() {
   const r = $('result'), focused = r.contains(document.activeElement) ? document.activeElement : null;
-  if (wide.matches) $('mine').before(r); else $('chart').before(r);
+  if (wide.matches) $('key').before(r); else $('chart').before(r);
   focused?.focus({ preventScroll: true });
 }
 
@@ -437,6 +437,38 @@ $('scrub').addEventListener('input', e => {
 });
 for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { state.speed = +b.dataset.speed; save(); syncTransport(); });
 $('labels').addEventListener('click', () => { state.labels = !state.labels; board.labels = state.labels; save(); syncTransport(); draw(); });
+// Key: how to read the board, in a card just under the board on a phone (where the board stays at the top, so the two
+// are on the screen together) and at the top of the column beside it on a computer. Key again, or its ×, puts it away.
+$('keyOpen').addEventListener('click', () => { if ($('key').hidden) openKey(); else closeKey(); });
+$('keyClose').addEventListener('click', () => closeKey(true));
+function openKey() {
+  $('key').hidden = false;
+  $('keyOpen').setAttribute('aria-expanded', 'true');
+  $('key').scrollIntoView({ block: 'start', behavior: smooth() });
+  $('keyTitle').focus({ preventScroll: true });
+}
+function closeKey(back = false) {
+  $('key').hidden = true;
+  $('keyOpen').setAttribute('aria-expanded', 'false');
+  if (back) $('keyOpen').focus({ preventScroll: true });
+}
+// The chalk dust the board punches out of its lines (see Board.makeGrain()), as a mask for the key's drawings on the
+// chalkboard: the same specks, the same size on the screen.
+{
+  const g = document.createElement('canvas'), c = g.getContext('2d');
+  g.width = g.height = 160;
+  c.fillRect(0, 0, 160, 160);
+  c.globalCompositeOperation = 'destination-out';
+  let a = 7;
+  const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+  for (let i = 0; i < 2600; i++) {
+    c.fillStyle = `rgba(0,0,0,${0.15 + rnd() * 0.5})`;
+    const sz = rnd() < 0.85 ? 1 : 2;
+    c.fillRect(Math.floor(rnd() * 160), Math.floor(rnd() * 160), sz, sz);
+  }
+  document.documentElement.style.setProperty('--grain', `url(${g.toDataURL()})`);
+  document.documentElement.style.setProperty('--grain-size', `${160 / Math.min(devicePixelRatio || 1, 2.5)}px`);
+}
 
 // Tap a player to see who he is and what he's doing. On a crowded line a fingertip covers two or three players, so a tap
 // where the picked player is goes to the next one there: tap again until it's the one you meant. A tap on empty field
@@ -1338,18 +1370,7 @@ function playbook() {
   // drag6 and bflat are the same routes as drag and flat at another depth or from the backfield, so they're listed once.
   const routeDesc = { flat: 'Out toward the sideline about four yards past the line, run by a receiver or by a back coming out of the backfield.' };
   sec('Routes', false, dl(Object.entries(ROUTES).filter(([k]) => !['drag6', 'bflat'].includes(k)).map(([k, r]) => [r.name.replace(/^\w/, c => c.toUpperCase()), routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())])));
-  sec('How to read the board', false, dl([
-    ['O and X', 'The offense is drawn as circles (the center as a square) and the defense as Xs, the way coaches draw them.'],
-    ['Lines with arrows', 'Routes for receivers and the path for a ball carrier. A dashed route starts late: the back blocks first.'],
-    ['Numbers on routes', 'The order the quarterback reads them: 1 is the first receiver he looks at, then 2, and so on. They\'re up before the snap, on your own pass play, or theirs once it\'s out.'],
-    ['A line with a bar across the end', 'A block.'],
-    ['Dashed line to a bubble', 'A zone drop: the defender goes to that area.'],
-    ['Dotted line to a receiver', 'Man-to-man coverage on that receiver.'],
-    ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn thicker, with a double head, in the bright colour.'],
-    ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.'],
-    ['Dotted line from the quarterback', 'The throw: from where the ball left his hand to where it came down.'],
-    ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play. After a play that went past the line, the board pulls back to show all of it, from the backfield to the spot.'],
-  ]));
+  sec('How to read the board', false, keyList());
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
   // areas in ZONES (js/playbook.js), as the player cards name them.
   sec('Words coaches use', false, dl([
@@ -1373,6 +1394,69 @@ function playbook() {
     ['Big play', 'A run of 10 yards or more, or a pass play that gains 20 or more: a common way analysts count explosive plays (Sharp Football Analysis, for one). Teams draw the line in different places.'],
     ['Takeaway', 'The defense taking the ball away: an interception, or a fumble it recovers. There are no fumbles on this board, so here a takeaway is an interception.'],
   ]));
+}
+
+// ---------------------------------------------------------------- the key
+
+// How to read the board, each mark with a small drawing of it in the board's own colours (the CSS custom properties the
+// board reads, so it follows the chalkboard and the whiteboard), at about the size the board draws it on a phone. It's
+// in the playbook, and in a card the Key button under the board opens, under the board on a phone and beside it on a
+// computer.
+const BOARD_KEY = [
+  ['O and X', 'The offense is drawn as circles (the center as a square) and the defense as Xs, the way coaches draw them. Once the play runs, an offensive player with the ball is filled in.', 'marks'],
+  ['The line of scrimmage', 'The dashed line across the field, where the ball is snapped. The yard numbers count from it.', 'los'],
+  ['The ball', 'At the center\'s feet before the snap. Thrown, it rises off the field, with its shadow under it.', 'ball'],
+  ['Lines with arrows', 'Routes for receivers and the path for a ball carrier. The quarterback\'s drop is the short broken line behind him.', 'route'],
+  ['A dashed line with an arrow', 'A route that starts late: the back blocks first, then goes out.', 'late'],
+  ['Numbers on routes', 'The order the quarterback reads them: 1 is the first receiver he looks at, then 2, and so on. They\'re up before the snap, on your own pass play, or theirs once it\'s out.', 'reads'],
+  ['A line with a bar across the end', 'A block.', 'block'],
+  ['Dashed line to a bubble', 'A zone drop: the defender goes to that area.', 'zone'],
+  ['Dotted line to a receiver', 'Man-to-man coverage on that receiver.', 'man'],
+  ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn thicker, with a double head, in the bright colour.', 'rush'],
+  ['Rings', 'As the play runs, a dashed ring in the bright colour is round the man the words on the board are about. A thin ring is round the player you tapped.', 'rings'],
+  ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.', 'trail'],
+  ['Dotted line from the quarterback', 'The throw: from where the ball left his hand to where it came down.', 'throw'],
+  ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play. After a play that went past the line, the board pulls back to show all of it, from the backfield to the spot.', 'whistle'],
+];
+function keyList() {
+  return `<dl class="key-list">${BOARD_KEY.map(([term, words, art]) => `<div class="key-row"><dt><span class="key-art" aria-hidden="true">${keyArt(art)}</span>${esc(term)}</dt><dd>${esc(words)}</dd></div>`).join('')}</dl>`;
+}
+
+// The drawings, 72 by 44, drawn as Board draws them: the same dashes, line widths, arrowheads and fades. Classes in
+// css/app.css colour them: o offense, d defense, l the line of scrimmage, b the ball, h the bright colour; f fills.
+function keyArt(kind) {
+  const pts = p => p.map(q => q.join(',')).join(' ');
+  const line = (p, cls, more = '') => `<polyline class="${cls}" points="${pts(p)}"${more}/>`;
+  // an arrowhead at b, coming from a, as Board.arrow() draws it
+  const head = (a, b, cls, s = 6) => {
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), at = d => [+(b[0] - s * Math.cos(ang + d)).toFixed(2), +(b[1] - s * Math.sin(ang + d)).toFixed(2)];
+    return `<polygon class="f${cls}" points="${pts([b, at(-0.45), at(0.45)])}"/>`;
+  };
+  const arrow = (p, cls, more = '') => line(p, cls, more) + head(p.at(-2), p.at(-1), cls);
+  const O = (x, y, more = '') => `<circle class="o" cx="${x}" cy="${y}" r="5.5"${more}/>`;
+  const X = (x, y) => `<path class="d" d="M${x - 4.4} ${y - 4.4}L${x + 4.4} ${y + 4.4}M${x + 4.4} ${y - 4.4}L${x - 4.4} ${y + 4.4}"/>`;
+  const C = (x, y) => `<rect class="o" x="${x - 5}" y="${y - 5}" width="10" height="10"/>`;
+  const ball = (x, y) => `<ellipse class="fb" cx="${x}" cy="${y}" rx="5" ry="3.2" transform="rotate(-28.6 ${x} ${y})"/>`;
+  const num = (x, y, n) => `<text class="key-num fo" x="${x}" y="${y}">${n}</text>`;
+  const art = {
+    marks: O(11, 22) + C(28, 22) + O(45, 22, ' style="fill: var(--off)"') + X(61, 22),
+    los: line([[5, 24], [67, 24]], 'l', ' stroke-dasharray="6 5" opacity=".85"') + X(36, 12) + C(36, 34),
+    ball: ball(22, 26) + '<ellipse cx="50" cy="30" rx="4.4" ry="2.4" style="fill: var(--field-line)" opacity=".25"/>' + ball(50, 14),
+    route: arrow([[12, 36], [12, 11], [54, 11]], 'o') + O(12, 36),
+    late: arrow([[14, 34], [56, 14]], 'o', ' stroke-dasharray="6 4"') + O(14, 34),
+    reads: arrow([[12, 37], [12, 15], [38, 15]], 'o') + num(47, 15, 1) + arrow([[58, 37], [58, 21]], 'o') + num(58, 12, 2) + O(12, 37) + O(58, 37),
+    block: line([[18, 32], [37, 21.5]], 'o') + `<path class="o" d="M34.4 16.9L39.6 26.1"/>` + O(18, 32) + X(54, 12),
+    zone: line([[12, 34], [46, 15]], 'd', ' stroke-dasharray="4 5"') + '<ellipse class="fd" cx="46" cy="15" rx="20" ry="10" opacity=".16"/>'
+      + '<ellipse class="d" cx="46" cy="15" rx="20" ry="10" stroke-dasharray="3 5" opacity=".5"/>' + X(12, 34),
+    man: line([[14, 12], [56, 32]], 'd', ' stroke-dasharray="1 5" stroke-width="2.2"') + X(14, 12) + O(56, 32),
+    // a rusher's arrow, and a blitzer's: thicker, in the bright colour, with a second head a head's length back
+    rush: arrow([[13, 9], [23, 35]], 'd') + line([[45, 9], [56, 35]], 'h', ' stroke-width="3.2"') + head([45, 9], [56, 35], 'h', 7.2) + head([45, 9], [52.9, 27.6], 'h', 7.2) + X(13, 9) + X(45, 9),
+    rings: O(20, 22) + `<circle class="h" cx="20" cy="22" r="11.5" stroke-width="2.2" stroke-dasharray="3.9 2.5"/>` + X(54, 22) + `<circle class="d" cx="54" cy="22" r="10.5" stroke-width="1.5" opacity=".9"/>`,
+    trail: `<g opacity=".33">${arrow([[12, 38], [12, 11], [52, 11]], 'o')}</g>` + line([[12, 38], [14, 30], [22, 24], [34, 22], [46, 25]], 'o', ' stroke-width="1.6" opacity=".42"') + O(46, 25),
+    throw: line([[13, 32], [51, 14]], 'b', ' stroke-dasharray="0.1 4.5" opacity=".8"') + O(12, 34) + O(59, 11) + ball(52, 14),
+    whistle: line([[4, 26], [68, 26]], 'o', ' stroke-width="2.5" opacity=".9"') + ball(17, 26) + '<text class="key-mark fo" x="26" y="14">+7</text>',
+  }[kind];
+  return `<svg viewBox="0 0 72 44" focusable="false">${art}</svg>`;
 }
 
 function techDiagram() {
@@ -1405,6 +1489,7 @@ if (kept) { // back after a reload: no new look from the other coach
 } else if (link !== 'ok' && state.auto) rollTheirs();
 renderChoosers();
 playbook();
+$('keyBody').innerHTML = keyList();
 clearChart();
 lineUp();
 syncTransport();

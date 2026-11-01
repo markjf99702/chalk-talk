@@ -903,14 +903,13 @@ for (const width of [320, 360, 375]) {
   await small.close();
 }
 
-// On a touch screen the things to tap are 44 px or so (the chips 42), and the speed buttons' 31 px pills take a tap
-// 44 px tall.
+// On a touch screen the things to tap are 44 px or so (the chips 42), and the speed buttons' 31 px pills, and the
+// 30 px Key beside the scrubber on a phone, take a tap 44 px tall.
 {
   const sizes = await page.evaluate(() => {
-    const short = (sel, min) => [...document.querySelectorAll(sel)].filter(e => e.getClientRects().length).map(e => e.getBoundingClientRect()).filter(b => b.height < min).length;
-    const speed = document.querySelector('[data-speed="1"]').getBoundingClientRect();
-    const reach = [-21, 21].every(dy => document.elementFromPoint(speed.left + speed.width / 2, speed.top + speed.height / 2 + dy)?.closest('[data-speed="1"]'));
-    return { coarse: matchMedia('(pointer: coarse)').matches, chips: short('.chip', 40), buttons: short('.ghost, .side-pick button, .tool, .switch', 44), reach };
+    const short = (sel, min) => [...document.querySelectorAll(sel)].filter(e => e.getClientRects().length && e.id !== 'keyOpen').map(e => e.getBoundingClientRect()).filter(b => b.height < min).length;
+    const reaches = sel => { const b = document.querySelector(sel).getBoundingClientRect(); return [-21, 21].every(dy => document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2 + dy)?.closest(sel)); };
+    return { coarse: matchMedia('(pointer: coarse)').matches, chips: short('.chip', 40), buttons: short('.ghost, .side-pick button, .tool, .switch', 44), reach: reaches('[data-speed="1"]') && reaches('#keyOpen') };
   });
   assert.ok(sizes.coarse, 'the phone context has a touch screen');
   assert.deepEqual(sizes, { coarse: true, chips: 0, buttons: 0, reach: true }, 'tap targets on a touch screen');
@@ -1368,6 +1367,70 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// How to read the board has a drawing of each mark, in the board's own colours in both looks (and on the chalkboard,
+// its chalk dust), with rows for the line of scrimmage and the ball. It's in the playbook, and Key, under the board,
+// opens it in a card: on a phone just under the board, which stays at the top of the screen, and on a computer at the
+// top of the column beside the board, under the result. Key again, or ×, puts it away, and × takes the focus back to Key.
+for (const colorScheme of ['light', 'dark']) {
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const key = await p.evaluate(() => {
+    const sec = [...document.querySelectorAll('#pbGrid details')].find(d => d.querySelector('summary').textContent === 'How to read the board');
+    const rows = [...sec.querySelectorAll('.key-row')].map(r => ({ term: r.querySelector('dt').lastChild.textContent, art: !!r.querySelector('dt .key-art[aria-hidden="true"] svg'), words: r.querySelector('dd').textContent }));
+    const { board } = window.chalkTalk, col = n => { const s = document.createElement('span'); s.style.color = board.colors[n]; document.body.append(s); const v = getComputedStyle(s).color; s.remove(); return v; };
+    const first = cls => sec.querySelector(`.key-art .${cls}`), cs = el => getComputedStyle(el);
+    return {
+      rows,
+      paint: { o: cs(first('o')).stroke, d: cs(first('d')).stroke, l: cs(first('l')).stroke, h: cs(first('h')).stroke, ball: cs(first('fb')).fill, board: cs(sec.querySelector('.key-art')).backgroundColor },
+      want: { o: col('off'), d: col('def'), l: col('los'), h: col('hot'), ball: col('ball'), board: col('board') },
+      dust: cs(sec.querySelector('.key-art svg')).maskImage || cs(sec.querySelector('.key-art svg')).webkitMaskImage,
+      card: document.getElementById('keyBody').textContent === sec.querySelector('.key-list').textContent,
+    };
+  });
+  assert.ok(key.rows.length >= 12 && key.rows.every(r => r.art && r.words.length > 5), `${colorScheme}: a row of the key without a drawing: ${JSON.stringify(key.rows.filter(r => !r.art))}`);
+  for (const term of ['O and X', 'The line of scrimmage', 'The ball', 'Lines with arrows', 'A dashed line with an arrow', 'Numbers on routes', 'A line with a bar across the end', 'Dashed line to a bubble', 'Dotted line to a receiver', 'Arrows from the defense', 'Trails', 'Dotted line from the quarterback', 'At the whistle']) {
+    assert.ok(key.rows.some(r => r.term === term), `${colorScheme}: the key has no row for ${term}`);
+  }
+  assert.deepEqual(key.paint, key.want, `${colorScheme}: the key's drawings aren't in the board's colours`);
+  assert.equal(key.dust !== 'none', colorScheme === 'dark', `${colorScheme}: the chalk dust on the key's drawings is ${key.dust}`);
+  assert.ok(key.card, 'the card by the board isn\'t the playbook\'s key');
+  if (colorScheme === 'dark') { await c.close(); continue; }
+
+  const at = () => p.evaluate(() => {
+    const r = id => { const b = document.getElementById(id).getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+    return { board: r('board'), button: r('keyOpen'), key: document.getElementById('key').hidden ? null : r('key'), stage: document.querySelector('.stage').getBoundingClientRect().bottom,
+      expanded: document.getElementById('keyOpen').getAttribute('aria-expanded'), focus: document.activeElement.id, result: document.getElementById('result').hidden ? null : r('result') };
+  });
+  const shut = await at();
+  assert.ok(shut.button.t >= shut.board.b && shut.button.b <= shut.stage, `the Key button isn't under the board: ${JSON.stringify(shut)}`);
+  assert.equal(shut.key, null, 'the key is open before it\'s asked for');
+  assert.equal(shut.expanded, 'false');
+  assert.ok(await p.evaluate(() => { const b = document.getElementById('keyOpen'), s = getComputedStyle(b, '::before'); return b.getBoundingClientRect().height - 2 * parseFloat(s.top); }) >= 44, 'the Key button is less than 44 px tall to tap');
+  await p.click('#keyOpen');
+  await until(async () => { const a = await at(); return a.key && Math.abs(a.key.t - a.stage) < 12; }, 3000, `the key didn't open just under the board: ${JSON.stringify(await at())}`);
+  const open = await at();
+  assert.ok(open.board.t >= -1 && open.board.b <= 844, 'the board went off the screen as the key opened');
+  assert.deepEqual([open.expanded, open.focus], ['true', 'keyTitle'], 'the key opened without saying so, or without the focus');
+  await p.click('#keyOpen');
+  assert.equal((await at()).key, null, 'Key again didn\'t put the key away');
+  await p.click('#keyOpen');
+  await p.click('#keyClose');
+  const closed = await at();
+  assert.deepEqual([closed.key, closed.expanded, closed.focus], [null, 'false', 'keyOpen'], '× didn\'t put the key away and go back to Key');
+
+  // a computer: beside the board, under the result
+  await p.setViewportSize({ width: 1280, height: 800 });
+  await p.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); });
+  await p.click('#keyOpen');
+  await until(async () => { const a = await at(); return a.key && a.key.t >= 0 && a.key.t < 40; }, 3000, `on a computer the key didn't come up at the top: ${JSON.stringify(await at())}`);
+  const wide = await at();
+  assert.ok(wide.key.l >= wide.board.r && wide.result && wide.result.b <= wide.key.t, `on a computer the key isn't beside the board, under the result: ${JSON.stringify(wide)}`);
+  assert.ok(wide.board.t >= 0 && wide.board.b <= 800, 'on a computer the board went off the screen as the key opened');
+  await c.close();
+}
+
 // The end of the play is chalked on the board: at the whistle (not before) the gain is written in marker by the ball,
 // as the headline counts it ("+30", "Sack −7", "Incomplete" by an × where it came down, "Picked off"), bigger for a big
 // play, with a line across the field at the spot of a run, a catch or a sack. The throw leaves a dotted line from his
@@ -1440,7 +1503,7 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   assert.ok(seen.ball.rx >= 7 * 0.62 - 0.01 && seen.ball.mark < 7, `on a phone the football is ${seen.ball.rx} px across a half, with a player's mark ${seen.ball.mark}`);
   assert.deepEqual(seen.bad, [], 'what\'s written at the whistle, against the headline');
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => seen.kinds[k]), `only these endings came up: ${JSON.stringify(seen.kinds)}`);
-  assert.match(await p.evaluate(() => [...document.querySelectorAll('.pb dt')].find(dt => dt.textContent === 'At the whistle').nextElementSibling.textContent), /"Incomplete" by an ×/);
+  assert.match(await p.evaluate(() => [...document.querySelectorAll('.pb dt')].find(dt => dt.lastChild.textContent === 'At the whistle').nextElementSibling.textContent), /"Incomplete" by an ×/);
   await p.context().close();
 }
 

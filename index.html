@@ -72,11 +72,18 @@
           <button type="button" role="radio" data-speed="1" aria-checked="true" aria-label="Full speed">1×</button>
         </div>
         <button type="button" class="tool toggle" id="labels" aria-pressed="true" aria-label="Position labels" title="Position labels">ABC</button>
+        <button type="button" class="tool toggle" id="keyOpen" aria-expanded="false" aria-controls="key" title="How to read the board">Key</button>
       </div>
       <p class="sr-only" id="say" role="status"></p>
     </section>
 
     <aside class="panel">
+      <section class="card key" id="key" aria-labelledby="keyTitle" hidden>
+        <h2 id="keyTitle" tabindex="-1">How to read the board</h2>
+        <button type="button" class="who-x" id="keyClose" aria-label="Close the key">×</button>
+        <div id="keyBody"></div>
+      </section>
+
       <section class="call card" id="mine">
         <h2 id="mineTitle">Your call</h2>
         <div id="mineBody"></div>

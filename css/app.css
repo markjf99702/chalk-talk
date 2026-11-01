@@ -355,7 +355,7 @@ button:disabled { cursor: default; }
 }
 .tool:disabled { opacity: .4; }
 .tool.toggle { width: auto; border-radius: 999px; padding: 0 10px; font-family: var(--cond); font-weight: 700; letter-spacing: .04em; color: var(--muted); }
-.tool.toggle[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
+.tool.toggle[aria-pressed="true"], .tool.toggle[aria-expanded="true"] { color: var(--ink); border-color: var(--ink); }
 /* the scrubber, with the clock at its left in the type of the play-by-play's times (a screen reader hears the time
    from the scrubber itself) */
 .scrubber { flex: 1; min-width: 40px; display: flex; align-items: center; gap: 6px; }
@@ -498,6 +498,37 @@ button:disabled { cursor: default; }
 .bar-track.idle { border-bottom: 1px dashed var(--line-strong); }
 .bar-row.idle .bar-val { color: var(--muted); font-weight: 400; }
 
+/* ---------------------------------------------------------------- the key */
+
+/* How to read the board, each mark with a drawing of it on a little board of its own (see keyList() in js/app.js): in
+   the playbook, and in a card the Key button opens, under the board on a phone and beside it on a computer. */
+.key { position: relative; }
+.key h2 { padding-right: 36px; }
+.key-list { margin: 10px 0 0; display: grid; gap: 10px; }
+.pb .key-list { margin: 6px 0 14px; }
+.key-row { position: relative; min-height: 52px; padding-left: 88px; }
+.key-row dt { font-weight: 700; font-size: 15px; }
+.key-row dd { margin: 1px 0 0; font-size: 15px; color: var(--muted); }
+.key-art { position: absolute; left: 0; top: 2px; width: 76px; height: 48px; border: 2px solid var(--frame); border-radius: 7px; background: var(--board); overflow: hidden; }
+.key-art svg { display: block; width: 72px; height: 44px; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.key-art .o { stroke: var(--off); }
+.key-art .d { stroke: var(--def); }
+.key-art .l { stroke: var(--los); }
+.key-art .b { stroke: var(--ball); }
+.key-art .h { stroke: var(--hot); }
+.key-art .fo { fill: var(--off); stroke: none; }
+.key-art .fd { fill: var(--def); stroke: none; }
+.key-art .fb { fill: var(--ball); stroke: none; }
+.key-art .fh { fill: var(--hot); stroke: none; }
+/* a read's number, and the writing at the whistle, knocked out of what's under them as on the board */
+.key-art .key-num, .key-art .key-mark { paint-order: stroke; stroke: var(--board); stroke-width: 3.5px; dominant-baseline: central; }
+.key-art .key-num { font-family: var(--hand); font-size: 14px; text-anchor: middle; }
+.key-art .key-mark { font-family: var(--marker); font-size: 17px; stroke-width: 4px; }
+/* on the chalkboard, the same chalk dust as the board's (set in js/app.js) */
+@media (prefers-color-scheme: dark) {
+  .key-art svg { -webkit-mask: var(--grain) 0 0 / var(--grain-size) repeat; mask: var(--grain) 0 0 / var(--grain-size) repeat; }
+}
+
 /* every player's job: closed until it's asked for, like the playbook's sections */
 .card.jobs { padding: 0 16px; }
 .jobs > summary { cursor: pointer; padding: 13px 0; font-family: var(--cond); font-weight: 700; font-size: 21px; letter-spacing: .01em; list-style-position: inside; }
@@ -544,11 +575,15 @@ button:disabled { cursor: default; }
   .side-pick { width: 100%; }
   .side-pick button { flex: 1; padding: 8px 10px; }
   .snap { padding: 8px 14px; font-size: 17px; }
-  /* the scrubber and its clock on a row of their own under the buttons: room for "Snap again", and a longer scrubber
-     to drag */
+  /* the scrubber and its clock on a row of their own under the buttons, with the Key button at its end: room for
+     "Snap again", and a longer scrubber to drag */
   .transport { flex-wrap: wrap; gap: 6px; }
   .transport .seg { margin-left: auto; }
-  .scrubber { order: 1; flex: 1 0 100%; }
+  .scrubber { order: 1; flex: 1 0 calc(100% - 64px); }
+  /* drawn shorter than the buttons above it, so the row is hardly taller than the scrubber, with the same 44 px to tap
+     (its border inside it) */
+  #keyOpen { order: 2; height: 30px; position: relative; }
+  #keyOpen::before { content: ''; position: absolute; inset: -8px 0; }
   #scrub { height: 22px; }
 }
 
@@ -577,7 +612,7 @@ button:disabled { cursor: default; }
 /* Forced colours (Windows High Contrast) replace every background, and with them the only sign of what's picked: the
    picked chip, side, speed and the labels toggle take the system's highlight colours, and Snap keeps an outline. */
 @media (forced-colors: active) {
-  .side-pick button[aria-checked="true"], .seg button[aria-checked="true"], .chip[aria-checked="true"], .tool.toggle[aria-pressed="true"] {
+  .side-pick button[aria-checked="true"], .seg button[aria-checked="true"], .chip[aria-checked="true"], .tool.toggle[aria-pressed="true"], .tool.toggle[aria-expanded="true"] {
     background: SelectedItem;
     color: SelectedItemText;
     border: 1px solid SelectedItem;
@@ -591,7 +626,7 @@ button:disabled { cursor: default; }
    width), with Snap and the scrubber under it, while the calls and the playbook scroll beside it. */
 @media (orientation: landscape) and (max-height: 520px) and (min-width: 640px) and (max-width: 959px) {
   :root {
-    --bh: min(100dvh - 106px - env(safe-area-inset-bottom), (52vw - 40px) / 1.42);
+    --bh: min(100dvh - 114px - env(safe-area-inset-bottom), (52vw - 40px) / 1.42);
     --side: calc(var(--bh) * 1.42 + 36px + env(safe-area-inset-left));
   }
   body { padding-left: var(--side); }
@@ -599,7 +634,9 @@ button:disabled { cursor: default; }
   #board { width: calc(var(--bh) * 1.42); height: var(--bh); }
   .transport { flex-wrap: wrap; gap: 6px; }
   .transport .seg { margin-left: auto; }
-  .scrubber { order: 1; flex: 1 0 100%; }
+  .scrubber { order: 1; flex: 1 0 calc(100% - 64px); }
+  #keyOpen { order: 2; height: 30px; position: relative; }
+  #keyOpen::before { content: ''; position: absolute; inset: -8px 0; }
   #scrub { height: 22px; }
   .snap { padding: 8px 14px; font-size: 17px; }
   .brand h1 { font-size: 30px; }
