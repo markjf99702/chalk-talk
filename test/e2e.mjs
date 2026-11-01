@@ -708,6 +708,21 @@ for (const [width, height] of [[844, 390], [667, 375]]) {
   await side.close();
 }
 
+// Once the board has stuck to the top of a phone, a soft edge under it, so what scrolls under it goes under something;
+// none at the top of the page, and none beside a board fixed at the side of a phone turned sideways.
+for (const [width, height, edge] of [[390, 844, true], [844, 390, false]]) {
+  const c = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const shadow = () => p.evaluate(() => getComputedStyle(document.querySelector('.stage')).boxShadow);
+  assert.equal(await shadow(), 'none', `${width}x${height}: an edge under the board at the top of the page`);
+  await p.evaluate(() => scrollTo(0, 700));
+  if (edge) await until(async () => await shadow() !== 'none', 3000, `${width}x${height}: no edge under the board once it has stuck`);
+  else { await new Promise(r => setTimeout(r, 300)); assert.equal(await shadow(), 'none', `${width}x${height}: an edge under the board fixed at the side`); }
+  await c.close();
+}
+
 // A tablet held upright keeps the board at the top too, over more than half the screen. Tabbing down the page, the
 // focus doesn't go behind it (WCAG 2.2, 2.4.11 Focus Not Obscured): the page scrolls a focused chip to below the board.
 {

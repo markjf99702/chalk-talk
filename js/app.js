@@ -1119,6 +1119,14 @@ const fit = () => {
   if (!$('who').hidden) { syncMore(); placeWho(true); } // placed again for the board's new size
 };
 fit();
+// Once the board has stuck to the top of a phone, a soft edge under it (.stage.stuck in css/app.css), so what scrolls
+// under it goes under something. A mark where the board would be in the page goes off the top of the screen as it sticks.
+{
+  const stage = document.querySelector('.stage'), mark = document.createElement('div');
+  mark.className = 'stuck-mark';
+  stage.before(mark);
+  new IntersectionObserver(([e]) => stage.classList.toggle('stuck', !e.isIntersecting && e.boundingClientRect.top < 0)).observe(mark);
+}
 const resized = new ResizeObserver(fit);
 resized.observe($('board'));
 resized.observe(document.querySelector('.stage')); // the controls under the board can take another row on their own

@@ -152,7 +152,11 @@ button:disabled { cursor: default; }
 @media (max-width: 959px) and (min-height: 700px) {
   .stage { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: max(6px, env(safe-area-inset-top)); margin-top: -6px; }
   html { scroll-padding-top: calc(var(--stage-h, 0px) + 8px); }
+  /* once it has stuck (see js/app.js), a soft edge under it, so what scrolls under it goes under something */
+  .stage.stuck { box-shadow: 0 10px 12px -12px var(--frame-shadow), 0 1px 0 var(--line); }
 }
+/* where the board would be in the page, for telling when it has stuck: out of the grid, a pixel square */
+.stuck-mark { position: absolute; width: 1px; height: 1px; pointer-events: none; }
 
 .board-wrap {
   position: relative;
