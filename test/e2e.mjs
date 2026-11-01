@@ -794,12 +794,12 @@ for (const side of ['O', 'D']) {
     const seen = await p.evaluate(id => ({ chip: document.querySelector(`[data-key="Play:${id}"]`).getBoundingClientRect().top, mine: document.getElementById('mine').getBoundingClientRect().top, y: scrollY }), id);
     assert.ok(Math.abs(seen.chip - before.chip) <= 2 || (seen.y === 0 && seen.mine >= 0), `the chip just picked went from ${Math.round(before.chip)} px to ${Math.round(seen.chip)} px on the screen (scrolled ${seen.y} px)`);
   }
-  await p.setViewportSize({ width: 800, height: 900 });
-  assert.equal((await where()).after, 'theirs', 'in a narrow window the result card isn\'t after the calls');
+  await p.setViewportSize({ width: 800, height: 900 }); // (the page hears of it at its next frame)
+  await until(async () => (await where()).after === 'theirs', 3000, 'in a narrow window the result card isn\'t after the calls');
   await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
   assert.match(await p.textContent('#why'), /Why ↓$/, 'in a narrow window the button on the board doesn\'t point down to the result');
   await p.setViewportSize({ width: 1280, height: 800 });
-  assert.equal((await where()).first, 'result', 'back at 1280 px the result card isn\'t first in the right-hand column');
+  await until(async () => (await where()).first === 'result', 3000, 'back at 1280 px the result card isn\'t first in the right-hand column');
   await c.close();
 }
 
