@@ -597,8 +597,9 @@ test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, about two passes in three complete, a
   // sack on about one dropback in twenty-two. From twelve start seeds (77 + k * 7919) this recipe gives 3.66-5.30 yards
   // a carry, 64.7-68.9% complete, sacks on 3.0-4.5% of dropbacks and interceptions on 1.1-2.2% of throws; at 700 snaps
-  // a carry ranged from 3.1 to 5.1 yards. Most start seeds now come out above the 66% completion bound: this one gives
-  // 64.9%.
+  // a carry ranged from 3.1 to 5.1 yards. Four of those twelve start seeds come out above the 66% completion bound
+  // (66.1-68.9%), two sit just over the 1% interception floor (1.1%) and one just under the 5.3-yard ceiling (5.296);
+  // this one gives 64.9%, 2.0% and 4.14.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
