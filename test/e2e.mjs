@@ -82,7 +82,7 @@ assert.equal(await page.textContent('#caption'), HINT, 'the first hint stays whe
 await page.getByRole('radio', { name: 'Smash' }).click();
 // Before the snap every coverage gets a four-man rush, but Cover 0's row blitzes, as Cover 0 always does: the chart
 // says so.
-assert.match(await page.textContent('#chartHint'), /^Average yards a play, from Gun Trips against a .+ front rushing four \(Cover 0 always blitzes\)\. /);
+assert.match(await page.textContent('#chartHint'), /^How often your play succeeds, gaining 4 yards or more, from Gun Trips against a .+ front rushing four \(Cover 0 always blitzes\)\. Beside each bar, the average yards a play\. /);
 // Before it runs, the chart shows the rows it will fill: every coverage, with an empty track.
 assert.deepEqual(await page.$$eval('#bars .bar-row.idle', r => r.map(x => [x.getAttribute('role'), x.getAttribute('aria-label'), x.querySelector('.bar-val').textContent])),
   ['Cover 0', 'Cover 1', 'Cover 2', 'Cover 3', 'Cover 4'].map(c => ['listitem', `${c}: not run yet`, '–']), 'the chart before it runs');
@@ -92,6 +92,14 @@ await page.waitForFunction(() => document.getElementById('runChart').getAttribut
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
 assert.equal(await page.locator('#bars .bar-row.idle').count(), 0, 'rows still waiting to run once it has run');
 assert.equal(await page.textContent('#runChart'), 'Run it again', 'once it has run, the button says it runs again');
+// Each bar is the share of snaps that gained 4 yards or more, the number on it; the average yards is the small one.
+assert.equal(await page.textContent('#bars .bar-head'), 'success · avg yards');
+for (const row of await page.$$eval('#bars .bar-row', r => r.map(x => ({ title: x.title, val: x.querySelector('.bar-val').textContent.replace(/\s+/g, ' '), small: x.querySelector('.bar-val small').textContent, width: parseFloat(x.querySelector('.bar').style.width) })))) {
+  const [, pct, avg] = row.title.match(/: (\d+)% successful, (−?\d+\.\d) yards a play, over 100 snaps$/);
+  assert.equal(row.val, `${pct}% ${avg}`, `the number on the bar is its success rate: ${row.title}`);
+  assert.equal(row.small, avg, 'the average yards is the small number');
+  assert.ok(Math.abs(row.width - Math.max(0.6, +pct)) < 0.6, `the bar is as long as its success rate: ${row.title}, ${row.width}%`);
+}
 await tapOn('FS');
 assert.match(await page.textContent('#whoPos'), /Free safety/, 'tapping the free safety opens his card');
 assert.equal(await page.textContent('#caption'), '', 'the first hint goes once a player is tapped');

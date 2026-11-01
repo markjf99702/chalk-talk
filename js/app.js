@@ -955,7 +955,7 @@ function clearChart() {
 // Before a run, the rows it will fill: every coverage (or every play, calling the defense), each with an empty track.
 function drawIdle() {
   const host = $('bars');
-  host.innerHTML = '<div class="bar-head" aria-hidden="true">avg yards · success</div>';
+  host.innerHTML = '<div class="bar-head" aria-hidden="true">success · avg yards</div>';
   for (const r of state.side === 'O' ? COVERAGES : PLAYS) {
     const row = document.createElement('div');
     row.className = 'bar-row idle';
@@ -968,12 +968,14 @@ function drawIdle() {
 
 // Before the snap the offense's chart can't use the other coach's real pressure without giving it away, so every
 // coverage gets a four-man rush (Cover 0 always blitzes) until the call is out.
+// The bars are the success rate: a few long runs after the catch swing the average yards a lot (one row can average 20
+// yards a play while its typical snap is an incompletion), so the average is the small number beside each bar.
 function chartHint() {
   const fm = byId(FORMATIONS, state.off.formation).name;
-  if (state.side === 'D') return `Average yards a play allowed, against ${fm}. A play counts as a success for the offense if it gains 4 yards or more.${again()}`;
+  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure;
-  return `Average yards a play, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}.`
-    + `${hidden() ? ' Their real call stays hidden until the snap.' : ''} A play counts as a success if it gains 4 yards or more.${again()}`;
+  return `How often your play succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}.`
+    + ` Beside each bar, the average yards a play.${hidden() ? ' Their real call stays hidden until the snap.' : ''}${again()}`;
 }
 function again() {
   if (!redo) return '';
@@ -1035,14 +1037,11 @@ async function runChart() {
 // length as the snaps come in, rather than jumping.
 function drawBars() {
   const host = $('bars');
-  const was = new Map([...host.querySelectorAll('.bar[data-id]')].map(b => [b.dataset.id, [b.style.left, b.style.width]]));
+  const was = new Map([...host.querySelectorAll('.bar[data-id]')].map(b => [b.dataset.id, b.style.width]));
   host.textContent = '';
-  const done = chart.rows.filter(r => r.avg !== undefined);
-  const max = Math.max(8, ...done.map(r => Math.abs(r.avg)));
-  const neg = done.some(r => r.avg < 0);
   const mineId = hidden() ? null : state.side === 'O' ? state.def.coverage : state.off.play;
   const tag = state.auto ? 'their call' : 'this call';
-  host.insertAdjacentHTML('beforeend', '<div class="bar-head" aria-hidden="true">avg yards · success</div>');
+  host.insertAdjacentHTML('beforeend', '<div class="bar-head" aria-hidden="true">success · avg yards</div>');
   for (const r of chart.rows) {
     const mine = r.id === mineId;
     const name = `<span class="bar-name"><span>${esc(r.name)}</span>${mine ? `<em>${tag}</em>` : ''}</span>`;
@@ -1055,16 +1054,14 @@ function drawBars() {
       continue;
     }
     row.className = 'bar-row' + (mine ? ' mine' : '');
-    const w = Math.abs(r.avg) / max * (neg ? 50 : 100);
-    const left = neg ? (r.avg < 0 ? 50 - w : 50) : 0;
+    const pct = Math.round(r.rate * 100), tenths = Math.round(r.avg * 10) / 10, avg = `${tenths < 0 ? '−' : ''}${Math.abs(tenths).toFixed(1)}`;
     row.innerHTML = `${name}
-      <span class="bar-track${neg ? ' split' : ''}"><span class="bar ${r.avg < 0 ? 'neg' : ''}" data-id="${esc(r.id)}"></span></span>
-      <span class="bar-val">${r.avg >= 0 ? '' : '−'}${Math.abs(r.avg).toFixed(1)} <small>${Math.round(r.rate * 100)}%</small></span>`;
+      <span class="bar-track"><span class="bar" data-id="${esc(r.id)}"></span></span>
+      <span class="bar-val">${pct}% <small>${avg}</small></span>`;
     const bar = row.querySelector('.bar'), from = was.get(r.id);
-    if (from) { [bar.style.left, bar.style.width] = from; bar.getBoundingClientRect(); } // from where it was, then on
-    bar.style.left = `${left}%`;
-    bar.style.width = `${Math.max(0.6, w)}%`;
-    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${r.avg.toFixed(1)} yards a play, ${Math.round(r.rate * 100)}% successful, over ${r.n} snaps`;
+    if (from) { bar.style.width = from; bar.getBoundingClientRect(); } // from where it was, then on
+    bar.style.width = `${Math.max(0.6, r.rate * 100)}%`;
+    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${pct}% successful, ${avg} yards a play, over ${r.n} snaps`;
   }
 }
 $('runChart').addEventListener('click', runChart);
@@ -1121,7 +1118,7 @@ function playbook() {
     ['Middle hook', 'The middle of the field in front of the safeties, 3 to 14 yards deep.'],
     ['Short middle, "the rat"', 'The middle of the field up to about 10 yards. In Cover 1 the defender left over sits there to take away crossing routes.'],
     ['Deep thirds, halves and quarters', 'The deep field, from about 9 yards on, split between the deep defenders: in thirds in Cover 3 (the corners and the free safety), in halves in Cover 2 (the two safeties), in quarters in Cover 4 (the corners and the safeties). The deep middle third is the middle one of the three; an inside quarter is one of the two nearest the middle.'],
-    ['Success', 'A play that gains 4 yards or more. Coaches judge a gain by the down and the distance to go; with no downs on this board, 4 yards, a good start on 1st and 10, is the line. The chart\'s success rate counts these.'],
+    ['Success', 'A play that gains 4 yards or more. Coaches judge a gain by the down and the distance to go; with no downs on this board, 4 yards, a good start on 1st and 10, is the line. The chart\'s bars show how often a play gets there.'],
     ['Big play', 'A run of 10 yards or more, or a pass play that gains 20 or more: a common way analysts count explosive plays (Sharp Football Analysis, for one). Teams draw the line in different places.'],
     ['Takeaway', 'The defense taking the ball away: an interception, or a fumble it recovers. There are no fumbles on this board, so here a takeaway is an interception.'],
   ]));
