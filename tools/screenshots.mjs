@@ -58,6 +58,8 @@ const hold = (page, t) => page.evaluate(async t => {
     state.t = board.t = board.duration(); board.render();
     finish();
   });
+  // the button fades in: wait for it to finish
+  await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished)));
   await page.evaluate(() => { const r = document.getElementById('result'); window.scrollTo(0, r.getBoundingClientRect().top + scrollY - document.querySelector('.stage').offsetHeight - 8); });
   await page.screenshot({ path: join(root, 'docs/phone-result.png') });
   await page.context().close();
