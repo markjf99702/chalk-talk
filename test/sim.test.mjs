@@ -29,7 +29,15 @@ test('every call against every defense runs to a finish', () => {
     for (const e of r.events) assert.ok(e.t <= r.result.t + 0.001, `${what} seed ${seed - 1}: "${e.text}" at ${e.t}s, after the play ended at ${r.result.t.toFixed(2)}s`);
     if (r.result.kind === 'sack') assert.ok(!r.events.some(e => e.kind === 'throw' || e.kind === 'away'), `${what} seed ${seed - 1}: a sack after the ball was thrown`);
     if (r.result.carrier >= 0) { // the board's last picture puts the ball carrier where the headline does
-      const y = r.frames.at(-1).xy[2 * r.result.carrier + 1];
+      const c = r.result.carrier;
+      // He gets there from where he was hit, tackled or pushed out, over a few frames: no jump at the whistle. (From the
+      // frame after he has the ball: one caught and hit at once makes the catch's own reach for the ball first.)
+      for (let k = r.frames.findIndex(f => f.t >= r.result.t - 1e-9); k > 0 && k < r.frames.length; k++) {
+        if (r.frames[k - 1].c !== c) continue;
+        const a = r.frames[k - 1].xy, b = r.frames[k].xy, d = Math.hypot(b[2 * c] - a[2 * c], b[2 * c + 1] - a[2 * c + 1]);
+        assert.ok(d < 0.75, `${what} seed ${seed - 1}: the ball carrier jumps ${d.toFixed(2)} yards at ${r.frames[k].t.toFixed(2)}s, at the end of the play`);
+      }
+      const y = r.frames.at(-1).xy[2 * c + 1];
       assert.ok(r.result.long ? y >= r.result.yards - 0.5 : Math.abs(y - r.result.yards) <= 0.5, `${what} seed ${seed - 1}: the play ends with the carrier at ${y.toFixed(2)}, the result says ${r.result.yards}`);
     }
   }

@@ -1225,9 +1225,10 @@ function contact(S) {
   const qbHeld = c === S.QB && S.play.type === 'pass' && !S.caught;
   // Near the sideline, a defender on his inside shoulder runs him out.
   if (Math.abs(c.x) > SIDELINE - 1.3 && !qbHeld && S.D.some(d => d.eng < 0 && dist(d, c) < 1.7 && Math.abs(d.x) < Math.abs(c.x) + 0.3) && R.chance(0.25)) {
-    c.x = Math.sign(c.x) * (SIDELINE + 0.3);
+    const hit = { x: c.x, y: c.y };
+    c.x = Math.sign(c.x) * (SIDELINE + 0.3); // where he goes out, and goes there from where he was hit (see finish())
     ev(S, 'oob', `${cap(name(S, c))} is pushed out of bounds.`, { who: c.i });
-    return finish(S, 'oob');
+    return finish(S, 'oob', undefined, hit);
   }
   for (const d of S.D) {
     if (d.missUntil > t || t - d.tried < 0.4) continue;
@@ -1276,7 +1277,8 @@ function timeUp(S) {
   finish(S, S.caught ? 'catch' : 'run', near);
 }
 
-// hit: where a tackled carrier was when he was hit; he goes down from there to the spot over the next few frames.
+// hit: where a tackled carrier was when he was hit, or one pushed out; he goes from there to the spot (down, or out of
+// bounds) over the next few frames.
 function finish(S, kind, by, hit) {
   if (S.result) return;
   const c = S.carrier;
