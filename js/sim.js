@@ -1416,7 +1416,7 @@ function describeJob(S, pl) {
     if (j.kind === 'stalk') return j.target ? `Blocks ${name(S, j.target)} to keep him off the run.` : 'Blocks downfield.';
     if (j.kind === 'block') {
       const tgt = j.target ? name(S, j.target) : 'the first defender to show up';
-      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: j.pull ? `Pulls from the back side and kicks out ${tgt}, the end man on the line.` : `Kicks out ${tgt}, the end man on the line.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.` })[j.scheme] || `Blocks ${tgt}.`;
+      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.` })[j.scheme] || `Blocks ${tgt}.`;
     }
     return '';
   }
