@@ -18,7 +18,8 @@ const require = createRequire(import.meta.url);
 let pw;
 try { pw = require('playwright'); } catch { pw = require(join(execSync('npm root -g').toString().trim(), 'playwright')); }
 
-// The build reads exact text out of css/app.css (the dark palette, the sticky board's rule), and fails if it isn't there.
+// The build reads exact text out of css/app.css (the dark palette, the sticky board's rule), and fails if it isn't
+// there.
 execFileSync(process.execPath, [join(root, 'scripts/build.mjs')], { stdio: ['ignore', 'ignore', 'inherit'] });
 const SITE = 'https://chalk-talk.junkdrawer.works/';
 const dir = await mkdtemp(join(tmpdir(), 'chalk-talk-onefile-'));

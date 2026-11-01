@@ -192,8 +192,8 @@ function play() {
   raf = requestAnimationFrame(tick);
 }
 
-// Whether the player's card closes as the play starts to run: at the snap, at ▶ after a pause or a scrub, and at ↺ Watch
-// it again. On a narrow board it would hide part of the play; a bigger board has room to keep it up.
+// Whether the player's card closes as the play starts to run: at the snap, at ▶ after a pause or a scrub, and at
+// ↺ Watch it again. On a narrow board it would hide part of the play; a bigger board has room to keep it up.
 const cardClosesOnPlay = () => narrow();
 
 function tick(now) {
@@ -267,8 +267,8 @@ function toBoard() { if (!stuckBoard()) $('board').scrollIntoView({ block: 'near
 function snap() {
   if (state.phase !== 'pre') { // Snap again: same calls, a new roll of the dice
     state.seed = newSeed();
-    // Someone reading the result card keeps his place on the page: the last result stays, faded, until this one's is in.
-    // (A change of call, New look or a shared link takes it away: those are up at the choosers.)
+    // Someone reading the result card keeps his place on the page: the last result stays, faded, until this one's is
+    // in. (A change of call, New look or a shared link takes it away: those are up at the choosers.)
     lineUp(!$('result').hidden);
   }
   play();
@@ -496,7 +496,8 @@ function placeNarrow(who, him, fresh) {
   who.style.maxHeight = 'none';
   const tall = who.offsetHeight, { l, r } = onBoard(who);
   // the smallest it goes: his name and the first line of his job
-  const MIN = Math.ceil($('whoPos').getBoundingClientRect().bottom - who.getBoundingClientRect().top + parseFloat(getComputedStyle($('whoJob')).lineHeight) + 1);
+  const line = parseFloat(getComputedStyle($('whoJob')).lineHeight);
+  const MIN = Math.ceil($('whoPos').getBoundingClientRect().bottom - who.getBoundingClientRect().top + line + 1);
   // the others' marks, and their labels where they're shown
   const others = state.play.players.filter(p => p.i !== board.selected).map(p => {
     const q = board.pos(board.t, p.i), x = board.sx(q.x), y = board.sy(q.y);
@@ -528,12 +529,12 @@ function placeNarrow(who, him, fresh) {
   const best = (list, tie) => list.sort((a, b) => a.hides - b.hides || tie(a, b))[0];
   const whole = best(ends.filter(e => e.full), (a, b) => b.far - a.far);
   const fitted = best(ends.filter(e => !e.full && e.max >= MIN), (a, b) => b.max - a.max);
-  const pick = (whole && whole.hides <= 3 ? whole : fitted && (!whole || fitted.hides < whole.hides) ? fitted : whole)
+  const end = (whole && whole.hides <= 3 ? whole : fitted && (!whole || fitted.hides < whole.hides) ? fitted : whole)
     || ends.sort((a, b) => b.max - a.max)[0];
-  who.classList.toggle('top', pick.top);
-  who.style.top = pick.top ? `${pick.s}px` : 'auto';
-  who.style.bottom = pick.top ? 'auto' : `${pick.s}px`;
-  who.style.maxHeight = `${Math.max(pick.max, MIN)}px`;
+  who.classList.toggle('top', end.top);
+  who.style.top = end.top ? `${end.s}px` : 'auto';
+  who.style.bottom = end.top ? 'auto' : `${end.s}px`;
+  who.style.maxHeight = `${Math.max(end.max, MIN)}px`;
   syncMore();
 }
 
@@ -1120,7 +1121,8 @@ const fit = () => {
 };
 fit();
 // Once the board has stuck to the top of a phone, a soft edge under it (.stage.stuck in css/app.css), so what scrolls
-// under it goes under something. A mark where the board would be in the page goes off the top of the screen as it sticks.
+// under it goes under something. A mark where the board would be in the page goes off the top of the screen as it
+// sticks.
 {
   const stage = document.querySelector('.stage'), mark = document.createElement('div');
   mark.className = 'stuck-mark';

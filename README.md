@@ -32,7 +32,7 @@ It's a static site: plain HTML, CSS and JavaScript, with no build step.
 
 ```sh
 npx serve .                   # or any static file server, then open the printed address
-npm test                      # unit tests for the simulator, the page in Chromium (needs Playwright), then the one-file copy
+npm test                      # the simulator's tests, then the page and the one-file copy in Chromium (Playwright)
 node tools/screenshots.mjs    # redraws docs/*.png and og.png
 node tools/make-icons.mjs     # redraws the PNG icons from icon.svg
 npm run build                 # dist/chalk-talk.html, the whole app in one file (needs esbuild: npm install)

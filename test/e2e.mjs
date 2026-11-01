@@ -753,8 +753,8 @@ const phone = async () => {
 };
 const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-// Playback: Pause holds the clock where it is, and ▶ goes on from there. Half speed plays about half a second of the play
-// each second, and Snap again from the result card snaps the same two calls with a new roll of the dice.
+// Playback: Pause holds the clock where it is, and ▶ goes on from there. Half speed plays about half a second of the
+// play each second, and Snap again from the result card snaps the same two calls with a new roll of the dice.
 {
   const p = await phone();
   await p.click('#snap');
@@ -1087,7 +1087,8 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
 }
 
 // From the keyboard: a pick keeps focus on the chip picked (the choosers are drawn again on every pick), the result
-// card's buttons hand it to Snap as the card goes away or fades out of reach, and the chart's button keeps it while it runs.
+// card's buttons hand it to Snap as the card goes away or fades out of reach, and the chart's button keeps it while it
+// runs.
 {
   const p = await phone();
   const focused = () => p.evaluate(() => document.activeElement.dataset.key || document.activeElement.id || document.activeElement.tagName);
