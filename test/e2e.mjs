@@ -2485,10 +2485,13 @@ assert.deepEqual([schemes.light.colors.chalk, schemes.dark.colors.chalk], [false
     const pair = sel => { const on = document.querySelector(`${sel}[aria-checked="true"]`), off = document.querySelector(`${sel}[aria-checked="false"]`); return [bg(on), bg(off)]; };
     const labels = document.getElementById('labels'), pressed = bg(labels);
     labels.click(); const released = bg(labels); labels.click();
-    return { forced: matchMedia('(forced-colors: active)').matches, chip: pair('#mineBody .chip'), side: pair('[data-side]'), speed: pair('[data-speed]'), labels: [pressed, released], snap: getComputedStyle(document.getElementById('snap')).borderTopWidth };
+    // the drill under way, pressed, against one that isn't
+    document.querySelector('#drillChips button').click();
+    const drill = [bg(document.querySelector('#drillChips [aria-pressed="true"]')), bg(document.querySelector('#drillChips [aria-pressed="false"]'))];
+    return { forced: matchMedia('(forced-colors: active)').matches, chip: pair('#mineBody .chip'), side: pair('[data-side]'), speed: pair('[data-speed]'), labels: [pressed, released], drill, snap: getComputedStyle(document.getElementById('snap')).borderTopWidth };
   });
   assert.ok(seen.forced, 'forced colours are on');
-  for (const k of ['chip', 'side', 'speed', 'labels']) assert.notEqual(seen[k][0], seen[k][1], `in forced colours a picked ${k} looks like one that isn't (${seen[k][0]})`);
+  for (const k of ['chip', 'side', 'speed', 'labels', 'drill']) assert.notEqual(seen[k][0], seen[k][1], `in forced colours a picked ${k} looks like one that isn't (${seen[k][0]})`);
   assert.notEqual(seen.snap, '0px', 'in forced colours Snap has no outline');
   await c.close();
 }
