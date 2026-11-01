@@ -388,6 +388,26 @@ test('a back\'s flat route and check-down end past the line, and Flood sends one
   }
 });
 
+test('the Cover 2 corner stays in the flat: he lets a slant go inside and widens with the man coming out into it', () => {
+  // Slant-Flat against Cover 2, 96 looks: a moment after the throw (0.3 s), the corner is outside the slant on his side
+  // in 80% of them. When he followed the slant inside, leaving the flat route to run, it was 6%.
+  let seed = 1, n = 0, outside = 0;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: 'slants', front: fr.id, coverage: 'c2', pressure, flip };
+    const r = simulate(call, seed), S = prepare(call, seed); seed++;
+    const at = r.frames.findIndex(f => f.air);
+    if (at < 0) continue;
+    const f = r.frames[Math.min(at + 6, r.frames.length - 1)];
+    for (const cb of S.CB) {
+      const sd = Math.sign(cb.x), slant = S.O.find(p => p.job.route === 'slant' && Math.sign(p.x) === sd);
+      if (!slant || !S.O.some(p => p.job.route === 'flat' && Math.sign(p.x) === sd)) continue;
+      n++;
+      if (f.xy[2 * cb.i] * sd > f.xy[2 * slant.i] * sd) outside++;
+    }
+  }
+  assert.ok(n > 60 && outside / n > 0.5, `the corner is outside the slant 0.3 s after the throw on ${outside} of ${n} looks`);
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);

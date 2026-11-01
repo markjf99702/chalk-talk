@@ -1054,21 +1054,26 @@ function zone(S, d) {
     else if (S.look && S.look.x > zx0 && S.look.x < zx1) tx = tx * 0.7 + S.look.x * 0.3;
     d.ts = d.y < ty - 2 ? d.top * 0.78 : d.top * 0.9;
   } else {
-    const inZone = routes.filter(r => r.x > zx0 - 1 && r.x < zx1 + 1 && r.y > zy0 - 1 && r.y < zy1 + 1);
+    // A flat defender (the Cover 2 corner) stays in the flat: he plays the man coming out into it before one breaking
+    // inside, passes a receiver who breaks inside of him on to the men inside, and doesn't chase him past the inside
+    // edge of the flat.
+    const flat = d.job.zid.startsWith('flat'), sd = Math.sign(z.at[0]);
+    const lo = zx0 - (flat && sd > 0 ? 0 : 2), hi = zx1 + (flat && sd < 0 ? 0 : 2);
+    const inZone = routes.filter(r => r.x > zx0 - 1 && r.x < zx1 + 1 && r.y > zy0 - 1 && r.y < zy1 + 1 && !(flat && r.x * sd < d.x * sd && r.vx * sd < -1));
     const QB = S.QB;
     if (inZone.length) {
       // Who to play: a flat defender takes the shallowest man threatening the flat, a hook defender the one
       // nearest the middle of his area; otherwise the nearest. The quarterback's eyes pull him a little.
       const wide = d.job.zid.startsWith('flat') || d.job.zid.startsWith('cf');
-      const score = r => (wide && r.y < 6 ? r.y * 0.6 - 6 : 0) + (!wide ? Math.abs(r.x - z.at[0]) * 0.8 : 0) + dist(r, d) - (S.look === r ? 2.5 : 0);
+      const score = r => (wide && r.y < 6 ? r.y * 0.6 - 6 : 0) + (!wide ? Math.abs(r.x - z.at[0]) * 0.8 : 0) + dist(r, d) - (S.look === r ? 2.5 : 0) + (flat && r.vx * sd < -1 ? 4 : 0);
       inZone.sort((a, b) => score(a) - score(b));
       const r = inZone[0];
       if (wide && r.y < 7 && Math.abs(r.x + r.vx * 0.5) > Math.abs(d.x)) {
         // a flat route: stay in front of him and outside, squeezing him toward the sideline
-        tx = clamp(r.x + r.vx * 0.45, zx0 - 2, zx1 + 2); ty = r.y + 1.6;
+        tx = clamp(r.x + r.vx * 0.45, lo, hi); ty = r.y + 1.6;
       } else {
         const [ux, uy] = unit(QB.x - r.x, QB.y - r.y);
-        tx = clamp(r.x + ux * 1.3 + r.vx * 0.25, zx0 - 2, zx1 + 2);
+        tx = clamp(r.x + ux * 1.3 + r.vx * 0.25, lo, hi);
         ty = clamp(r.y + uy * 1.3 + r.vy * 0.2, zy0, zy1 + 1);
       }
     } else {
