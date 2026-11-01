@@ -852,7 +852,7 @@ function coachNote(P) {
   // On inside zone the line works to the play side; when that leaves the back-side end alone, the note says who he is.
   const backEnd = pl.id === 'iz' && P.unblocked.some(i => P.players[i].label === 'DE' && P.players[i].x * playSide(P) < 0)
     ? ' The back-side end was left unblocked: the line works to the play side, so he\'s the man a cutback has to beat.' : '';
-  const note = pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd + (P.box.box > P.box.blockers ? ` Here the defense had ${P.box.box - P.box.blockers} more in the box than the offense had blockers.` : P.box.box < P.box.blockers ? ' Here the offense had more blockers than the defense had defenders in the box: a good look to run against.' : ' Here the numbers in the box were even.');
+  const note = pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd + (P.box.box > P.box.blockers ? ` Here the defense had ${P.box.box - P.box.blockers} more in the box than the offense had blockers.` : P.box.box < P.box.blockers ? ' Here the offense had more blockers than the defense had defenders in the box.' : ' Here the numbers in the box were even.');
   return { note, reads };
 }
 
@@ -1093,7 +1093,7 @@ function playbook() {
   sec('Words coaches use', false, dl([
     ['Strong side and weak side', 'The strong side is the tight end\'s side, or the side with more receivers; the weak side is the other one. The defense sets its strength to it: the Sam and the strong safety go to the strong side, the Will to the weak side.'],
     ['Play side and back side', 'On a run, the play side is where the ball is going and the back side is the other half of the line. Every run on this board is drawn up to the strong side.'],
-    ['The box', 'The area near the line where defenders play the run. The board counts it out to 3 yards past the end of the line on each side (the tight end, or the tackle where there\'s no tight end) and up to 8 yards deep. More defenders in the box than there are blockers makes a run hard; fewer makes it a good look to run against.'],
+    ['The box', 'The area near the line where defenders play the run. The board counts it out to 3 yards past the end of the line on each side (the tight end, or the tackle where there\'s no tight end) and up to 8 yards deep. More defenders in the box than there are blockers makes a run hard: there aren\'t enough blockers to go round.'],
     ['Shotgun', 'The quarterback lines up about five yards behind the center and takes a short snap through the air, instead of under center with his hands on the ball. He sees the defense from there, and needs only a short drop to throw.'],
     ['Press', 'A corner lined up a yard or so off the receiver, right in his face, to jam him at the snap and stay on him. Corners press in man coverage.'],
     ['Leverage', 'Which side of a receiver a defender lines up on. With outside leverage he\'s a step outside him, so the receiver\'s easy way is inside; with inside leverage it\'s the other way round.'],
