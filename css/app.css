@@ -452,6 +452,9 @@ button:disabled { cursor: default; }
 .bar-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 .bar-val small { color: var(--muted); font-weight: 400; margin-left: 2px; }
 .bar-row.waiting { opacity: .4; }
+/* before a run: the rows it will fill, each an empty dashed track */
+.bar-track.idle { border-bottom: 1px dashed var(--line-strong); }
+.bar-row.idle .bar-val { color: var(--muted); font-weight: 400; }
 
 /* ---------------------------------------------------------------- playbook */
 

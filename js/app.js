@@ -934,16 +934,30 @@ addEventListener('hashchange', () => {
 let chartJob = 0;
 let chart = null; // the rows of the last run: { rows: [{ id, name, call, avg, rate }], pressure, side }
 let redo = null; // a finished chart went with a change of call: { side, yours } until it's run again
-const RUN_LABEL = $('runChart').textContent, SNAPS = 20;
+// Run once, the button says it can be run again: each run is a new set of snaps, and the numbers move a little.
+const RUN_LABEL = $('runChart').textContent, AGAIN_LABEL = 'Run it again', SNAPS = 20;
 
 function clearChart() {
   chartJob++;
   chart = null;
-  $('bars').textContent = '';
   $('chartTitle').textContent = state.side === 'O' ? 'Your play against each coverage' : 'Your defense against each play';
   $('chartHint').textContent = chartHint();
   $('runChart').textContent = RUN_LABEL;
   $('runChart').removeAttribute('aria-disabled');
+  drawIdle();
+}
+// Before a run, the rows it will fill: every coverage (or every play, calling the defense), each with an empty track.
+function drawIdle() {
+  const host = $('bars');
+  host.innerHTML = '<div class="bar-head" aria-hidden="true">avg yards · success</div>';
+  for (const r of state.side === 'O' ? COVERAGES : PLAYS) {
+    const row = document.createElement('div');
+    row.className = 'bar-row idle';
+    row.setAttribute('role', 'listitem');
+    row.setAttribute('aria-label', `${r.name}: not run yet`);
+    row.innerHTML = `<span class="bar-name"><span>${esc(r.name)}</span></span><span class="bar-track idle"></span><span class="bar-val">–</span>`;
+    host.append(row);
+  }
 }
 
 // Before the snap the offense's chart can't use the other coach's real pressure without giving it away, so every
@@ -1003,7 +1017,7 @@ async function runChart() {
     r.avg = yds / SNAPS; r.rate = ok / SNAPS;
     drawBars();
   }
-  button.textContent = RUN_LABEL;
+  button.textContent = AGAIN_LABEL;
   button.removeAttribute('aria-disabled');
 }
 

@@ -83,10 +83,15 @@ await page.getByRole('radio', { name: 'Smash' }).click();
 // Before the snap every coverage gets a four-man rush, but Cover 0's row blitzes, as Cover 0 always does: the chart
 // says so.
 assert.match(await page.textContent('#chartHint'), /^Average yards a play, from Gun Trips against a .+ front rushing four \(Cover 0 always blitzes\)\. /);
+// Before it runs, the chart shows the rows it will fill: every coverage, with an empty track.
+assert.deepEqual(await page.$$eval('#bars .bar-row.idle', r => r.map(x => [x.getAttribute('role'), x.getAttribute('aria-label'), x.querySelector('.bar-val').textContent])),
+  ['Cover 0', 'Cover 1', 'Cover 2', 'Cover 3', 'Cover 4'].map(c => ['listitem', `${c}: not run yet`, '–']), 'the chart before it runs');
 await page.click('#runChart');
 assert.match(await page.textContent('#runChart'), /^Running… [1-5] of 5$/, 'the chart says how far along it is');
-await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
+await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 30000 });
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
+assert.equal(await page.locator('#bars .bar-row.idle').count(), 0, 'rows still waiting to run once it has run');
+assert.equal(await page.textContent('#runChart'), 'Run it again', 'once it has run, the button says it runs again');
 await tapOn('FS');
 assert.match(await page.textContent('#whoPos'), /Free safety/, 'tapping the free safety opens his card');
 assert.equal(await page.textContent('#caption'), '', 'the first hint goes once a player is tapped');
@@ -189,9 +194,11 @@ await page.getByRole('radio', { name: 'Cover 0' }).click();
 assert.equal(await page.evaluate(() => window.chalkTalk.state.def.coverage), 'c0');
 assert.equal(await page.getByRole('radio', { name: 'Blitz' }).isDisabled(), true, 'Cover 0 always blitzes');
 
-// The chart runs every play against this defense.
+// The chart runs every play against this defense: eleven rows, waiting until it does.
+assert.equal(await page.locator('#bars .bar-row.idle').count(), 11, 'the defense\'s chart before it runs');
+assert.equal(await page.textContent('#runChart'), 'Run it 20 times each', 'a chart for the other side is a new one');
 await page.click('#runChart');
-await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 11, null, { timeout: 30000 });
+await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 11, null, { timeout: 30000 });
 
 // The headline and the verdict over it round the same way: the simulator spots the ball to the half yard, and a
 // 3.5-yard run reads "Gain of 4 yards", the line where a play counts as a win for the offense.
@@ -1245,14 +1252,16 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
 // says so until it's run again.
 {
   const p = await phone();
-  const rows = () => p.$$eval('#bars .bar-row:not(.waiting)', r => r.length);
-  const ready = () => p.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
+  const rows = () => p.$$eval('#bars .bar-row:not(.waiting):not(.idle)', r => r.length);
+  const ready = () => p.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 30000 });
   await p.click('#runChart');
   await p.getByRole('radio', { name: 'Mesh' }).click();
   assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), 'true', 'changing the call stopped the chart');
   await ready();
   await p.getByRole('radio', { name: 'Flood' }).click();
   assert.equal(await rows(), 0);
+  assert.equal(await p.locator('#bars .bar-row.idle').count(), 5, 'a finished chart cleared by a change of call shows its rows waiting to run');
+  assert.equal(await p.textContent('#runChart'), 'Run it 20 times each');
   assert.match(await p.textContent('#chartHint'), / You changed the call\. Run it again for Flood\.$/);
   await p.click('#theirsLook');
   assert.match(await p.textContent('#chartHint'), / They changed their call\. Run it again for Flood\.$/);

@@ -43,7 +43,7 @@ try {
   await page.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
   assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result has a headline');
   await page.click('#runChart');
-  await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting)').length === 5, null, { timeout: 30000 });
+  await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 30000 });
 
   // Every font it used came from inside the page.
   const fonts = await page.evaluate(async () => {
