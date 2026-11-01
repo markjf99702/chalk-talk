@@ -495,9 +495,16 @@ for (const side of ['O', 'D']) {
       if (k % 11 < 4 && !/ in the box/.test(now)) say('a run without the box count');
       seen.add(res.kind);
     }
-    return { out, seen: [...seen].sort() };
+    // A throwaway after reads that were covered says how many (Four Verticals against Nickel Cover 3, seed 2: two).
+    state.off = { formation: 'trips', play: 'verts', flip: false };
+    state.def = { front: 'nickel', coverage: 'c3', pressure: 'four' };
+    state.seed = 2;
+    lineUp(); state.t = board.duration(); finish();
+    const away = { kind: state.play.result.kind, now: document.getElementById('noteNow').textContent };
+    return { out, seen: [...seen].sort(), away };
   });
   assert.deepEqual(bad.out, [], 'the This time line in the coach\'s note');
+  assert.deepEqual(bad.away, { kind: 'throwaway', now: 'This time: with his first two reads covered, he threw it away rather than take a sack.' });
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
   await p.close();
 }

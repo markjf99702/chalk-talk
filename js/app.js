@@ -1019,7 +1019,8 @@ function thisTime(P) {
     return `${nm(P, by)} ${free ? 'came unblocked' : shed(by) ? 'got off his block' : 'got through'} and sacked him ${res.t.toFixed(1)} seconds after the snap, ${passed ? `with ${covered(passed)} covered` : pl.drop === 'screen' ? 'before the screen was set up' : 'before his first read came open'}.`;
   }
   if (res.kind === 'throwaway') {
-    const passed = E.findLast(e => e.kind === 'away')?.passed || 0;
+    // (the quarterback's line, which counts them, not the one after it as it lands)
+    const passed = E.find(e => e.kind === 'away' && e.passed !== undefined)?.passed || 0;
     return `${passed ? `with ${covered(passed)} covered` : 'with nothing open in time'}, he threw it away rather than take a sack.`;
   }
   const t = E.find(e => e.kind === 'throw');
