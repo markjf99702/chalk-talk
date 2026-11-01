@@ -383,9 +383,9 @@ test('coverages put the right number deep and the right number rushing', () => {
 
 test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, around 60% complete, a sack on about
-  // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.80-4.90 yards a carry,
+  // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.52-5.06 yards a carry,
   // 57-61% complete, sacks on 2.6-4.4% of dropbacks and interceptions on 2.0-3.5% of throws; at 700 snaps a carry
-  // ranged from 3.1 to 6.1 yards.
+  // ranged from 2.6 to 5.4 yards.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -408,7 +408,7 @@ test('the README\'s matchups', () => {
   // Each cell is 240 snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start
   // seeds (2718, 31415, 16180, 14142) Four Verticals gained 3.9-7.3 yards a dropback fewer against Cover 4 than Cover 3
   // (and 12.3-13.8 fewer than Cover 2), Mesh threw to its crossers on 41-48% of throws against Cover 1 and 15-22%
-  // against Cover 3, and runs succeeded 40-45% of the time at even numbers in the box and 17-21% with two more
+  // against Cover 3, and runs succeeded 37-42% of the time at even numbers in the box and 17-20% with two more
   // defenders than blockers. A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
