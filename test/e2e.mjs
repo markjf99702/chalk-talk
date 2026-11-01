@@ -1282,6 +1282,43 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// At the whistle of a play that ended past the line, the board pulls back over half a second to show the whole play:
+// from just behind the backfield to past the spot, with the spot clear of the words along the top. Scrubbed back
+// before the whistle, it follows the ball again; with reduced motion asked for, it goes there at once; a play that
+// ended behind the line, or where the board shows it all anyway, keeps its camera. Taps find the players where they're
+// drawn.
+{
+  const p = await phone();
+  const view = (t, link) => p.evaluate(({ t, link }) => {
+    const { state, board, lineUp } = window.chalkTalk;
+    if (link) { state.auto = false; Object.assign(state, link); lineUp(); }
+    const res = state.play.result, T = t === 'end' ? board.duration() : res.t + t;
+    board.t = T; board.render();
+    const P = state.play.players, h = P.findIndex(q => q.label === 'H'), at = board.pos(T, Math.max(0, h));
+    return { k: board.k, k0: board.k0, top: board.top, bottom: board.top - board.h / board.k, spot: res.yards, kind: res.kind, spotPx: board.sy(res.yards), h: board.h, low: board.sy(-12),
+      tap: h >= 0 && board.hit(board.sx(at.x), board.sy(at.y))[0] === h };
+  }, { t, link });
+  const catch30 = { off: { formation: 'trips', play: 'smash', flip: false }, def: { front: 'nickel', coverage: 'c2', pressure: 'four' }, seed: 15 };
+  const before = await view(-0.05, catch30), half = await view(0.25), end = await view('end');
+  assert.equal(end.kind, 'catch');
+  assert.ok(Math.abs(before.k - before.k0) < 1e-9 && before.bottom > -11.9, `before the whistle the camera isn't following the ball: ${JSON.stringify(before)}`);
+  assert.ok(end.k < end.k0 && Math.abs(end.bottom + 12) < 1e-6 && end.top >= end.spot + 3, `at the end the whole play isn't in view: ${JSON.stringify(end)}`);
+  assert.ok(end.spotPx >= 80 - 1e-6, `the spot is ${end.spotPx} px from the top, under the words there`);
+  assert.ok(half.k < before.k && half.k > end.k, `half way through the pull back: ${half.k} between ${before.k} and ${end.k}`);
+  assert.ok(end.tap, 'a tap on the H after the pull back doesn\'t find him');
+  assert.ok(Math.abs((await view(-0.05)).k - before.k) < 1e-9, 'scrubbed back before the whistle, the camera stays pulled back');
+  await p.emulateMedia({ reducedMotion: 'reduce' });
+  assert.ok(Math.abs((await view(0.05)).k - end.k) < 1e-9, 'with reduced motion the camera eases back rather than going at once');
+  await p.emulateMedia({ reducedMotion: 'no-preference' });
+  // a sack, and a short run the camera never had to follow
+  const sack = await view('end', { off: { formation: 'trips', play: 'verts', flip: false }, def: { front: 'nickel', coverage: 'c1', pressure: 'blitz' }, seed: 7 });
+  assert.equal(sack.kind, 'sack');
+  assert.ok(Math.abs(sack.k - sack.k0) < 1e-9 && Math.abs(sack.low - sack.h) < 1e-6, `after a sack the camera moved: ${JSON.stringify(sack)}`);
+  const run = await view('end', { off: { formation: 'iform', play: 'iz', flip: false }, def: { front: 'over', coverage: 'c3', pressure: 'four' }, seed: 179 });
+  assert.ok(run.kind === 'run' && Math.abs(run.k - run.k0) < 1e-9, `after a short run the camera moved: ${JSON.stringify(run)}`);
+  await p.context().close();
+}
+
 // A blitzer's arrow is told apart by its shape as well as its colour (WCAG 2.2, 1.4.1 Use of Color): a thicker line and
 // a double head, against one head on every other rusher's.
 {

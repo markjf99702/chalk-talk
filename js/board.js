@@ -46,9 +46,13 @@ export class Board {
     this.dpr = dpr;
     this.w = Math.max(10, r.width); this.h = Math.max(10, r.height);
     this.cv.width = Math.round(this.w * dpr); this.cv.height = Math.round(this.h * dpr);
-    this.k = this.w / W_YDS; // pixels per yard
-    this.rangeY = this.h / this.k;
+    this.k0 = this.w / W_YDS; // pixels per yard, with the field from sideline to sideline
+    this.k = this.k0; // and as the camera has it now (see frame())
+    this.ox = 0;
+    this.rangeY = this.h / this.k0;
+    this.top = Y_LOW + this.rangeY;
     this.grain = null;
+    if (this.play) this.setPlay(this.play, this.t);
     this.readColors();
   }
 
@@ -68,7 +72,11 @@ export class Board {
     this.grain = this.ctx.createPattern(g, 'repeat');
   }
 
-  setPlay(play) { this.play = play; this.t = 0; this.camTrack = play ? camera(play, this.rangeY) : null; }
+  setPlay(play, t = 0) {
+    this.play = play; this.t = t;
+    this.camTrack = play ? camera(play, this.rangeY) : null;
+    this.pull = play ? this.pullTop() : null;
+  }
 
   duration() { return this.play ? this.play.frames[this.play.frames.length - 1].t : 0; }
 
@@ -92,16 +100,48 @@ export class Board {
     return c[i] + ((c[i + 1] ?? c[i]) - c[i]) * u;
   }
 
+  // The camera at time t: the yards in view, from this.top down, and so how many pixels a yard is (this.k), with the
+  // field in the middle of the board (this.ox) when it's narrower than the board. It follows the ball; at the whistle
+  // of a play that ended past the line, it eases back over half a second to take in the whole play (see pullTop()),
+  // or with reduced motion asked for, goes there at once. Scrubbed back before the whistle, it's following again.
+  frame(t) {
+    let bottom = Y_LOW + this.cam(t), top = bottom + this.rangeY;
+    if (this.pull !== null && t >= this.play.result.t - 1e-6) {
+      const u = this.still.matches ? 1 : ease(Math.min(1, (t - this.play.result.t) / 0.5));
+      bottom += (Y_LOW - bottom) * u;
+      top += (this.pull - top) * u;
+    }
+    this.top = top;
+    this.k = this.h / (top - bottom);
+    this.ox = (this.w - W_YDS * this.k) / 2;
+  }
+
+  // Where the camera pulls back to at the whistle, the yard at the top of the view, or null where it stays. Once a
+  // play has ended past the line (the spot, where an incomplete pass came down, or the man who picked it off), the view
+  // goes from just behind the backfield, as before the snap, to at least 3 yards past that, with the spot clear of the
+  // words over the deep end of the board. Where the view at the end already shows all that, it stays.
+  pullTop() {
+    const P = this.play, res = P.result, F = P.frames;
+    let end;
+    if (res.kind === 'int' && res.by >= 0) end = F[F.length - 1].xy[2 * res.by + 1];
+    else if (res.kind === 'incomplete' || res.kind === 'throwaway') { let b = F.length - 1; while (b > 0 && !F[b - 1].air) b--; end = F[b].ball[1]; }
+    else end = res.yards;
+    if (!(end > 0)) return null;
+    const a = end - Y_LOW, room = Math.min(0.6, (WORDS + 8) / this.h);
+    const top = Y_LOW + Math.max(this.rangeY, a + 3, a / (1 - room));
+    return this.camTrack[F.length - 1] < 0.05 && top <= Y_LOW + this.rangeY + 1e-6 ? null : top;
+  }
+
   // Yards to pixels (CSS pixels).
-  sx(x) { const v = (x + W_YDS / 2) * this.k; return this.flip ? this.w - v : v; }
-  sy(y) { const v = (Y_LOW + this.camY + this.rangeY - y) * this.k; return this.flip ? this.h - v : v; }
+  sx(x) { const v = this.ox + (x + W_YDS / 2) * this.k; return this.flip ? this.w - v : v; }
+  sy(y) { const v = (this.top - y) * this.k; return this.flip ? this.h - v : v; }
 
   render() {
     const { ctx, dpr } = this;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
     if (!this.play) return;
-    this.camY = this.cam(this.t);
+    this.frame(this.t);
     this.field();
     const pre = this.t <= 0.001, over = !pre && this.t >= this.play.result.t - 1e-6;
     // After the snap the drawn-up play stays faintly under the trails, fading to it over the first half second.
@@ -124,7 +164,7 @@ export class Board {
   field() {
     const { ctx, k } = this;
     const C = this.colors;
-    const y0 = Y_LOW + this.camY - 1, y1 = y0 + this.rangeY + 2;
+    const y1 = this.top + 1, y0 = this.top - this.h / this.k - 1;
     ctx.lineCap = 'round';
     // sidelines (each theme sets how strong they and the 10-yard lines are: see --field-side and --field-ten)
     ctx.strokeStyle = C.side; ctx.globalAlpha = 1; ctx.lineWidth = 2;
@@ -142,12 +182,12 @@ export class Board {
         for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(this.sx(sd * SIDELINE), this.sy(y)); ctx.lineTo(this.sx(sd * (SIDELINE - tick)), this.sy(y)); ctx.stroke(); }
       }
     }
-    // yard markers, counted from the line of scrimmage
+    // yard markers, counted from the line of scrimmage: every five yards, or every ten with the camera pulled back
     ctx.globalAlpha = 1; ctx.fillStyle = C.num;
-    const fs = Math.max(9, Math.min(13, k * 0.95));
+    const fs = Math.max(9, Math.min(13, k * 0.95)), step = 5 * k < fs * 2.2 ? 10 : 5;
     ctx.font = `600 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (let y = Math.ceil(y0 / 5) * 5; y <= y1; y += 5) {
+    for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) {
       if (y <= 0) continue;
       for (const sd of [-1, 1]) {
         const x = sd * (SIDELINE - 6.5);
@@ -508,6 +548,9 @@ export class Board {
     }).filter(c => c.d < reach).sort((a, b) => a.d - b.d).map(c => c.i);
   }
 }
+
+// Easing in and out, for t from 0 to 1.
+const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 // Follow a long play down the field: the view slides up when the ball gets near the top.
 function camera(play, rangeY) {

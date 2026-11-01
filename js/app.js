@@ -1287,7 +1287,7 @@ function playbook() {
     ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn thicker, with a double head, in the bright colour.'],
     ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.'],
     ['Dotted line from the quarterback', 'The throw: from where the ball left his hand to where it came down.'],
-    ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play.'],
+    ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play. After a play that went past the line, the board pulls back to show all of it, from the backfield to the spot.'],
   ]));
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
   // areas in ZONES (js/playbook.js), as the player cards name them.
