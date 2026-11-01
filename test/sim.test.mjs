@@ -1,7 +1,7 @@
 // Unit tests for the simulator:  node --test test/sim.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simulate, prepare } from '../js/sim.js';
+import { simulate, prepare, name } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, SIDELINE } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -495,6 +495,24 @@ test('with a rusher closing in and nobody open, the quarterback throws it away, 
     assert.ok(near < 8.5, `${JSON.stringify(r.call)} seed ${seed - 1}: thrown away ${near.toFixed(1)} yards from the nearest receiver`);
   }
   assert.ok(n >= 5, `${n} throwaways`);
+});
+
+test('with a blitzer coming unblocked the quarterback throws hot, before he gets there', () => {
+  // Every pass play but the screen against Cover 0 (everyone rushes who isn't in man coverage), 192 dropbacks: more
+  // than half are hot throws now, every one out within 2.5 seconds (the Play-Action Shot's fake takes the longest) and
+  // naming a rusher nobody blocked.
+  let seed = 1, n = 0, hotN = 0;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.drop !== 'screen')) for (const fr of FRONTS) for (const flip of [false, true]) {
+    const r = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: 'c0', pressure: 'blitz', flip }, seed++);
+    n++;
+    const t = r.events.find(e => e.kind === 'throw' && /, hot, with /.test(e.text));
+    if (!t) continue;
+    hotN++;
+    assert.ok(t.t < 2.5, `${pl.id} seed ${seed - 1}: a hot throw at ${t.t} s`);
+    const S = prepare(r.call, seed - 1), b = S.D.find(d => t.text.includes(`with ${name(S, d)} coming unblocked`));
+    assert.ok(b && !r.frames.some(f => f.t <= t.t && f.eng[b.i] >= 0), `${pl.id} seed ${seed - 1}: "${t.text}" names a man nobody blocked`);
+  }
+  assert.ok(hotN / n > 0.4, `${hotN} hot throws in ${n} dropbacks against Cover 0`);
 });
 
 test('coverages put the right number deep and the right number rushing', () => {

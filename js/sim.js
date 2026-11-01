@@ -715,6 +715,9 @@ function qb(S, pl) {
   let rn = null, rd = 99;
   for (const d of S.D) if (d.eng < 0 && d.job.kind === 'rush') { const dd = dist(d, pl); if (dd < rd) { rd = dd; rn = d; } }
   if (rn && rd < 3 && t > 0.6) { const [ux] = unit(pl.x - rn.x, pl.y - rn.y); pl.tx = pl.x + ux * 2; pl.ty = pl.y + 0.3; pl.ts = 2; }
+  // A rusher coming with nobody to block him: the hot throw, quick, before he gets there. (Not on the screen, which
+  // lets the rushers come on purpose.)
+  if (play.drop !== 'screen' && t > 0.4) { const b = unblocked(S); if (b && dist(b, pl) < 8 && hot(S, b)) return; }
   if (t < S.readAt) {
     if (rd < 1.5 && t > 0.5) hurry(S, pl, false);
     return;
@@ -749,6 +752,34 @@ function qb(S, pl) {
     if (t > S.hold) return throwAway(S, pl);
   }
   if (rd < 2.2) hurry(S, pl, rd);
+}
+
+// A rusher nobody is blocking or about to block, on his way in: one the protection had nobody left for, or a man
+// defender who came after the passer when his man stayed in to block. (One who got off a block is pressure, not a
+// rusher left unblocked.)
+function unblocked(S) {
+  let best = null, bd = 99;
+  for (const d of S.D) {
+    if (d.job.kind !== 'rush' || d.eng >= 0 || d.lostTo >= 0 || !(d.addOn || S.freeRushers.includes(d))) continue;
+    if (S.O.some(o => o.eng < 0 && (o.want === d || o.job.target === d) && dist(o, d) < 2.5)) continue;
+    const dd = dist(d, S.QB);
+    if (dd < bd) { bd = dd; best = d; }
+  }
+  return best;
+}
+
+// The hot throw: to the receiver nearest the spot the blitzer left, if he has a step on his man, or else to anyone
+// open, as soon as he's into his route.
+function hot(S, b) {
+  const outs = S.O.filter(r => r.job.kind === 'route' && S.t >= (r.job.delay || 0) + 0.3);
+  if (!outs.length) return false;
+  const why = `hot, with ${name(S, b)} coming unblocked`;
+  const near = outs.slice().sort((p, q) => hyp(p.x - b.x0, p.y - b.y0) - hyp(q.x - b.x0, q.y - b.y0))[0], w = windowFor(S, near);
+  if (w.w > 0.3) { throwTo(S, near, w.P, w.tf, why); return true; }
+  let best = null;
+  for (const r of outs) { const x = windowFor(S, r); if (!best || x.w > best.w) best = { ...x, r }; }
+  if (best.w > 0.9) { throwTo(S, best.r, best.P, best.tf, why); return true; }
+  return false;
 }
 
 // Why he threw to read k: the reads before it are counted, not listed, so the caption stays short ("read 4, with the
