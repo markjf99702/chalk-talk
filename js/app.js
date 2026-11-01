@@ -619,9 +619,12 @@ function offenseChooser(host, readonly) {
     const was = fm.personnel;
     Object.assign(state.off, patch);
     // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
-    // or strong side keeps his call, the way an audible at the line does.
-    if (state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was) rollTheirs();
+    // or strong side keeps his call, the way an audible at the line does. The board says so until the snap, the way New
+    // look does, since his new call is hidden.
+    const subbed = state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was;
+    if (subbed) rollTheirs();
     afterChange();
+    if (subbed) setCaption('New personnel: they\'ve substituted.');
   };
   chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel, subWord: 'personnel' })), fm.id, id => set({ formation: id }), {
     disabled: readonly, blurb: `${fm.blurb} ${personnelWords(fm.personnel)}`,
@@ -743,6 +746,7 @@ $('auto').addEventListener('change', e => {
   state.auto = ownAuto = e.target.checked;
   if (state.auto) rollTheirs();
   afterChange();
+  if (state.auto) setCaption('The other coach has his call. It\'s hidden until the snap.');
 });
 // New look: the other coach picks again. It's in the result card after a play, and in his card before the snap.
 // The board says what it did until the snap, even when nothing there shows it: calling the defense, a new play from the

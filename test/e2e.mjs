@@ -990,6 +990,26 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.ok(nickel < 12, `a nickel defense stayed on against I-Form ${nickel} times in 30`);
   await p.context().close();
 }
+// His new call is hidden, so the board says he has substituted, before the snap and after it. A new play or strong side
+// says nothing: he keeps his call. Turning his picking back on says he has a call, hidden until the snap.
+{
+  const p = await phone();
+  const caption = () => p.textContent('#caption');
+  await p.getByRole('radio', { name: 'I-Form' }).click();
+  assert.equal(await caption(), 'New personnel: they\'ve substituted.', 'new personnel before the snap');
+  for (const name of ['Power', 'Left']) {
+    await p.getByRole('radio', { name }).click();
+    assert.doesNotMatch(await caption(), /substituted/, `a new ${name === 'Left' ? 'strong side' : 'play'} in the same formation says they've substituted`);
+  }
+  await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); });
+  await p.getByRole('radio', { name: 'Gun Doubles' }).click();
+  assert.equal(await caption(), 'New personnel: they\'ve substituted.', 'new personnel after a snap');
+  await p.click('#auto');
+  assert.equal(await caption(), '', 'calling both sides');
+  await p.click('#auto');
+  assert.equal(await caption(), 'The other coach has his call. It\'s hidden until the snap.', 'turning his picking back on');
+  await p.context().close();
+}
 
 // A call you've seen stays seen. Change your play after a snap and their call is still shown, as the same one as last
 // snap, until New look has him pick again: that one is hidden until the next snap. New look is in their card before the
