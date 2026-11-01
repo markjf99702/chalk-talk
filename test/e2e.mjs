@@ -1445,7 +1445,8 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   const still = async q => { for (let a = -1, b = -2; a !== b;) { a = await q.evaluate(() => scrollY); await new Promise(r => setTimeout(r, 150)); b = await q.evaluate(() => scrollY); } };
   const p = await phone();
   await p.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); document.querySelector('#result .actions').scrollIntoView({ block: 'end' }); });
-  const note = () => p.evaluate(() => document.getElementById('note').getBoundingClientRect().top);
+  // (its last line, "This time": the card's height goes with the snap, and the actions are at the bottom of the screen)
+  const note = () => p.evaluate(() => document.getElementById('noteNow').getBoundingClientRect().top);
   const before = await note(), seed = await p.evaluate(() => window.chalkTalk.state.seed);
   assert.ok(before > await p.evaluate(() => document.querySelector('.stage').getBoundingClientRect().bottom) && before < 844, `the coach's note is at ${Math.round(before)} px`);
   await p.click('#again');
