@@ -1044,6 +1044,26 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Where the board doesn't stay in view (a laptop's window made small, 700 by 600, and a small phone turned sideways,
+// 568 by 320), a player's button brings the page up to his card, rather than opening it out of sight, and Escape takes
+// it back down to the button.
+for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
+  const c = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: mobile, hasTouch: mobile });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.click('#jobs summary');
+  const fs = p.locator('.jobs-team button', { hasText: 'FS · Free safety' });
+  await fs.scrollIntoViewIfNeeded();
+  const card = () => p.evaluate(() => { const r = document.getElementById('who').getBoundingClientRect(); return { open: !document.getElementById('who').hidden, top: r.top, bottom: r.bottom, h: innerHeight }; });
+  assert.ok((await card()).open === false && (await p.evaluate(() => document.getElementById('board').getBoundingClientRect().bottom)) < 0, `${width}x${height}: the board was still in view at the free safety's button`);
+  await fs.click();
+  await until(async () => { const k = await card(); return k.open && k.top >= 0 && k.bottom <= k.h; }, 3000, `${width}x${height}: the free safety's button opened his card out of sight: ${JSON.stringify(await card())}`);
+  await p.keyboard.press('Escape');
+  await until(async () => p.evaluate(() => { const el = document.activeElement, r = el.getBoundingClientRect(); return el.textContent === 'FS · Free safety' && r.top >= 0 && r.bottom <= innerHeight; }), 3000, `${width}x${height}: Escape didn't go back to the free safety's button`);
+  await c.close();
+}
+
 // Playback: Pause holds the clock where it is, and ▶ goes on from there. Half speed plays about half a second of the
 // play each second, and Snap again from the result card snaps the same two calls with a new roll of the dice.
 {

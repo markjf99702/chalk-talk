@@ -832,6 +832,15 @@ function renderJobs() {
         showWho(p.i);
         draw();
         opener = b;
+        // Where the board doesn't stay in view (a window under 960 px wide and under 700 tall, a small phone turned
+        // sideways), the page goes up to the card, which would otherwise open out of sight: the whole board in the
+        // middle of the window, with him and his card on it, or the card there if the board is taller than the window.
+        // Only the page scrolls: the board's frame clips what's on it, and scrolling the card into view could shift the
+        // field inside it.
+        const r = $('who').getBoundingClientRect(), f = $('board').getBoundingClientRect();
+        if (r.top < 0 || r.bottom > innerHeight) {
+          scrollBy({ top: f.height <= innerHeight ? f.top - (innerHeight - f.height) / 2 : r.top + r.height / 2 - innerHeight / 2, behavior: smooth() });
+        }
         $('who').focus({ preventScroll: true });
       });
       row.append(b);
