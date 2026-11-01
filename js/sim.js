@@ -307,6 +307,7 @@ function buildDefense(S) {
 // half a second later; jet, he goes at full speed and the ball is snapped as he gets to the middle, still running: he
 // carries on across behind the line (see jetLead) before he turns up into his route. In man coverage the man who had him runs with him, a step behind and at his own depth (between the line and
 // the linebackers as he crosses the formation); in zone they slide to where they line up against the new formation.
+// A safety lined up deep who has him runs with him over the top, at his own depth.
 // The teams have already lined up for the snap (see prepare()): this works out the frames before it and, for jet,
 // where everyone is at the snap, still moving. S.from is the same call lined up before the motion.
 const MO = { across: 8, settle: 0.3, set: 0.5, lag: 0.25, react: 0.35, cross: -2.6 };
@@ -372,7 +373,7 @@ function presnap(S, kind) {
         // him before the motion to how he will at the snap, as the man in motion gets there
         const w = smooth(run(t - MO.lag - go) / L), m = moverAt(t - MO.lag);
         x = m.x + (A[k].x - start.x) * (1 - w) + (B[k].x - end.x) * w;
-        const base = A[k].y + (B[k].y - A[k].y) * w, inside = smooth((7 - Math.abs(x)) / 2);
+        const base = A[k].y + (B[k].y - A[k].y) * w, inside = base < 5 ? smooth((7 - Math.abs(x)) / 2) : 0; // (a deep man stays deep)
         y = base + (clamp(base, 2.3, 3) - base) * inside;
       }
       xy[2 * d.i] = x; xy[2 * d.i + 1] = y;

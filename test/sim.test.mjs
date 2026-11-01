@@ -765,12 +765,29 @@ test('motion: he runs across and is counted on his new side; in man coverage his
       assert.ok(Math.sign(at(snap, had.i).x) === Math.sign(fm.motion.to * f) || Math.abs(at(snap, had.i).x) < 6, `${what}: his man ran with him`);
       assert.ok(Math.hypot(at(snap, had.i).x - at(r.frames[0], had.i).x) > 4, `${what}: his man ran with him`);
       assert.match(line.text, /runs with him: man coverage\.$/, what);
+      // He crosses at his own depth, or between the line and the linebackers: never down on the line.
+      for (const fr of r.frames.filter(x => x.t <= 0)) assert.ok(at(fr, had.i).y > 1.5, `${what}: his man is down on the line at ${fr.t}`);
     } else {
       assert.equal(r.motion.man, -1, what);
       for (const d of S.D) assert.ok(at(r.frames[0], d.i).x * at(snap, d.i).x > -2, `${what}: the ${d.label} crossed the field after him in a zone`);
       assert.equal(line.text, 'Nobody follows him: zone.', what);
     }
   }
+});
+
+test('motion against a disguise: a safety showing deep who has the man in motion runs with him over the top', () => {
+  // Disguised Cover 1 shows two deep; a safety in man on the man in motion goes with him at his own depth, and so
+  // gives the man coverage away, rather than diving down to the line to cross the formation.
+  let found = 0;
+  for (let seed = 1; seed < 400 && found < 5; seed++) {
+    const call = { formation: FORMATIONS[seed % 4].id, play: 'smash', front: FRONTS[Math.floor(seed / 4) % 4].id, coverage: 'c1', pressure: seed % 2 ? 'four' : 'blitz', disguise: true, motion: seed % 3 ? 'jet' : 'across', flip: seed % 5 < 2 };
+    const r = simulate(call, seed);
+    if (r.motion.man < 0 || r.players[r.motion.man].cls !== 's') continue;
+    found++;
+    const i = r.motion.man, ys = r.frames.filter(f => f.t <= 0).map(f => f.xy[2 * i + 1]);
+    assert.ok(Math.min(...ys) > 10, `${JSON.stringify(call)} seed ${seed}: the ${r.players[i].label} came down to ${Math.min(...ys).toFixed(1)} yards to run with him`);
+  }
+  assert.ok(found >= 3, `only ${found} calls where a safety had him`);
 });
 
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
