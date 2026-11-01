@@ -940,7 +940,10 @@ addEventListener('hashchange', () => {
 // ---------------------------------------------------------------- the chart: this call against everything
 
 let chartJob = 0;
-let chart = null; // the rows of the last run: { rows: [{ id, name, call, n, yds, ok, avg, rate }], pressure, side }
+// Each row counts its snaps as they're run (n, yds, ok). Its bar shows avg and rate as they stood when it last finished
+// a time round, `of` snaps in, so a row drawn again part way (at the snap, to mark their call) says what its numbers
+// come from.
+let chart = null; // the rows of the last run: { rows: [{ id, name, call, n, yds, ok, avg, rate, of }], pressure, side }
 let redo = null; // a finished chart went with a change of call: { side, yours } until it's run again
 // Run once, the button says it can be run again: each run is a new set of snaps, and the numbers move a little.
 // Twenty snaps a row is enough for a first look but not to rank the rows (one row can swing from 1 to 14 yards a play
@@ -1031,7 +1034,7 @@ async function runChart() {
         const res = simulate({ ...r.call, flip: r.n % 2 === 1 }, newSeed()).result;
         r.n++; r.yds += res.yards; if (success(res)) r.ok++;
       }
-      r.avg = r.yds / r.n; r.rate = r.ok / r.n;
+      r.avg = r.yds / r.n; r.rate = r.ok / r.n; r.of = r.n;
       drawBars();
     }
   }
@@ -1067,7 +1070,7 @@ function drawBars() {
     const bar = row.querySelector('.bar'), from = was.get(r.id);
     if (from) { bar.style.width = from; bar.getBoundingClientRect(); } // from where it was, then on
     bar.style.width = `${Math.max(0.6, r.rate * 100)}%`;
-    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${pct}% successful, ${avg} yards a play, over ${r.n} snaps`;
+    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${pct}% successful, ${avg} yards a play, over ${r.of} snaps`;
   }
 }
 $('runChart').addEventListener('click', runChart);

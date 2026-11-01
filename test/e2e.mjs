@@ -1437,6 +1437,19 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Snap while the chart adds snaps: their call's row is marked as soon as it's out, and every row still says how many
+// snaps its numbers come from, 20 at a time, rather than how far into its next 20 the chart had got.
+{
+  const p = await phone();
+  await p.click('#runChart');
+  await p.waitForFunction(() => /^Running… [4-8]0 of 100$/.test(document.getElementById('runChart').textContent), null, { timeout: 30000 });
+  await p.click('#snap');
+  const seen = await p.$$eval('#bars .bar-row', r => r.map(x => ({ mine: x.classList.contains('mine'), n: +(x.title.match(/over (\d+) snaps$/) || [])[1] })));
+  assert.equal(seen.filter(r => r.mine).length, 1, 'their call\'s row is marked once the snap gives it away');
+  assert.ok(seen.every(r => r.n % 20 === 0), `drawn again at the snap, the rows say their numbers come from ${seen.map(r => r.n).join(', ')} snaps`);
+  await p.context().close();
+}
+
 // A reload (or a phone dropping the tab while it's in the background) keeps the play you were on: before the snap the
 // same hidden call, and after it the same play, finished. A new visit gets a fresh look.
 {
