@@ -365,6 +365,25 @@ test('on a run the ball carrier runs into a rusher held in a block, not through 
   }
 });
 
+test('on Power the pullers get to their men: the kick-out lands on the end, and the guard leads up on the linebacker', () => {
+  // A puller or a kick-out blocker used to stop for whoever showed up in front of him first, and the tackle beside him
+  // could take the end he was going for: of 288 Power snaps (every formation, front, coverage and pressure, both ways)
+  // the kick-out had his man by the time the back got to the line in 125 and the pulling guard ahead of a fullback in 29
+  // of 72. Now it's 221 and 57.
+  let seed = 1, kick = 0, kickN = 0, pull = 0, pullN = 0;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: 'power', front: fr.id, coverage: cv.id, pressure, flip };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const hole = r.events.find(e => e.kind === 'hole'), until = (hole ? hole.t : r.result.t) + 1e-9;
+    for (const b of S.O.filter(o => o.job.kind === 'block' && o.job.target && (o.job.scheme === 'kick' || o.job.scheme === 'pull'))) {
+      const got = r.frames.some(f => f.t <= until && f.eng[b.i] === b.job.target.i);
+      if (b.job.scheme === 'kick') { kickN++; if (got) kick++; } else { pullN++; if (got) pull++; }
+    }
+  }
+  assert.ok(kick >= 0.65 * kickN, `the kick-out got to his man in ${kick} of ${kickN} Power snaps`);
+  assert.ok(pull >= 0.65 * pullN, `the pulling guard got to his linebacker in ${pull} of ${pullN} Power snaps`);
+});
+
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
   const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
   for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {

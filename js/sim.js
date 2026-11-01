@@ -685,13 +685,14 @@ function pro(S, pl) {
 }
 
 // A run blocker's pick-up: the nearest defender in front of him who is free, that no teammate is on his way to block.
-// (near: whoever shows up right in front of him, even a teammate's man if that teammate is still a way off).
+// (near: whoever shows up right in front of him, even a teammate's man if that teammate is still a way off, but never
+// the man a puller or the kick-out block is going for).
 function pickUp(S, pl, range, near) {
   let best = null, bd = range;
   for (const d of S.D) {
     if (d.eng >= 0 || d.noEngage >= S.t || d.lostTo === pl.i || d.y < pl.y - 0.5) continue;
     const dd = dist(d, pl);
-    if (dd < bd && !S.O.some(o => o !== pl && o.eng < 0 && o.job.target === d && d.lostTo !== o.i && (!near || dist(o, d) < 2))) { bd = dd; best = d; }
+    if (dd < bd && !S.O.some(o => o !== pl && o.eng < 0 && o.job.target === d && d.lostTo !== o.i && (!near || dist(o, d) < 2 || o.job.scheme === 'kick' || o.job.pull))) { bd = dd; best = d; }
   }
   return best;
 }
@@ -960,8 +961,9 @@ function runBlock(S, pl) {
   // comes free near him: never a man a teammate is on his way to.
   const lead = j.scheme === 'lead' || j.scheme === 'pull' || j.scheme === 'kick';
   if (!tgt && (t > 0.5 || !j.target)) { tgt = pickUp(S, pl, j.target || lead ? 4 : 2.5); if (tgt) j.target = tgt; }
-  // On his way up to a linebacker, he blocks whoever shows up in front of him first.
-  if (tgt && tgt.y0 > 2 && dist(tgt, pl) > 2) {
+  // On his way up to a linebacker, he blocks whoever shows up in front of him first. (Not a puller or the man kicking
+  // out the end: each has one man, and runs to him.)
+  if (tgt && tgt.y0 > 2 && dist(tgt, pl) > 2 && !j.pull && j.scheme !== 'kick') {
     const near = pickUp(S, pl, 1.6, true);
     if (near && near !== tgt) { tgt = near; j.target = near; }
   }
