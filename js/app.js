@@ -13,7 +13,7 @@ const RUN_NOTES = {
   iz: 'Inside zone works when there are as many blockers as defenders in the box.',
   oz: 'Outside zone stretches the defense sideways. If the line reaches the edge, the back gets outside; if the defense flows too fast to stop that, a cutback lane opens behind it.',
   power: 'Power brings an extra blocker to the hole, the pulling guard, and wins with numbers at the point of attack. It loses to quick penetration and to an extra defender in the box.',
-  draw: 'The draw wants defenders who think pass: rushers running up the field past the back, linebackers dropping into coverage. Against a blitz it runs into the rushers.',
+  draw: 'The draw wants defenders who think pass: rushers running up the field past the back, linebackers dropping into coverage. Against man coverage a defender is waiting on the back, and against an all-out blitz the rushers are already there.',
 };
 
 // ---------------------------------------------------------------- state

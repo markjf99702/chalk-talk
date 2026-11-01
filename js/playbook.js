@@ -86,7 +86,7 @@ export const PLAYS = [
   {
     id: 'verts', name: 'Four Verticals', type: 'pass', drop: 'five', reads: ['S2', 'W2', 'S3', 'S1', 'W1', 'RB'],
     routes: r => ({ S1: 'go', S2: 'seam', S3: 'seam', W1: 'go', W2: 'seam', RB: 'check', FB: 'check' }),
-    blurb: 'Four receivers run straight down the field. Against one deep safety, someone ends up with nobody over the top; against two, the seams split them.',
+    blurb: 'Four receivers run straight down the field, more than the deep defenders can each stay over. Against two deep safeties each has a receiver on either side of him, and he can\'t be over both.',
   },
   {
     id: 'smash', name: 'Smash', type: 'pass', drop: 'five', reads: ['S2', 'S1', 'W2', 'W1', 'RB', 'FB'],
@@ -106,7 +106,7 @@ export const PLAYS = [
   {
     id: 'slants', name: 'Slant-Flat', type: 'pass', drop: 'quick', reads: ['S1', 'S2', 'W1', 'W2'],
     routes: r => ({ S1: 'slant', S2: 'flat', S3: 'seam', W1: 'slant', W2: 'flat', RB: 'check', FB: 'check' }),
-    blurb: 'Quick game: the outside receivers run slants, the inside ones run to the flat, and the ball is out in about a second and a half. It beats the blitz.',
+    blurb: 'Quick game: the outside receivers run slants, the inside ones run to the flat, and the ball is out in about a second. It beats the blitz.',
   },
   {
     id: 'pa', name: 'Play-Action Shot', type: 'pass', drop: 'pa', reads: ['S1', 'W1', 'S2', 'RB'],
@@ -257,37 +257,37 @@ export const PERSONNEL = 'Personnel is two digits: how many running backs, then 
 // Coach's notes on how a pass concept tends to fare against each coverage. Short and plain.
 export const NOTES = {
   verts: {
-    c0: 'No safety deep against four vertical routes: if the protection holds, it\'s a footrace with nobody over the top. If a blitzer comes free first, there\'s no time for it.',
-    c1: 'One free safety can only help on one seam. The quarterback holds him with his eyes and throws the other way.',
-    c2: 'The seams go right at the hole between the two deep safeties, and the corners in the flats are left with nobody to cover.',
-    c3: 'Four vertical routes on three deep defenders: one of the seams has nobody over the top. The classic Cover 3 beater.',
+    c0: 'No safety deep against four vertical routes: every one is a footrace with nobody over the top. But Cover 0 sends a rusher the line can\'t block, so the ball usually has to come out hot, before he gets there.',
+    c1: 'One free safety can\'t help on all four. The go routes outside are one-on-ones with the corners in man coverage, and the check-down is there when they\'re covered.',
+    c2: 'Each half-field safety has two receivers running at him: the seam inside him and the go route outside, past the corner sitting in the flat. He can\'t stay over both.',
+    c3: 'Four vertical routes on three deep defenders should leave a seam open, but the hook defenders carry the seams up the field and the free safety stays over the top of them. The throw has to beat both, and the check-down is often the answer.',
     c4: 'Quarters puts four defenders deep, one for each vertical route. The deep shots are taken away; the check-down underneath is there.',
   },
   smash: {
-    c0: 'Against man with no help, the corner route is a one-on-one footrace to the sideline, and the hitch beats a press corner who turns to run.',
-    c1: 'Man coverage turns Smash into one-on-ones. The hitch is quick and safe; the corner route fights the free safety over the top.',
+    c0: 'Against man with no help, the corner route is a footrace to the sideline. But Cover 0 sends a rusher the line can\'t block, so the ball usually comes out hot, to whoever is nearest the spot he left, before the corner route has made its break.',
+    c1: 'Man coverage turns Smash into one-on-ones. The corner route, breaking away from the man chasing it toward the sideline, is the one that comes open: the free safety in the middle is a long way from it.',
     c2: 'The Cover 2 corner sits in the flat, so he can\'t carry the corner route, and the half-field safety is a long way from the sideline. Built to beat exactly this.',
     c3: 'The Cover 3 corner bails deep and takes away the corner route, but that leaves the hitch open underneath him.',
-    c4: 'Quarters is built to stop this: the safety reads the slot and jumps the corner route, and the corner sits over the hitch.',
+    c4: 'Quarters is built to stop this: four defenders deep, so the corner route has a corner and a safety over it. What\'s left is the hitch underneath, open but short.',
   },
   flood: {
-    c0: 'Against man, Flood is three one-on-ones on one side. The sail route breaking away from a trailing defender is the best of them.',
-    c1: 'The free safety can\'t help on routes breaking toward the sideline. The sail and the flat are one-on-ones in space.',
-    c2: 'The Cover 2 corner has the flat, the safety is deep: the sail route lands in between them at about 13 yards.',
+    c0: 'Against man, Flood is three one-on-ones on one side. But Cover 0 sends a rusher the line can\'t block, and the quick throw is to the back in the flat, with his man a step behind.',
+    c1: 'The free safety can\'t help on routes breaking toward the sideline, and the back\'s flat route is a one-on-one in space against a linebacker: the easy throw.',
+    c2: 'The Cover 2 corner is caught between the sail and the flat route under it. When he sinks under the sail, with the safety over the top of it, the back in the flat is open, and that\'s where the ball goes most often.',
     c3: 'Three receivers on one side against two zone defenders there (the corner deep and the curl-flat defender short). Someone is left uncovered. Built to beat exactly this.',
-    c4: 'Quarters has an extra man deep, so the sail is covered over the top; the flat is open underneath.',
+    c4: 'Quarters puts four deep, and the corner and safety on that side stay deep: the sail settles in front of them at 12 to 14 yards, and the flat is open underneath it too.',
   },
   mesh: {
     c0: 'The two crossers brush past each other, and man defenders trailing them run into the traffic. With no help in the middle, a clean catch can go a long way.',
-    c1: 'The crossers pick the man defenders off each other, but the "rat" in the short middle is there to wall them.',
-    c2: 'Against zone, the crossers keep running into the next defender\'s area or settle in the soft spots between the linebackers. The corner route over the flat defender is there too.',
-    c3: 'The crossers clear the middle and the corner route attacks the deep third; the sit route settles between the linebackers.',
-    c4: 'The four deep defenders leave three underneath, so the crossers and the sit route have room.',
+    c1: 'The crossers pick the man defenders off each other, and a crosser who gets past the "rat" in the short middle is running away from the man chasing him.',
+    c2: 'The three underneath defenders sit on the crossers, but the corner route over the corner in the flat is open: the same hole Smash goes after.',
+    c3: 'The corner route runs into the deep third the Cover 3 corner is guarding, so the ball goes underneath, to the crossers and the back\'s swing, for short gains.',
+    c4: 'Four deep defenders take away the corner route. The crossers and the back\'s swing underneath are open, but the deep defenders come down on them before they get far.',
   },
   slants: {
     c0: 'Quick throws are the answer to an all-out blitz: the ball is out before the rush gets there. A slant beating a press corner has nobody behind him.',
     c1: 'Slants against outside-leverage corners are open inside. The rat in the middle is the danger.',
-    c2: 'The Cover 2 corner sits in the flat, right where the flat route goes; the slant goes behind him, in front of the linebackers.',
+    c2: 'The Cover 2 corner sits in the flat, right where the flat route goes, and the linebackers sit over the slant. Both are short throws: the flat is open more often, with the corner right there to tackle.',
     c3: 'The curl-flat defender has to choose: widen for the flat and the slant comes open behind him, or squeeze the slant and the flat is free.',
     c4: 'Quarters corners play off and deep, so there\'s room underneath for both quick routes.',
   },
@@ -299,10 +299,10 @@ export const NOTES = {
     c4: 'Quarters safeties read the run fake and come up, which is exactly when the post goes behind them, or they stay home and the crosser is underneath.',
   },
   screen: {
-    c0: 'The best call against an all-out blitz: every rusher runs past the back, and there\'s nobody left to tackle him but the corners, who are running with their receivers.',
+    c0: 'The screen\'s best look: every rusher in an all-out blitz runs past the back, and there\'s nobody left to tackle him but the corners, who are running with their receivers.',
     c1: 'Man defenders are turned and running with their receivers. The man on the back is the one who has to beat three linemen.',
     c2: 'The underneath zone defenders are facing the quarterback and see it coming. It works only if the linemen get to them first.',
     c3: 'The curl-flat defender is often right where the screen goes. Screens against Cover 3 need the linemen to block him quickly.',
-    c4: 'Three underneath defenders, two of them out wide: the middle is thin once the back has the ball.',
+    c4: 'Three underneath defenders, two of them out wide, so the middle is thin; but the quarters safeties come down fast once the back has the ball.',
   },
 };
