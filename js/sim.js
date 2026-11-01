@@ -508,7 +508,9 @@ function ballSpeed(d) { return Math.min(26, 18 + d * 0.25); }
 function throwTo(S, r, P, tf, why) {
   const QB = S.QB, b = S.ball, R = S.R;
   const d = hyp(P.x - QB.x, P.y - QB.y);
-  const pressed = nearestRusher(S) < 2.6;
+  // A rusher close by hurries the throw, except on the screen: the line let the rushers through on purpose, and the
+  // quarterback lofts it over them to the back he knew would be there.
+  const pressed = nearestRusher(S) < 2.6 && S.play.drop !== 'screen';
   const sd = 0.3 + d * (d > 25 ? 0.022 : 0.012) + (pressed ? 0.55 : 0);
   const tx = P.x + R.normal() * sd, ty = P.y + R.normal() * sd * 0.8;
   Object.assign(b, { state: 'air', fx: b.x, fy: b.y, tx, ty, t0: S.t, tf, peak: Math.min(9, d * 0.16), target: r ? r.i : -1, holder: -1 });
