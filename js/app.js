@@ -1108,6 +1108,7 @@ function playbook() {
     ['Deep thirds, halves and quarters', 'The deep field, from about 9 yards on, split between the deep defenders: in thirds in Cover 3 (the corners and the free safety), in halves in Cover 2 (the two safeties), in quarters in Cover 4 (the corners and the safeties). The deep middle third is the middle one of the three; an inside quarter is one of the two nearest the middle.'],
     ['Success', 'A play that gains 4 yards or more. Coaches judge a gain by the down and the distance to go; with no downs on this board, 4 yards, a good start on 1st and 10, is the line. The chart\'s success rate counts these.'],
     ['Big play', 'A run of 10 yards or more, or a pass play that gains 20 or more: a common way analysts count explosive plays (Sharp Football Analysis, for one). Teams draw the line in different places.'],
+    ['Takeaway', 'The defense taking the ball away: an interception, or a fumble it recovers. There are no fumbles on this board, so here a takeaway is an interception.'],
   ]));
 }
 
