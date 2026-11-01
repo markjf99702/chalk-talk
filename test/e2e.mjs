@@ -1224,9 +1224,10 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
 // Each time in the play-by-play is a button that watches that moment again: from a second before it to a second after,
 // at half speed whatever the speed is set to, and then it stops there with that line on the board. Where two more lines
 // would come up within the second and push it off, it stops short of the second of them; a line about a block shed,
-// which the board doesn't put up as it plays, is up while it's the moment watched. ▶ then plays on at your speed. From
-// the snap on (not before: it would give away a hidden play), the scrubber has a mark at the handoff, the throw and
-// the catch. The board's frames are stepped by hand here, a tenth of a second each, so the speeds can be counted.
+// which the board doesn't put up as it plays, is up while it's the moment watched. ▶ then plays on at your speed. Once
+// the play has been seen to the whistle (not as it first runs, when it would give away how it comes out, nor before the
+// snap, when it would give away a hidden play), the scrubber has a mark at the handoff, the throw and the catch. The
+// board's frames are stepped by hand here, a tenth of a second each, so the speeds can be counted.
 {
   const p = await phone();
   await p.evaluate(() => {
@@ -1288,6 +1289,11 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   assert.deepEqual(marks.snapped, marks.want, 'the scrubber\'s marks are at the handoff, the throw and the catch');
   assert.deepEqual(marks.snapped.map(m => m[0]), ['throw', 'catch']);
   assert.equal(marks.before, 0, 'the scrubber has marks before the snap');
+  // As the snap runs the first time there are none (a second mark would say the pass is caught); at the whistle, they come.
+  await p.evaluate(() => { window.chalkTalk.play(); window.stepFrames(30); });
+  assert.deepEqual([(await now()).phase, await p.$$eval('#marks i', m => m.length)], ['playing', 0], 'the scrubber\'s marks give the play away as it runs');
+  await untilStopped();
+  assert.equal(await p.$$eval('#marks i', m => m.length), 2, 'at the whistle the scrubber has no marks');
 
   // Power, where the cut and the miss just after it come 0.1 s apart and the hole opens 0.3 s later: the cut, watched
   // again, stops a frame before the hole, while it's still up. Then the tackler's shed block, which the board leaves

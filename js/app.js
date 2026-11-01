@@ -180,6 +180,9 @@ function draw() { board.t = state.t; board.render(); placeWho(); }
 
 // A moment from the play-by-play, watched again (see replay()): its line, and while it plays, the time it stops at.
 let moment = null; // { e, until }, then { e } once it has stopped there
+// The play last seen to the whistle (played out, scrubbed to the end, or back after a reload): the scrubber's marks are
+// for it (see syncMarks()).
+let whistled = null;
 
 function play() {
   if (!state.play) return;
@@ -258,6 +261,7 @@ let whyTimer = 0;
 const HOLD = 1300; // ms
 function finish({ hold = false } = {}) {
   state.phase = 'done';
+  whistled = state.play;
   cancelAnimationFrame(raf);
   syncTransport();
   showResult();
@@ -400,11 +404,12 @@ function syncScrub() {
   s.setAttribute('aria-valuetext', `${state.t.toFixed(1)} of ${board.duration().toFixed(1)} seconds${now ? `: ${now}` : ''}`);
 }
 
-// The marks under the scrubber at the handoff, the throw and the catch (or the interception), from the snap on: before
-// it they'd say whether a hidden play is a run or a pass.
+// The marks under the scrubber at the handoff, the throw and the catch (or the interception), once the play has been
+// seen to the whistle: as it runs the first time they'd give away how it comes out (a second mark is a catch, none on a
+// pass is a sack), and before the snap whether a hidden play is a run or a pass.
 let marked = null;
 function syncMarks() {
-  const P = state.phase === 'pre' ? null : state.play;
+  const P = state.phase !== 'pre' && whistled === state.play ? state.play : null;
   if (marked === P) return;
   marked = P;
   const host = $('marks'), F = P?.frames;
@@ -433,6 +438,7 @@ $('scrub').addEventListener('input', e => {
   const F = state.play.frames;
   state.t = F[Math.max(0, Math.min(F.length - 1, Math.round(+e.target.value)))].t;
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
+  if (state.phase === 'done') whistled = state.play;
   caption(); draw(); syncTransport();
   if (state.phase === 'done') { showResult(); showWhy(); sayResult(); } else $('why').hidden = true;
 });
