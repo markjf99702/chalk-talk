@@ -142,6 +142,9 @@ assert.equal(ending.why, false, 'the button to the explanation came up over the 
 assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result has a headline');
 assert.ok(await page.$$eval('#story li', li => li.length) >= 1, 'the play-by-play has at least one line');
 assert.ok((await page.textContent('#note')).trim().length > 40, 'the coach\'s note is there');
+// It says how the call does in general, and then how this snap went.
+assert.match(await page.textContent('#note'), /^How .+ (does against Cover \d|works): [A-Z]/);
+assert.match(await page.textContent('#noteNow'), /^This time: [a-z].+\.$/);
 assert.match(await page.textContent('#theirsHint'), /They called/, 'their call is shown after the snap');
 assert.equal(await page.textContent('#say'), `${await page.textContent('#resHead')}. ${await page.textContent('#resKicker')}. Why it worked is under the board.`);
 // One name for one thing: Snap again is a new snap of the same calls, here and in the result card, and it says so. The
@@ -457,6 +460,45 @@ for (const side of ['O', 'D']) {
   assert.match(blitz.text, /^Cover 0: the .+ and the .+ blitz\.$/);
   assert.ok(blitz.caption.includes(blitz.text), `just after the snap the caption says "${blitz.caption}"`);
   assert.deepEqual(blitz.rung, blitz.all, 'the blitzers the caption names aren\'t all ringed');
+  await p.close();
+}
+
+// The coach's note says how this snap went, from what happened on it: on a pass, the man he threw to and the yards the
+// headline gives, or the man who broke it up, picked it off or sacked him; on a run, the box count and the man who made
+// the tackle.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.waitForFunction(() => window.chalkTalk);
+  const bad = await p.evaluate(() => {
+    const { state, lineUp, finish, board } = window.chalkTalk, out = [], seen = new Set();
+    const F = ['iform', 'single', 'doubles', 'trips'], PL = ['iz', 'oz', 'power', 'draw', 'verts', 'smash', 'flood', 'mesh', 'slants', 'pa', 'screen'];
+    const FR = ['over', 'under', '34', 'nickel'], CV = ['c0', 'c1', 'c2', 'c3', 'c4'];
+    const short = { DT: 'the defensive tackle', NT: 'the nose', M: 'the Mike', W: 'the Will', S: 'the Sam', J: 'the Jack', FS: 'the free safety', SS: 'the strong safety', NB: 'the nickel back', CB: 'a corner', DE: 'a defensive end' };
+    state.auto = false;
+    for (let k = 0; k < 220; k++) {
+      state.off = { formation: F[k % 4], play: PL[k % 11], flip: k % 2 === 1 };
+      state.def = { front: FR[(k * 7) % 4], coverage: CV[(k * 3) % 5], pressure: k % 3 ? 'four' : 'blitz' };
+      state.seed = 7100 + k;
+      lineUp(); state.t = board.duration(); finish();
+      const P = state.play, res = P.result, now = document.getElementById('noteNow').textContent, head = document.getElementById('resHead').textContent;
+      const say = why => out.push(`${state.off.play}/${state.def.coverage} seed ${state.seed}: ${why}: "${now}" (${head})`);
+      if (!/^This time: .+\.$/.test(now)) { say('not a sentence'); continue; }
+      const yards = head.match(/(\d+)\+? yards?/)?.[1];
+      if (yards && res.kind !== 'sack' && !now.includes(` ${yards}`)) say('not the headline\'s yards');
+      const end = res.by >= 0 && res.kind !== 'catch' && P.players[res.by].label; // after a catch, the yards are what count
+      if (end && !now.includes(short[end]) && !(end === 'DE' && /side end/.test(now))) say('not the man who ended it');
+      const thrown = P.events.find(e => e.kind === 'throw');
+      if (thrown) { const r = P.players[thrown.who]; if (!now.includes(r.cls === 'te' ? `(${r.label})` : r.label === 'RB' ? 'running back' : r.label === 'FB' ? 'fullback' : `the ${r.label} `)) say('not the man he threw to'); }
+      if (res.kind === 'sack' && !/sacked him/.test(now)) say('a sack, unsaid');
+      if (k % 11 < 4 && !/ in the box/.test(now)) say('a run without the box count');
+      seen.add(res.kind);
+    }
+    return { out, seen: [...seen].sort() };
+  });
+  assert.deepEqual(bad.out, [], 'the This time line in the coach\'s note');
+  assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
   await p.close();
 }
 

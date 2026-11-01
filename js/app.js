@@ -1,6 +1,6 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES } from './playbook.js';
-import { simulate } from './sim.js';
+import { simulate, name } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
 
@@ -929,8 +929,9 @@ function showResult() {
     li.innerHTML = `<span class="t">${e.t.toFixed(1)}s</span> ${esc(e.text)}`;
     story.append(li);
   }
-  const { note, reads } = coachNote(P);
-  $('note').textContent = note;
+  const { lead, note, now, reads } = coachNote(P);
+  $('note').innerHTML = `<b>${esc(lead)}</b> ${esc(note)}`;
+  $('noteNow').innerHTML = `<b>This time:</b> ${esc(now)}`;
   const ul = $('reads');
   ul.textContent = '';
   for (const r of reads) { const li = document.createElement('li'); li.textContent = r; ul.append(li); }
@@ -970,8 +971,62 @@ function coachNote(P) {
   // On inside zone the line works to the play side; when that leaves the back-side end alone, the note says who he is.
   const backEnd = pl.id === 'iz' && P.unblocked.some(i => P.players[i].label === 'DE' && P.players[i].x * playSide(P) < 0)
     ? ' The back-side end was left unblocked: the line works to the play side, so he\'s the man a cutback has to beat.' : '';
-  const note = pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd + (P.box.box > P.box.blockers ? ` Here the defense had ${P.box.box - P.box.blockers} more in the box than the offense had blockers.` : P.box.box < P.box.blockers ? ' Here the offense had more blockers than the defense had defenders in the box.' : ' Here the numbers in the box were even.');
-  return { note, reads };
+  // How the call does in general, then how this snap went, so a snap that goes the other way doesn't read as the note
+  // being wrong.
+  const lead = pl.type === 'pass' ? `How ${pl.name} does against ${cv.name}:` : `How ${pl.name} works:`;
+  const note = pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd;
+  return { lead, note, now: thisTime(P), reads };
+}
+
+// This snap in one sentence, from the play-by-play: on a pass, which read he threw to and what came of it, or what got
+// to him first; on a run, the numbers in the box and who made the tackle. The yards are the headline's.
+const READS = ['', 'one', 'two', 'three', 'four', 'five', 'six'];
+function thisTime(P) {
+  const res = P.result, E = P.events, pl = byId(PLAYS, P.call.play), n = gained(res), by = res.by;
+  const yd = v => `${v} yard${v === 1 ? '' : 's'}`;
+  const him = i => name(null, P.players[i]); // an offensive player's name: "the H", "the tight end (Y)"
+  const shed = i => E.some(e => e.kind === 'shed' && e.who === i);
+  const covered = (k, passed = k) => (k === 1 && passed === 1 ? 'his first read' : passed >= k ? `his first ${READS[k]} reads` : `${READS[passed]} of his first ${READS[k]} reads`);
+  if (pl.type === 'run') {
+    const d = P.box.box - P.box.blockers;
+    const box = d > 0 ? `the defense had ${d} more in the box than the offense had blockers` : d < 0 ? 'the offense had more blockers than the defense had defenders in the box' : 'the numbers in the box were even';
+    const yards = n > 0 ? `after ${yd(n)}` : n < 0 ? `for a loss of ${yd(-n)}` : 'for no gain';
+    let carry;
+    const blocked = E.findLast(e => e.kind === 'tackle')?.blocked;
+    if (res.carrier >= 0 && P.players[res.carrier].cls === 'qb') carry = `${nm(P, by, true)} ${blocked ? 'reached out of a block and' : 'got into the backfield and'} dropped the quarterback before the handoff`;
+    else if (res.long) carry = `the back broke it for ${Math.min(n, 60)}+ yards`;
+    else if (by < 0) carry = `the back was forced out of bounds ${yards}`;
+    else if (P.unblocked.includes(by)) carry = `${nm(P, by, true)}, left unblocked, made the tackle ${yards}`;
+    else carry = `${nm(P, by, true)} ${shed(by) ? 'got off a block to make the tackle' : blocked ? 'reached out of a block to make the tackle' : 'made the tackle'} ${yards}`;
+    return `${box}, and ${carry}.`;
+  }
+  if (res.kind === 'sack') {
+    const s = E.findLast(e => e.kind === 'sack'), passed = s?.passed || 0;
+    if (by < 0) return 'nothing came open, and he never got rid of it.';
+    const free = P.cameFree.includes(by) || !P.frames.some(f => f.t <= res.t && f.eng[by] >= 0);
+    return `${nm(P, by)} ${free ? 'came unblocked' : shed(by) ? 'got off his block' : 'got through'} and sacked him ${res.t.toFixed(1)} seconds after the snap, ${passed ? `with ${covered(passed)} covered` : pl.drop === 'screen' ? 'before the screen was set up' : 'before his first read came open'}.`;
+  }
+  if (res.kind === 'throwaway') {
+    const passed = E.findLast(e => e.kind === 'away')?.passed || 0;
+    return `${passed ? `with ${covered(passed)} covered` : 'with nothing open in time'}, he threw it away rather than take a sack.`;
+  }
+  const t = E.find(e => e.kind === 'throw');
+  if (!t) return '';
+  const who = him(t.who), route = ROUTES[t.route]?.name || 'route', on = `${who} on the ${route}${/route|check-down|screen/.test(route) ? '' : ' route'}`;
+  const threw = {
+    read: t.read === 0 ? `he threw to his first read, ${on}` : !t.passed ? `he threw to read ${t.read + 1}, ${on}` : t.route === 'check' ? `with ${covered(t.read, t.passed)} covered, he checked it down to ${who}` : `with ${covered(t.read, t.passed)} covered, he threw to ${on}`,
+    hot: `${t.blitzer >= 0 ? nm(P, t.blitzer) : 'a blitzer'} came unblocked, so he threw hot to ${on}`,
+    pressure: `with the rush on him, he threw to ${on}`,
+    last: `with none of his reads open, he threw to ${on}`,
+    screen: `he threw the screen to ${who}`,
+  }[t.how] || `he threw to ${on}`;
+  const end = E.findLast(e => e.kind === 'inc' || e.kind === 'pbu' || e.kind === 'int');
+  let came;
+  if (res.kind === 'catch') came = res.long ? `, and it went for ${Math.min(n, 60)}+ yards` : n >= 4 ? `, and it went for ${yd(n)}` : n > 0 ? `, but it went for only ${yd(n)}` : n < 0 ? `, but he was dropped for a loss of ${yd(-n)}` : ', but it went for no gain';
+  else if (res.kind === 'int') came = end?.how === 'off' ? `, but the throw was off target and ${nm(P, by)} picked it off` : `, and ${nm(P, by)} jumped the route and picked it off`;
+  else came = { out: ', but the throw went out of bounds', off: ', but the throw was off target', drop: ', but he dropped it' }[end?.how]
+    || (end?.kind === 'pbu' ? `, but ${nm(P, by)} broke it up` : by >= 0 ? `, but ${nm(P, by)} got a hand on it` : ', but it fell incomplete');
+  return `${threw}${came}.`;
 }
 
 // Which way a run goes: +1 to the offense's right, -1 to its left.

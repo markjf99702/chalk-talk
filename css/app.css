@@ -428,6 +428,9 @@ button:disabled { cursor: default; }
 .note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .note h3 { margin: 0 0 4px; font-family: var(--cond); font-weight: 700; font-size: 16px; letter-spacing: .02em; }
 .note p { margin: 0; font-size: 15px; }
+.note p b { font-weight: 600; }
+/* how this snap went, under how the call does in general */
+.note p.now { margin-top: 6px; }
 .reads { margin: 8px 0 0; padding-left: 18px; font-size: 14px; color: var(--muted); display: grid; gap: 3px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .ghost {

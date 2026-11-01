@@ -543,7 +543,10 @@ function giveBall(S, pl) {
 
 function ballSpeed(d) { return Math.min(26, 18 + d * 0.25); }
 
-function throwTo(S, r, P, tf, why) {
+// why: the words for the play-by-play ("his first read"); how: the same for the coach's note to put in its own words
+// (see thisTime() in js/app.js): { how: 'read', read } with read counted from 0, 'hot' with the blitzer, 'pressure',
+// 'last' (past his last read) or 'screen'. Either way it says how many reads he passed up first.
+function throwTo(S, r, P, tf, why, how = {}) {
   const QB = S.QB, b = S.ball, R = S.R;
   const d = hyp(P.x - QB.x, P.y - QB.y);
   // A rusher close by hurries the throw, except on the screen: the line let the rushers through on purpose, and the
@@ -558,7 +561,7 @@ function throwTo(S, r, P, tf, why) {
   S.pressedThrow = pressed;
   if (r) {
     r.catchAt = { x: tx, y: ty };
-    ev(S, 'throw', `${name(S, QB, true)} throws to ${name(S, r)} on ${routeText(r.job.route)}${why ? ', ' + why : ''}.`, { who: r.i });
+    ev(S, 'throw', `${name(S, QB, true)} throws to ${name(S, r)} on ${routeText(r.job.route)}${why ? ', ' + why : ''}.`, { who: r.i, route: r.job.route, passed: passedUp(S, r), ...how });
   }
 }
 
@@ -567,24 +570,24 @@ function arrive(S) {
   const r = b.target >= 0 ? S.P[b.target] : null;
   const P = { x: b.tx, y: b.ty };
   if (!r) { b.state = 'dead'; if (S.awayTo) ev(S, 'away', 'It hits the ground. Incomplete.', { who: S.awayTo.i }); else ev(S, 'away', 'It lands out of bounds. Incomplete.'); return finish(S, 'throwaway'); }
-  if (Math.abs(P.x) > SIDELINE) { b.state = 'dead'; ev(S, 'inc', `Thrown out of bounds, out of ${name(S, r)}'s reach. Incomplete.`, { who: r.i }); return finish(S, 'incomplete'); }
+  if (Math.abs(P.x) > SIDELINE) { b.state = 'dead'; ev(S, 'inc', `Thrown out of bounds, out of ${name(S, r)}'s reach. Incomplete.`, { who: r.i, how: 'out' }); return finish(S, 'incomplete'); }
   const rd = dist(r, P);
   let near = null, nd = 99;
   for (const d of S.D) { const dd = dist(d, P); if (dd < nd) { nd = dd; near = d; } }
   if (rd > 1.5) {
-    if (nd < 1.1 && R.chance(0.2)) { b.state = 'dead'; ev(S, 'int', `The throw is off target, and ${name(S, near)} picks it off.`, { who: near.i }); return finish(S, 'int', near); }
-    b.state = 'dead'; ev(S, 'inc', `Off target: ${name(S, r)} can't get to it. Incomplete.`, { who: r.i }); return finish(S, 'incomplete');
+    if (nd < 1.1 && R.chance(0.2)) { b.state = 'dead'; ev(S, 'int', `The throw is off target, and ${name(S, near)} picks it off.`, { who: near.i, how: 'off' }); return finish(S, 'int', near); }
+    b.state = 'dead'; ev(S, 'inc', `Off target: ${name(S, r)} can't get to it. Incomplete.`, { who: r.i, how: 'off' }); return finish(S, 'incomplete');
   }
   if (nd < rd + 0.25 && nd < 1.0) {
     const pi = nd < rd - 0.2 ? 0.13 : 0.04;
-    if (R.chance(pi)) { b.state = 'dead'; ev(S, 'int', `${cap(name(S, near))} jumps the route and intercepts it.`, { who: near.i }); return finish(S, 'int', near); }
+    if (R.chance(pi)) { b.state = 'dead'; ev(S, 'int', `${cap(name(S, near))} jumps the route and intercepts it.`, { who: near.i, how: 'jump' }); return finish(S, 'int', near); }
     if (R.chance(0.7)) { b.state = 'dead'; ev(S, 'pbu', `${cap(name(S, near))} breaks it up.`, { who: near.i }); return finish(S, 'incomplete', near); }
   }
   // Deep balls are harder to catch: the ball comes over the shoulder and the defender is closing.
   const pc = (nd > 2.5 ? 0.95 : nd > 1.5 ? 0.88 : nd > 0.8 ? 0.72 : 0.5) - (P.y > 18 ? 0.2 : 0);
   if (!R.chance(pc - rd * 0.08)) {
     b.state = 'dead';
-    ev(S, 'inc', nd < 1.5 ? `${cap(name(S, near))} gets a hand in, and it falls incomplete.` : `${cap(name(S, r))} drops it.`, { who: (nd < 1.5 ? near : r).i });
+    ev(S, 'inc', nd < 1.5 ? `${cap(name(S, near))} gets a hand in, and it falls incomplete.` : `${cap(name(S, r))} drops it.`, { who: (nd < 1.5 ? near : r).i, how: nd < 1.5 ? 'hand' : 'drop' });
     return finish(S, 'incomplete', nd < 1.5 ? near : null);
   }
   r.x = P.x * 0.6 + r.x * 0.4; r.y = P.y * 0.6 + r.y * 0.4;
@@ -732,7 +735,7 @@ function qb(S, pl) {
   }
   if (S.play.drop === 'screen') {
     const rb = S.RB;
-    if (rb.job.kind === 'route' && (rb.wp >= rb.path.length - 1 || t > 2.2 || rd < 2)) { const w = windowFor(S, rb); throwTo(S, rb, w.P, w.tf, ''); }
+    if (rb.job.kind === 'route' && (rb.wp >= rb.path.length - 1 || t > 2.2 || rd < 2)) { const w = windowFor(S, rb); throwTo(S, rb, w.P, w.tf, '', { how: 'screen' }); }
     return;
   }
   // The progression: look at each read in turn. Wait for a route to make its cut, give it a beat, then move on.
@@ -747,7 +750,7 @@ function qb(S, pl) {
       const w = windowFor(S, r);
       // The farther down the field, the more room he wants before he lets it go.
       const need = 0.8 + clamp((w.P.y - 8) * 0.06, 0, 1) + S.R.normal() * 0.3;
-      if (w.w > need) return throwTo(S, r, w.P, w.tf, readNote(S, k));
+      if (w.w > need) return throwTo(S, r, w.P, w.tf, readNote(S, k), { how: 'read', read: k });
     }
     if ((S.kReady !== null && t - S.kReady > S.dwell) || t - S.kAt > 1.1 || !r || r.job.kind !== 'route') {
       if (r && !r.passed) { r.passed = true; S.passed = (S.passed || []).concat(r); }
@@ -756,7 +759,7 @@ function qb(S, pl) {
   } else {
     // Past the last read: take the best thing there, or throw it away when time runs out.
     const best = bestWindow(S);
-    if (best && best.w > 0.3) return throwTo(S, best.r, best.P, best.tf, 'after nothing else came open');
+    if (best && best.w > 0.3) return throwTo(S, best.r, best.P, best.tf, 'after nothing else came open', { how: 'last' });
     if (t > S.hold) return throwAway(S, pl);
   }
   if (rd < 2.2) hurry(S, pl, rd);
@@ -783,12 +786,15 @@ function hot(S, b) {
   if (!outs.length) return false;
   const why = `hot, with ${name(S, b)} coming unblocked`;
   const near = outs.slice().sort((p, q) => hyp(p.x - b.x0, p.y - b.y0) - hyp(q.x - b.x0, q.y - b.y0))[0], w = windowFor(S, near);
-  if (w.w > 0.3) { throwTo(S, near, w.P, w.tf, why); return true; }
+  if (w.w > 0.3) { throwTo(S, near, w.P, w.tf, why, { how: 'hot', blitzer: b.i }); return true; }
   let best = null;
   for (const r of outs) { const x = windowFor(S, r); if (!best || x.w > best.w) best = { ...x, r }; }
-  if (best.w > 0.9) { throwTo(S, best.r, best.P, best.tf, why); return true; }
+  if (best.w > 0.9) { throwTo(S, best.r, best.P, best.tf, why, { how: 'hot', blitzer: b.i }); return true; }
   return false;
 }
+
+// How many reads he had passed up as covered, leaving out the man he's throwing to (as readNote() counts them).
+const passedUp = (S, r) => (S.passed || []).filter(x => x !== r).length;
 
 // Why he threw to read k: the reads before it are counted, not listed, so the caption stays short ("read 4, with the
 // first three covered"); one before it is named ("read 2, after the H was covered").
@@ -834,12 +840,12 @@ function hurry(S, pl, rd) {
   const best = bestWindow(S);
   const open = best && best.w > 0.9 + S.R.normal() * 0.6;
   if (rd === false || rd < 1.5) {
-    if (open) return throwTo(S, best.r, best.P, best.tf, 'under pressure');
+    if (open) return throwTo(S, best.r, best.P, best.tf, 'under pressure', { how: 'pressure' });
     if (S.R.chance(0.025)) return throwAway(S, pl);
     if (rd === false) return;
   }
   if (!S.R.chance(0.25)) return;
-  if (open) return throwTo(S, best.r, best.P, best.tf, 'under pressure');
+  if (open) return throwTo(S, best.r, best.P, best.tf, 'under pressure', { how: 'pressure' });
   return throwAway(S, pl);
 }
 
@@ -863,7 +869,7 @@ function throwAway(S, pl) {
   S.ball.target = -1;
   S.awayTo = r && !out ? r : null;
   throwTo(S, null, P, 0.1 + d / ballSpeed(d), '');
-  ev(S, 'away', `${cap(name(S, pl, true))} throws it away${!r ? '' : out ? `, out of bounds past ${name(S, r)}` : `, into the ground in front of ${name(S, r)}`}.`, { who: pl.i });
+  ev(S, 'away', `${cap(name(S, pl, true))} throws it away${!r ? '' : out ? `, out of bounds past ${name(S, r)}` : `, into the ground in front of ${name(S, r)}`}.`, { who: pl.i, passed: passedUp(S) });
 }
 
 // Where the receiver will be when the ball gets there, and how close anyone else can get by then.
@@ -1420,12 +1426,12 @@ function contact(S) {
     if (blocked) pt = 0.14;
     if (S.D.some(o => o !== d && o.eng < 0 && dist(o, c) < 1.6)) pt += 0.12;
     if (R.chance(pt)) {
-      if (qbHeld) { ev(S, 'sack', `${cap(name(S, d))} sacks the quarterback.`, { who: d.i }); return finish(S, 'sack', d); }
+      if (qbHeld) { ev(S, 'sack', `${cap(name(S, d))} sacks the quarterback.`, { who: d.i, passed: passedUp(S) }); return finish(S, 'sack', d); }
       const fall = clamp(c.vy * 0.16 * (head > 0.3 ? 0.5 : 1), -0.5, 1.8);
       const hit = { x: c.x, y: c.y };
       c.y += fall; // where he goes down, and where the ball is spotted
-      if (c === S.QB && S.play.type === 'run') ev(S, 'tackle', `${cap(name(S, d))} ${blocked ? 'reaches out of a block' : 'gets into the backfield'} and drops the quarterback before the handoff.`, { who: d.i });
-      else ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i });
+      if (c === S.QB && S.play.type === 'run') ev(S, 'tackle', `${cap(name(S, d))} ${blocked ? 'reaches out of a block' : 'gets into the backfield'} and drops the quarterback before the handoff.`, { who: d.i, blocked });
+      else ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i, blocked });
       return finish(S, c === S.QB && S.play.type === 'run' ? 'run' : S.caught ? 'catch' : 'run', d, hit);
     }
     // A defender who misses is left behind for a moment; one chasing down a deep catch from behind is back in the
