@@ -5,7 +5,7 @@
 **A football coach's board you can run.** Call the offense or the defense, snap it, and watch every route, block, rush and coverage play out in Xs and Os. Afterwards it tells you what happened and why: who came free, how the call does against theirs, and how many blockers there were for the defenders in the box. Tap any player to learn his position and his job on that play.
 
 <p align="center">
-  <img src="docs/phone-call.png" alt="The board before the snap: Gun Trips against a nickel defense, with the routes for Smash drawn in white chalk and the defense's alignment in yellow Xs" width="250">
+  <img src="docs/phone-call.png" alt="The board before the snap: Gun Trips against a nickel defense, with the routes for Smash drawn in white chalk and numbered in the order the quarterback reads them, and the defense's alignment in yellow Xs" width="250">
   &nbsp;
   <img src="docs/phone-play.png" alt="The same play two seconds after the snap: chalk trails show where everyone went, the zone drops are shaded, a dotted line follows the throw, and a caption reads 'The quarterback throws to the H on a corner route, his first read.', with the H ringed" width="250">
   &nbsp;
