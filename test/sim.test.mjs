@@ -35,6 +35,28 @@ test('every call against every defense runs to a finish', () => {
   }
 });
 
+test('while the play is live nobody stands on the quarterback after the throw', () => {
+  let seed = 271828;
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
+    const r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    const qb = r.players.find(p => p.cls === 'qb').i;
+    const thrown = r.events.find(e => e.kind === 'throw' || e.kind === 'away')?.t ?? Infinity;
+    const on = new Array(22).fill(0); // frames running that each man has been within half a yard of the quarterback
+    for (const f of r.frames) {
+      if (f.t > r.result.t + 1e-9) break;
+      for (const p of r.players) {
+        const x = f.xy[2 * p.i];
+        if (p.team === 'D' && f.t > thrown) {
+          on[p.i] = Math.hypot(x - f.xy[2 * qb], f.xy[2 * p.i + 1] - f.xy[2 * qb + 1]) < 0.5 ? on[p.i] + 1 : 0;
+          assert.ok(on[p.i] < 10, `${what}: the ${p.label} has stood on the quarterback for half a second after the throw, at ${f.t.toFixed(2)}s`);
+        }
+      }
+    }
+  }
+});
+
 test('a play still going when the board\'s clock runs out ends with a tackle or says the board stopped counting', () => {
   // Outside Zone from the I against the Under in Cover 3: the back breaks five tackles and is still running at 10 seconds.
   const r = simulate({ formation: 'iform', play: 'oz', front: 'under', coverage: 'c3', pressure: 'four', flip: true }, 404);
