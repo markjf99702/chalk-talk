@@ -1222,6 +1222,95 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// Each time in the play-by-play is a button that watches that moment again: from a second before it to a second after,
+// at half speed whatever the speed is set to, and then it stops there with that line on the board. Where two more lines
+// would come up within the second and push it off, it stops short of the second of them; a line about a block shed,
+// which the board doesn't put up as it plays, is up while it's the moment watched. ▶ then plays on at your speed. From
+// the snap on (not before: it would give away a hidden play), the scrubber has a mark at the handoff, the throw and
+// the catch. The board's frames are stepped by hand here, a tenth of a second each, so the speeds can be counted.
+{
+  const p = await phone();
+  await p.evaluate(() => {
+    const queue = new Map();
+    let id = 0, now = 0;
+    window.requestAnimationFrame = cb => { queue.set(++id, cb); return id; };
+    window.cancelAnimationFrame = n => queue.delete(n);
+    // (never behind the page's own clock, which the board starts each run from)
+    window.stepFrames = (n = 1) => { for (let k = 0; k < n; k++) { const due = [...queue.values()]; queue.clear(); now = Math.max(now, performance.now()) + 100; for (const cb of due) cb(now); } };
+  });
+  const open = link => p.evaluate(link => {
+    const { state, board, pause } = window.chalkTalk;
+    location.hash = link;
+    return new Promise(r => setTimeout(r, 50)).then(() => {
+      pause();
+      const s = document.getElementById('scrub');
+      s.value = s.max; s.dispatchEvent(new Event('input'));
+      return { phase: state.phase, duration: board.duration() };
+    });
+  }, link);
+  const now = () => p.evaluate(() => {
+    const { state } = window.chalkTalk;
+    return { t: +state.t.toFixed(3), phase: state.phase, speed: state.speed, caption: [...document.getElementById('caption').children].map(s => s.textContent),
+      label: document.getElementById('play').getAttribute('aria-label'), why: !document.getElementById('why').hidden, clock: document.getElementById('clock').textContent };
+  });
+  const untilStopped = async () => { for (let k = 0; k < 400 && (await now()).phase === 'playing'; k++) await p.evaluate(() => window.stepFrames()); return now(); };
+
+  assert.equal((await open('p=O.trips.smash.0.nickel.c2.four.15')).phase, 'done');
+  const story = await p.evaluate(() => window.chalkTalk.state.play.events.map(e => ({ t: e.t, kind: e.kind, text: e.text })));
+  const times = await p.$$eval('#story .t', b => b.map(x => [x.tagName, x.textContent, x.getAttribute('aria-label')]));
+  assert.deepEqual(times, story.map(e => ['BUTTON', `${e.t.toFixed(1)}s`, `${e.t.toFixed(1)}s: watch it again`]), 'each time in the play-by-play is a button');
+  const k = story.findIndex(e => e.kind === 'throw'), thrown = story[k];
+  await p.locator('#story .t').nth(k).click();
+  const started = await now();
+  assert.ok(Math.abs(started.t - (thrown.t - 1)) < 1e-3 && started.phase === 'playing', `the moment at ${thrown.t} s started at ${started.t} s (${started.phase})`);
+  assert.deepEqual([started.label, started.why], ['Pause', false], 'while the moment plays, ▶ pauses it, and the button to the explanation is out of the way');
+  await p.evaluate(() => window.stepFrames(2));
+  const slow = await now();
+  assert.ok(Math.abs(slow.t - started.t - 0.05) < 1e-3, `two frames of a tenth of a second moved it ${(slow.t - started.t).toFixed(3)} s, not 0.05 s (half speed)`);
+  assert.equal(slow.speed, 1, 'watching a moment again changed the speed setting');
+  const stopped = await untilStopped();
+  assert.equal(stopped.phase, 'paused', 'it doesn\'t stop after the moment');
+  assert.ok(Math.abs(stopped.t - (thrown.t + 1)) < 1e-3, `it stopped at ${stopped.t} s, not a second after the moment (${thrown.t} s)`);
+  assert.ok(stopped.caption.includes(thrown.text), `"${thrown.text}" isn't on the board where it stopped: ${stopped.caption.join(' / ')}`);
+  assert.deepEqual([stopped.label, stopped.clock], ['Play', `${stopped.t.toFixed(1)}s`]);
+  await p.click('#play');
+  const on = await now();
+  await p.evaluate(() => window.stepFrames(2));
+  assert.ok(Math.abs((await now()).t - on.t - 0.1) < 1e-3, '▶ after the moment plays on at full speed');
+  // the scrubber's marks: the throw and the catch, where the thumb is at those moments
+  const marks = await p.evaluate(() => {
+    const { state, board, lineUp } = window.chalkTalk, F = state.play.frames, s = document.getElementById('scrub');
+    const out = { snapped: [...document.querySelectorAll('#marks i')].map(i => [i.dataset.kind, +i.style.getPropertyValue('--at')]) };
+    out.want = state.play.events.filter(e => ['hand', 'throw', 'catch', 'int'].includes(e.kind)).map(e => [e.kind, Math.round(e.t / 0.05) / (F.length - 1)]);
+    lineUp();
+    out.before = document.querySelectorAll('#marks i').length;
+    return out;
+  });
+  assert.deepEqual(marks.snapped, marks.want, 'the scrubber\'s marks are at the handoff, the throw and the catch');
+  assert.deepEqual(marks.snapped.map(m => m[0]), ['throw', 'catch']);
+  assert.equal(marks.before, 0, 'the scrubber has marks before the snap');
+
+  // Power, where the cut and the miss just after it come 0.1 s apart and the hole opens 0.3 s later: the cut, watched
+  // again, stops a frame before the hole, while it's still up. Then the tackler's shed block, which the board leaves
+  // out as the play runs.
+  await open('p=O.iform.power.0.over.c3.four.41');
+  const run = await p.evaluate(() => window.chalkTalk.state.play.events.map(e => ({ t: e.t, kind: e.kind, text: e.text })));
+  const cut = run.findIndex(e => e.kind === 'cut'), shed = run.findIndex(e => e.kind === 'shed');
+  assert.deepEqual(run.slice(cut, cut + 3).map(e => e.kind), ['cut', 'miss', 'hole'], `the play changed: ${run.map(e => `${e.t} ${e.kind}`).join(', ')}`);
+  await p.locator('#story .t').nth(cut).click();
+  const short = await untilStopped();
+  assert.ok(Math.abs(short.t - (run[cut + 2].t - 0.05)) < 1e-3, `the cut at ${run[cut].t} s, watched again, stopped at ${short.t} s, not a frame before the hole at ${run[cut + 2].t} s`);
+  assert.deepEqual(short.caption, [run[cut].text, run[cut + 1].text], 'the cut isn\'t on the board where it stopped');
+  assert.ok(shed > 0, 'no shed block in the play');
+  await p.locator('#story .t').nth(shed).click();
+  const shedAt = await untilStopped();
+  assert.equal(shedAt.caption.at(-1), run[shed].text, 'the shed block isn\'t on the board where it stopped');
+  assert.equal(await p.evaluate(() => window.chalkTalk.board.spot), await p.evaluate(i => window.chalkTalk.state.play.events[i].who, shed), 'the man who shed the block isn\'t ringed');
+  await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = String(+s.value); s.dispatchEvent(new Event('input')); });
+  assert.ok(!(await now()).caption.includes(run[shed].text), 'scrubbed to the same place, the shed block is on the board as the play runs');
+  await p.context().close();
+}
+
 // The end of the play is chalked on the board: at the whistle (not before) the gain is written in marker by the ball,
 // as the headline counts it ("+30", "Sack −7", "Incomplete" by an × where it came down, "Picked off"), bigger for a big
 // play, with a line across the field at the spot of a run, a catch or a sack. The throw leaves a dotted line from his

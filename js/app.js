@@ -129,6 +129,7 @@ const board = new Board($('board'));
 function lineUp(keep = false) {
   cancelAnimationFrame(raf); // a frame of the last play still to come would run its clock on into this one
   clearTimeout(whyTimer);
+  moment = null;
   state.play = simulate(call(), state.seed);
   state.phase = 'pre';
   state.t = 0;
@@ -176,8 +177,12 @@ function syncBoard() {
 let raf = 0, last = 0;
 function draw() { board.t = state.t; board.render(); placeWho(); }
 
+// A moment from the play-by-play, watched again (see replay()): its line, and while it plays, the time it stops at.
+let moment = null; // { e, until }, then { e } once it has stopped there
+
 function play() {
   if (!state.play) return;
+  moment = null;
   const snapped = state.phase === 'pre';
   if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
   // His call is out now, and stays out until he picks again. For a replay the status line is cleared, so that its end
@@ -208,17 +213,41 @@ function play() {
 const cardClosesOnPlay = () => narrow();
 
 function tick(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(0.05, (now - last) / 1000), again = moment?.until !== undefined;
   last = now;
-  state.t = Math.min(board.duration(), state.t + dt * state.speed);
+  state.t = Math.min(again ? moment.until : board.duration(), state.t + dt * (again ? 0.5 : state.speed));
   caption();
   draw();
   syncScrub();
+  if (again && state.t >= moment.until) { pause(); return; }
   if (state.t >= board.duration()) { finish({ hold: true }); return; }
   if (state.phase === 'playing') raf = requestAnimationFrame(tick);
 }
 
-function pause() { state.phase = 'paused'; cancelAnimationFrame(raf); syncTransport(); }
+function pause() { state.phase = 'paused'; cancelAnimationFrame(raf); if (moment) delete moment.until; syncTransport(); }
+
+// A time in the play-by-play, tapped: that moment again, the way a broadcast replays it, from a second before it to a
+// second after, at half speed whatever the speed is set to, and then it stops there with that line still on the board.
+// (It stops short where two more lines would have come up after it and pushed it off.) ▶ plays on from there at the
+// speed you have.
+function replay(e) {
+  if (!state.play || state.phase === 'pre') return;
+  const F = state.play.frames, dt = F[1].t - F[0].t;
+  const lines = state.play.events.filter(x => x.kind !== 'shed' || x === e), next = lines[lines.indexOf(e) + 2];
+  let until = Math.min(e.t + 1, board.duration() - dt);
+  if (next) until = Math.min(until, next.t - dt);
+  cancelAnimationFrame(raf);
+  clearTimeout(whyTimer);
+  moment = { e, until: Math.max(until, e.t) };
+  state.t = Math.max(0, e.t - 1);
+  state.phase = 'playing';
+  $('why').hidden = true;
+  if (board.selected >= 0 && cardClosesOnPlay()) { board.selected = -1; hideWho(); }
+  caption(); draw(); syncTransport();
+  toBoard();
+  last = performance.now();
+  raf = requestAnimationFrame(tick);
+}
 
 // The end of the play. Played out, the line that ended it stays up a moment to be read (the simulator stops the board
 // 0.7 s after it, which is short for "The strong safety makes the tackle." and the catch just before it), and then the
@@ -312,9 +341,10 @@ function staleResult(on) {
 
 // The last two things that happened in the last 2.2 seconds, the older one above and fainter, so two that happen close
 // together both stay up long enough to read. It follows the clock alone, so scrubbing and pausing show the same words.
-// The man the newest line names is ringed on the board (see Board.players()).
+// The man the newest line names is ringed on the board (see Board.players()). A line about a block shed comes up only
+// when it's the moment being watched again from the play-by-play.
 function caption() {
-  const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && e.kind !== 'shed');
+  const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && (e.kind !== 'shed' || e === moment?.e));
   setCaption(evs.slice(-2).map(e => e.text));
   board.spot = evs.at(-1)?.who ?? -1;
   board.spotAll = evs.at(-1)?.all || null;
@@ -348,6 +378,7 @@ function syncTransport() {
   $('play').innerHTML = `<span aria-hidden="true">${glyph}</span>`;
   $('play').setAttribute('aria-label', name);
   syncScrub();
+  syncMarks();
   for (const b of document.querySelectorAll('[data-speed]')) b.setAttribute('aria-checked', String(+b.dataset.speed === state.speed));
   rove(document.querySelector('.seg'));
   $('labels').setAttribute('aria-pressed', String(state.labels));
@@ -368,6 +399,25 @@ function syncScrub() {
   s.setAttribute('aria-valuetext', `${state.t.toFixed(1)} of ${board.duration().toFixed(1)} seconds${now ? `: ${now}` : ''}`);
 }
 
+// The marks under the scrubber at the handoff, the throw and the catch (or the interception), from the snap on: before
+// it they'd say whether a hidden play is a run or a pass.
+let marked = null;
+function syncMarks() {
+  const P = state.phase === 'pre' ? null : state.play;
+  if (marked === P) return;
+  marked = P;
+  const host = $('marks'), F = P?.frames;
+  host.textContent = '';
+  if (!P) return;
+  const dt = F[1].t - F[0].t;
+  for (const e of P.events.filter(x => ['hand', 'throw', 'catch', 'int'].includes(x.kind))) {
+    const i = document.createElement('i');
+    i.dataset.kind = e.kind;
+    i.style.setProperty('--at', String(Math.min(1, Math.round(e.t / dt) / (F.length - 1))));
+    host.append(i);
+  }
+}
+
 $('snap').addEventListener('click', snap);
 // The result card's buttons go with it, or fade out of reach with it, as the next play lines up, so the focus goes on
 // to Snap.
@@ -376,6 +426,7 @@ $('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(
 $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() : play()));
 $('scrub').addEventListener('input', e => {
   if (!state.play) return;
+  moment = null;
   cancelAnimationFrame(raf);
   clearTimeout(whyTimer);
   const F = state.play.frames;
@@ -934,11 +985,19 @@ function showResult() {
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
   $('resVs').textContent = `${pl.name} from ${fm.name} against ${fr.name}, ${cv.name}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ' with a blitz' : ''}.`;
+  // Each line's time is a button that watches that moment again on the board (see replay()).
   const story = $('story');
   story.textContent = '';
   for (const e of P.events) {
-    const li = document.createElement('li');
-    li.innerHTML = `<span class="t">${e.t.toFixed(1)}s</span> ${esc(e.text)}`;
+    const li = document.createElement('li'), b = document.createElement('button'), at = `${e.t.toFixed(1)}s`;
+    b.type = 'button';
+    b.className = 't';
+    b.textContent = at;
+    b.setAttribute('aria-label', `${at}: watch it again`);
+    b.addEventListener('click', () => replay(e));
+    const text = document.createElement('span');
+    text.textContent = e.text;
+    li.append(b, text);
     story.append(li);
   }
   const { lead, note, now, reads } = coachNote(P);

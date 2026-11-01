@@ -62,7 +62,10 @@
         <button type="button" class="tool" id="play" aria-label="Play" disabled><span aria-hidden="true">▶</span></button>
         <div class="scrubber">
           <span class="clock" id="clock" aria-hidden="true">–</span>
-          <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Scrub through the play" disabled>
+          <div class="track">
+            <span class="marks" id="marks" aria-hidden="true"></span>
+            <input type="range" id="scrub" min="0" max="1000" step="1" value="0" aria-label="Scrub through the play" disabled>
+          </div>
         </div>
         <div class="seg small" role="radiogroup" aria-label="Speed">
           <button type="button" role="radio" data-speed="0.5" aria-checked="false" aria-label="Half speed">½×</button>

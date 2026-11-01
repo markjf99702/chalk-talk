@@ -360,8 +360,15 @@ button:disabled { cursor: default; }
    from the scrubber itself) */
 .scrubber { flex: 1; min-width: 40px; display: flex; align-items: center; gap: 6px; }
 .clock { flex: none; min-width: 2.6em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1; }
-#scrub { flex: 1; min-width: 40px; margin: 0; accent-color: var(--accent); }
+.track { position: relative; flex: 1; min-width: 40px; display: flex; align-items: center; }
+#scrub { position: relative; flex: 1; min-width: 40px; margin: 0; accent-color: var(--accent); }
 #scrub:disabled { opacity: .4; }
+/* Once it's snapped, a small mark under the track at the handoff, the throw and the catch, where the middle of the
+   thumb is at that moment: it goes from half the thumb's width in at one end to the same at the other (16 px wide in
+   Chromium and Firefox, 28 px on an iPhone). */
+.marks { position: absolute; inset: 0; pointer-events: none; --thumb: 16px; }
+@supports (-webkit-touch-callout: none) { .marks { --thumb: 28px; } }
+.marks i { position: absolute; bottom: 0; width: 2px; height: 5px; border-radius: 1px; background: var(--muted); left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at)); transform: translateX(-50%); }
 
 /* ---------------------------------------------------------------- panel */
 
@@ -424,7 +431,23 @@ button:disabled { cursor: default; }
 .vs { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
 .story { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 5px; }
 .story li { display: grid; grid-template-columns: 2.9em 1fr; gap: 6px; font-size: 15px; }
-.story .t { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; padding-top: 2px; }
+/* each time is a button that watches that moment again on the board, with a hit area out to the lines either side */
+.story .t {
+  position: relative;
+  justify-self: start;
+  align-self: start;
+  margin: 0;
+  padding: 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  line-height: 1.5;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.story .t::before { content: ''; position: absolute; inset: -3px -6px -2px; }
 .note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .note h3 { margin: 0 0 4px; font-family: var(--cond); font-weight: 700; font-size: 16px; letter-spacing: .02em; }
 .note p { margin: 0; font-size: 15px; }
@@ -538,6 +561,9 @@ button:disabled { cursor: default; }
   .seg.small button { position: relative; min-width: 44px; }
   .seg.small button::before { content: ''; position: absolute; inset: -7px 0; }
   .switch { min-height: 44px; }
+  /* the play-by-play's times: about 30 px tall each to tap, without reaching the next line's */
+  .story { gap: 9px; }
+  .story .t::before { inset: -4px -8px; }
   .jd-foot { align-items: center; }
   .jd-foot a { padding: 12px 4px; }
 }
