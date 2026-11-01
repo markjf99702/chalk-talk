@@ -239,7 +239,7 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
     ['O.single.iz.0.over.c3.four.1', 'Gain of 3 yards', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
     ['O.trips.smash.0.nickel.c2.four.59', 'Intercepted', 'A takeaway for the defense', 'D'],
     ['O.trips.smash.0.nickel.c2.four.5', 'Gain of 19 yards', 'A win for the offense', 'O'],
-    ['O.trips.smash.0.nickel.c2.four.6', 'Gain of 20 yards', 'A big play for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c2.four.21', 'Gain of 20 yards', 'A big play for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.579', 'Gain of 9 yards', 'A win for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards', 'A big play for the offense', 'O'],
   ]) {

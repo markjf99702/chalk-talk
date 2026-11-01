@@ -814,9 +814,10 @@ function windowFor(S, r) {
     const react = d.react;
     const sx = d.x + d.vx * Math.min(react, tf), sy = d.y + d.vy * Math.min(react, tf);
     // A deep defender turning to come down, or an underneath one trying to get depth under a throw over his head,
-    // covers less ground than a man running straight at the spot.
+    // covers less ground than a man running straight at the spot. A deep defender with the throw at his depth or past
+    // it is running straight at it, flat out, as he does once it's in the air (see breakOnBall()).
     const z = d.job.z;
-    const k = z?.deep && P.y < d.y - 2 ? 0.8 : z && !z.deep && P.y > z.y[1] + 3 ? 0.55 : 0.9;
+    const k = z?.deep ? (P.y < d.y - 2 ? 0.8 : 1) : z && P.y > z.y[1] + 3 ? 0.55 : 0.9;
     const reach = d.top * k * Math.max(0, tf - react);
     w = Math.min(w, hyp(sx - P.x, sy - P.y) - reach);
     // Underneath defenders in the throwing lane can knock down a low throw.

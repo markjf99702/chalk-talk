@@ -447,6 +447,22 @@ test('a Cover 2 safety keeps to the middle of his half until the throw, rather t
   assert.ok(den > 0 && num / den < 0.25, `the safety moves out ${(num / den).toFixed(2)} of a yard for each yard the corner route gets outside his spot`);
 });
 
+test('the quarterback passes over a first read covered by a deep defender', () => {
+  // Mesh's first read is the corner route, into the deep third the Cover 3 corner is guarding. Over 128 looks he now
+  // throws it on about one throw in four; when he rated a deep defender at nine-tenths of the speed the man runs at
+  // the ball, four in five, and more than half of those were broken up or intercepted.
+  let seed = 1, throws = 0, corner = 0;
+  for (let k = 0; k < 2; k++) for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: 'mesh', front: fr.id, coverage: 'c3', pressure, flip };
+    const r = simulate(call, seed), S = prepare(call, seed); seed++;
+    const t = r.events.find(e => e.kind === 'throw');
+    if (!t) continue;
+    throws++;
+    if (t.who === S.reads[0].i) corner++;
+  }
+  assert.ok(throws > 80 && corner / throws < 0.4, `Mesh against Cover 3 throws to its first read, the corner route, on ${corner} of ${throws} throws`);
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);
@@ -506,8 +522,8 @@ test('the README\'s matchups', () => {
   // routes get open against Cover 1's man coverage, and runs struggle with more defenders in the box than blockers.
   // Each cell is 240 snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start
   // seeds (2718, 31415, 16180, 14142) Four Verticals gained 3.9-7.3 yards a dropback fewer against Cover 4 than Cover 3
-  // (and 12.3-13.8 fewer than Cover 2), Mesh threw to its crossers on 41-48% of throws against Cover 1 and 15-22%
-  // against Cover 3, and runs succeeded 40-44% of the time at even numbers in the box and 19-23% with two more
+  // (and 12.3-13.8 fewer than Cover 2), a throw to Mesh's crossers gained 12.1-14.1 yards against Cover 1 and 5.0-5.5
+  // against Cover 3 (78-86% and 64-66% of them caught), and runs succeeded 40-44% of the time at even numbers in the box and 19-23% with two more
   // defenders than blockers. A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
@@ -520,16 +536,17 @@ test('the README\'s matchups', () => {
   const verts = {};
   for (const c of ['c2', 'c3', 'c4']) { let y = 0, n = 0; cell('verts', c, (call, s, P) => { y += P.result.yards; n++; }); verts[c] = y / n; }
   assert.ok(verts.c4 < verts.c3 && verts.c4 < verts.c2, `Four Verticals, yards a dropback: Cover 2 ${verts.c2.toFixed(1)}, Cover 3 ${verts.c3.toFixed(1)}, Cover 4 ${verts.c4.toFixed(1)}`);
+  // How open the crossers get: what a throw to one of them gains.
   const crossers = {};
   for (const c of ['c1', 'c3']) {
-    let throws = 0, cross = 0;
+    let cross = 0, yards = 0;
     cell('mesh', c, (call, s, P) => {
       const t = P.events.find(e => e.kind === 'throw');
-      if (t) { throws++; if (['drag', 'drag6'].includes(prepare(call, s).P[t.who].job.route)) cross++; }
+      if (t && ['drag', 'drag6'].includes(prepare(call, s).P[t.who].job.route)) { cross++; yards += P.result.yards; }
     });
-    crossers[c] = cross / throws;
+    crossers[c] = yards / cross;
   }
-  assert.ok(crossers.c1 > crossers.c3, `Mesh's throws to its crossers: Cover 1 ${(100 * crossers.c1).toFixed(0)}%, Cover 3 ${(100 * crossers.c3).toFixed(0)}%`);
+  assert.ok(crossers.c1 > crossers.c3, `a throw to Mesh's crossers gains ${crossers.c1.toFixed(1)} yards against Cover 1, ${crossers.c3.toFixed(1)} against Cover 3`);
   const box = { 0: [0, 0], 2: [0, 0] };
   for (const pl of PLAYS.filter(p => p.type === 'run')) for (const cv of COVERAGES) for (const fm of FORMATIONS) for (const fr of FRONTS) for (let k = 0; k < 3; k++) {
     const P = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: k % 4 ? 'four' : 'blitz', flip: k % 2 === 1 }, seed++);
