@@ -215,7 +215,7 @@ test('pass protection picks up every rusher it has the men for: a rusher goes fr
 });
 
 test('the words match the board: zones by strong and weak side, a run in every defender\'s card, and plain play-by-play', () => {
-  let seed = 314000, qbDown = 0;
+  let seed = 314000;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
     const S = prepare(call, seed), r = simulate(call, seed++);
@@ -243,12 +243,12 @@ test('the words match the board: zones by strong and weak side, a run in every d
       // longest is a tight end's read after the other tight end's: 21 words.)
       assert.ok(thrown.split(' ').length <= 21, `${what}: the throw takes ${thrown.split(' ').length} words: "${thrown}"`);
     }
+    // (This used to happen about one run in a hundred, nearly always the nose on Outside Zone after the left tackle was
+    // sent across his face to someone else. Now that the line takes the men in front of it, none of these snaps has it.)
     if (pl.type === 'run' && r.result.carrier === S.QB.i && !r.events.some(e => e.kind === 'hand')) {
-      qbDown++;
       assert.match(r.events.at(-1).text, /drops the quarterback before the handoff/, `${what}: the quarterback goes down before the handoff, and the story says "${story}"`);
     }
   }
-  assert.ok(qbDown > 0, 'no quarterback went down before the handoff, so that check proved nothing');
 });
 
 test('a run names the hole: one line, when the ball carrier gets to the line after the handoff', () => {
@@ -283,6 +283,39 @@ test('every line of the play-by-play that names a man says which man, for the bo
       assert.ok(Number.isInteger(e.who) && e.who >= 0 && e.who < 22, `${pl.id} seed ${seed - 1}: "${e.text}" (${e.kind}) has nobody to point at`);
     }
   }
+});
+
+test('run blocking: the men on the line first, linebackers next, and never a safety', () => {
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run' && p.scheme !== 'draw')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip }, 11);
+    const what = `${fm.id} ${pl.id} vs ${fr.id} ${cv.id} ${pressure}${flip ? ', strong side left' : ''}`;
+    const blockers = S.O.filter(o => o.job.kind === 'block');
+    const lines = () => blockers.map(o => `${o.label}->${o.job.target?.label ?? '-'}`).join(' ');
+    for (const b of blockers) {
+      const d = b.job.target;
+      if (!d) continue;
+      assert.notEqual(d.cls, 's', `${what}: the ${b.label} is sent at the ${d.label}, a safety (${lines()})`);
+      // (The kick-out is for the end man, whoever he is: a linebacker or a nickel back off the ball outside the end.)
+      if (d.y0 >= 2 && b.job.scheme !== 'kick') assert.equal(d.cls, 'lb', `${what}: the ${b.label} climbs to the ${d.label}, who isn't a linebacker (${lines()})`);
+      assert.equal(blockers.filter(o => o.job.target === d).length, 1, `${what}: two men have the ${d.label} (${lines()})`);
+    }
+    // Nobody leaves a man lined up on him, or in the gap he's stepping to, to climb to a linebacker.
+    for (const d of S.D.filter(d => d.y0 < 2 && Math.abs(d.x0) < 9 && d !== S.emol && !blockers.some(o => o.job.target === d))) {
+      const lean = pl.scheme === 'power' ? -1 : 1;
+      for (const b of blockers.filter(o => o.cls === 'ol' && o.job.target && o.job.target.y0 >= 2 && o.job.scheme !== 'pull')) {
+        const side = (d.x0 - b.x0) * S.p * lean;
+        assert.ok(side < -0.5 || side > 1.6, `${what}: the ${b.label} climbs to the ${b.job.target.label} past the ${d.label} in front of him, who is left free (${lines()})`);
+      }
+    }
+  }
+  // The look from the first round's lab: Singleback inside zone into a 4-3 Over in Cover 1 went nowhere, the nose tackle
+  // making most of the tackles, while a guard ran past him to a safety eight yards deep.
+  let y = 0, nose = 0;
+  for (let k = 0; k < 60; k++) {
+    const r = simulate({ formation: 'single', play: 'iz', front: 'over', coverage: 'c1', pressure: k % 4 ? 'four' : 'blitz', flip: k % 2 === 1 }, 9000 + k);
+    y += r.result.yards; if (r.result.by >= 0 && r.players[r.result.by].label === 'NT') nose++;
+  }
+  assert.ok(y / 60 > 3 && nose < 15, `Singleback inside zone against the Over in Cover 1: ${(y / 60).toFixed(1)} yards a carry, the nose made ${nose} of 60 tackles`);
 });
 
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {

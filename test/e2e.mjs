@@ -236,12 +236,12 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
   p.on('pageerror', e => problems.push(e.message));
   await p.goto(base);
   for (const [code, head, kicker, win] of [
-    ['O.single.iz.0.over.c3.four.25', 'Gain of 3 yards', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
+    ['O.single.iz.0.over.c3.four.1', 'Gain of 3 yards', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
     ['O.trips.smash.0.nickel.c2.four.48', 'Intercepted', 'A takeaway for the defense', 'D'],
     ['O.trips.smash.0.nickel.c2.four.15', 'Gain of 19 yards', 'A win for the offense', 'O'],
     ['O.trips.smash.0.nickel.c2.four.74', 'Gain of 20 yards', 'A big play for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.11', 'Gain of 9 yards', 'A win for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.367', 'Gain of 10 yards', 'A big play for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.101', 'Gain of 9 yards', 'A win for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards', 'A big play for the offense', 'O'],
   ]) {
     await p.evaluate(code => { location.hash = `#p=${code}`; }, code);
     await p.waitForFunction(seed => { const { state } = window.chalkTalk; return state.seed === seed && state.phase === 'playing'; }, +code.split('.').at(-1), { timeout: 5000 });
@@ -435,7 +435,7 @@ for (const side of ['O', 'D']) {
   const seen = await p.evaluate(() => {
     const { state, board, simulate, lineUp } = window.chalkTalk, s = document.getElementById('scrub');
     Object.assign(state, { side: 'O', auto: false });
-    Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false });
+    Object.assign(state.off, { formation: 'iform', play: 'oz', flip: false });
     Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four' });
     let a, b;
     for (let seed = 1; seed < 500 && !b; seed++) {

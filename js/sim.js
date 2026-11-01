@@ -380,30 +380,58 @@ function assignRun(S) {
   const taken = new Set(wrs.map(w => w.job.target).filter(Boolean));
   const box = S.D.filter(d => Math.abs(d.x) < 9 && d.y < 8.5 && !taken.has(d));
   const playG = S.OL.find(o => o.label === (p > 0 ? 'RG' : 'LG')), backG = S.OL.find(o => o.label === (p > 0 ? 'LG' : 'RG'));
-  // The man the kick-out block is for: the first defender outside the last play-side blocker on the line.
+  // The man the kick-out block is for: the first defender outside the last play-side blocker on the line. Never a
+  // safety: nobody on a run is sent at one.
   const teP = S.te(p), edgeX = teP ? Math.abs(teP.x) : 3;
-  const outside = box.filter(d => d.x * p > edgeX + 0.2 && d.y < 6).sort((a, b) => hyp(a.x - p * (edgeX + 1.5), a.y - 1.5) - hyp(b.x - p * (edgeX + 1.5), b.y - 1.5));
-  const emol = outside[0] || box.filter(d => d.y < 2 && d.x * p > 2.6).sort((a, b) => b.x * p - a.x * p)[0];
+  const front7 = box.filter(d => d.cls !== 's');
+  const outside = front7.filter(d => d.x * p > edgeX + 0.2 && d.y < 6).sort((a, b) => hyp(a.x - p * (edgeX + 1.5), a.y - 1.5) - hyp(b.x - p * (edgeX + 1.5), b.y - 1.5));
+  const emol = outside[0] || front7.filter(d => d.y < 2 && d.x * p > 2.6).sort((a, b) => b.x * p - a.x * p)[0];
   S.emol = emol;
   for (const b of blockers) {
     let kind = play.scheme;
     if (b.cls === 'fb') kind = play.scheme === 'power' ? 'kick' : 'lead';
     if (play.scheme === 'power' && b === backG) kind = 'pull';
-    b.job = { kind: 'block', scheme: kind };
+    b.job = { kind: 'block', scheme: kind, target: null };
   }
-  const cost = (b, d) => {
-    const k = b.job.scheme, lb = d.y > 2;
-    if (k === 'kick') return d === emol ? 0 : Infinity;
-    if (k === 'pull' || k === 'lead') return lb ? Math.abs(d.x - aimX) * 0.8 + Math.abs(d.y - 4.5) * 0.3 : Infinity;
-    const lean = { zone: 0.9, reach: 1.6, power: -0.9 }[k] ?? 0.9;
-    const zx = b.x + p * lean;
-    if (k !== 'power' && (d.x - b.x) * p < -1.9) return Infinity; // never block the backside gap
-    if (k === 'power' && (d.x - b.x) * p > 1.9) return Infinity;
-    if (b.cls === 'te' && lb && Math.abs(d.x - b.x) > 3) return Infinity;
-    return Math.abs(d.x - zx) + (lb ? 0.9 + (d.y - 2) * 0.25 : 0) + (b.cls === 'te' && !lb ? 0.4 : 0);
+  // Two levels, the way a line coach draws it. First the men on the line of scrimmage: each is the lineman's or tight
+  // end's he lines up on, or in the gap that blocker is responsible for: on a zone the gap to his play side (an outside
+  // zone reaches the man from there), so the back-side end is left for the cutback to beat; on Power the gap inside
+  // him, blocking down. Then whoever is left over climbs to a linebacker. A safety is nobody's.
+  const lean = { zone: 0.8, reach: 0.9, power: -0.9 };
+  const reach = (b, d, far) => {
+    const side = (d.x - b.x) * p; // how far he is toward the play side
+    if (b.job.scheme !== 'power' && side < -0.5) return false; // a zone never blocks the backside gap
+    if (b.job.scheme === 'power' && side > 1.9) return false; // Power blocks down, never out
+    return Math.abs(d.x - b.x) <= far;
   };
-  const pick = assign(blockers, box, cost, b => (b.job.scheme === 'kick' ? 9 : 4.5));
-  blockers.forEach((b, k) => { b.job.target = pick[k] >= 0 ? box[pick[k]] : null; });
+  const gap = (b, d) => Math.abs(d.x - (b.x + p * lean[b.job.scheme]));
+  const kicked = blockers.some(b => b.job.scheme === 'kick') ? emol : null; // the kick-out's man is his alone
+  const onLine = box.filter(d => d.y < 2 && d !== kicked);
+  const first = blockers.filter(b => lean[b.job.scheme] !== undefined);
+  const p1 = assign(onLine, first, (d, b) => (reach(b, d, 3.5) ? gap(b, d) + Math.abs(d.x - b.x) * 0.3 + (b.cls === 'te' ? 0.4 : 0) : Infinity), () => 8);
+  onLine.forEach((d, k) => { if (p1[k] >= 0) first[p1[k]].job.target = d; });
+  // The second level. The pulling guard on Power, or the fullback leading on a zone, has the linebacker at the hole.
+  // Then a lineman or a tight end with nobody on him climbs to the linebacker over him or on the back side of him (on
+  // Power, the backside linebacker: the last of gap, down, backer).
+  const climb = (list, cost) => {
+    const backers = box.filter(d => d.cls === 'lb' && !blockers.some(b => b.job.target === d) && d !== kicked);
+    const pk = assign(list, backers, cost, () => 5);
+    list.forEach((b, k) => { if (pk[k] >= 0) b.job.target = backers[pk[k]]; });
+  };
+  const atHole = (b, d) => Math.abs(d.x - aimX) * 0.8 + Math.abs(d.y - 4.5) * 0.3;
+  climb(blockers.filter(b => b.job.scheme === 'pull' || b.job.scheme === 'lead'), atHole);
+  climb(blockers.filter(b => !b.job.target && lean[b.job.scheme] !== undefined), (b, d) => {
+    const side = (d.x - b.x) * p;
+    if (b.job.scheme === 'power' ? side > 1.9 : side < -3.5) return Infinity;
+    return Math.abs(d.x - b.x) <= (b.cls === 'te' ? 3 : 4.5) ? Math.abs(d.x - (b.x + p * lean[b.job.scheme] * 0.3)) + Math.max(0, d.y - 2) * 0.25 : Infinity;
+  });
+  // A lineman with nobody left at either level takes a man on the line still free beside him: on a zone with no
+  // linebacker on the back side, the backside tackle cuts off the end.
+  const idle = blockers.filter(b => !b.job.target && lean[b.job.scheme] !== undefined), loose = onLine.filter(d => !blockers.some(b => b.job.target === d));
+  const p3 = assign(idle, loose, (b, d) => (Math.abs(d.x - b.x) <= 2 ? Math.abs(d.x - b.x) : Infinity), () => 5);
+  idle.forEach((b, k) => { if (p3[k] >= 0) b.job.target = loose[p3[k]]; });
+  const kick = blockers.find(b => b.job.scheme === 'kick');
+  if (kick) kick.job.target = emol || null;
   const blocked = new Set(blockers.map(b => b.job.target).filter(Boolean));
   S.unblocked = box.filter(d => !blocked.has(d));
   if (S.FB && play.scheme !== 'power') S.FB.job.lead = true;
@@ -647,6 +675,18 @@ function pro(S, pl) {
   }
 }
 
+// A run blocker's pick-up: the nearest defender in front of him who is free, that no teammate is on his way to block.
+// (near: whoever shows up right in front of him, even a teammate's man if that teammate is still a way off).
+function pickUp(S, pl, range, near) {
+  let best = null, bd = range;
+  for (const d of S.D) {
+    if (d.eng >= 0 || d.noEngage >= S.t || d.lostTo === pl.i || d.y < pl.y - 0.5) continue;
+    const dd = dist(d, pl);
+    if (dd < bd && !S.O.some(o => o !== pl && o.eng < 0 && o.job.target === d && d.lostTo !== o.i && (!near || dist(o, d) < 2))) { bd = dd; best = d; }
+  }
+  return best;
+}
+
 function nearestFree(S, pl, range) {
   let best = null, bd = range;
   for (const d of S.D) if (d.eng < 0 && d.noEngage < S.t && d.y > pl.y - 0.5) { const dd = dist(d, pl); if (dd < bd) { bd = dd; best = d; } }
@@ -840,14 +880,29 @@ function runBlock(S, pl) {
   if (pl.eng >= 0) return;
   let tgt = j.target;
   if (tgt && (tgt.eng >= 0 && tgt.eng !== pl.i || tgt.lostTo === pl.i || dist(tgt, pl) > 9 || tgt.noEngage > t)) tgt = null;
-  if (!tgt && (t > 0.5 || !j.target)) { tgt = nearestFree(S, pl, 6); if (tgt) j.target = tgt; }
+  // With nobody to block, or once his man is gone (somebody else has him, or he got off this block), he takes whoever
+  // comes free near him: never a man a teammate is on his way to.
+  const lead = j.scheme === 'lead' || j.scheme === 'pull' || j.scheme === 'kick';
+  if (!tgt && (t > 0.5 || !j.target)) { tgt = pickUp(S, pl, j.target || lead ? 4 : 2.5); if (tgt) j.target = tgt; }
+  // On his way up to a linebacker, he blocks whoever shows up in front of him first.
+  if (tgt && tgt.y0 > 2 && dist(tgt, pl) > 2) {
+    const near = pickUp(S, pl, 1.6, true);
+    if (near && near !== tgt) { tgt = near; j.target = near; }
+  }
   if (j.scheme === 'pull' && t < 0.55) { // the pulling guard: step back and run along the line
     pl.tx = pl.x0 + p * 4; pl.ty = -1.8; pl.ts = pl.top * 0.85; return;
   }
-  if (!tgt) { pl.tx = pl.x + p * 1; pl.ty = pl.y + 1.5; pl.ts = 2; return; }
-  const lead = j.scheme === 'reach' ? 1.2 : 0.6;
-  pl.tx = tgt.x + tgt.vx * 0.2 - p * (j.scheme === 'kick' ? -0.4 : 0.3) * 0; pl.ty = tgt.y + tgt.vy * 0.2 - 0.3;
-  if (j.scheme === 'reach' && tgt.y < 2) pl.tx = tgt.x + p * lead;
+  if (!tgt) { // nobody yet: a lead blocker goes to the hole, a lineman to his play-side gap, each looking for work
+    if (lead) { pl.tx = S.aimX; pl.ty = Math.min(pl.y + 2, 2); pl.ts = pl.top * 0.85; } else { pl.tx = pl.x0 + p * 1.2; pl.ty = Math.min(pl.y + 1.5, 2.5); pl.ts = 2.5; }
+    return;
+  }
+  pl.tx = tgt.x + tgt.vx * 0.2; pl.ty = tgt.y + tgt.vy * 0.2 - 0.3;
+  if (j.scheme === 'reach' && tgt.y < 2) pl.tx = tgt.x + p * 1.2;
+  if (tgt.y > pl.y + 1.5) { // a linebacker coming downhill: get in his path to the ball, not behind him
+    const ball = S.carrier && S.carrier !== S.QB ? S.carrier : { x: S.aimX, y: 0 };
+    const [ux, uy] = unit(ball.x - tgt.x, ball.y - tgt.y), k = Math.min(1.5, dist(tgt, pl) * 0.4);
+    pl.tx = tgt.x + ux * k; pl.ty = tgt.y + uy * k;
+  }
   pl.ts = pl.top * (pl.cls === 'ol' ? 0.9 : 0.95);
 }
 
