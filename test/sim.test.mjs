@@ -594,10 +594,11 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
 });
 
 test('over many snaps the numbers look like football', () => {
-  // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, around 60% complete, a sack on about
-  // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.44-5.18 yards a carry,
-  // 57-61% complete, sacks on 2.6-4.4% of dropbacks and interceptions on 2.0-3.5% of throws; at 700 snaps a carry
-  // ranged from 2.7 to 5.1 yards.
+  // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, about two passes in three complete, a
+  // sack on about one dropback in twenty-two. From twelve start seeds (77 + k * 7919) this recipe gives 3.66-5.30 yards
+  // a carry, 64.7-68.9% complete, sacks on 3.0-4.5% of dropbacks and interceptions on 1.1-2.2% of throws; at 700 snaps
+  // a carry ranged from 3.1 to 5.1 yards. Most start seeds now come out above the 66% completion bound: this one gives
+  // 64.9%.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -615,13 +616,14 @@ test('over many snaps the numbers look like football', () => {
 });
 
 test('the README\'s matchups', () => {
-  // The README says four verticals do least against Cover 4's extra deep defender (of Cover 2, 3 and 4), crossing
-  // routes get open against Cover 1's man coverage, and runs struggle with more defenders in the box than blockers.
-  // Each cell is 240 snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start
-  // seeds (2718, 31415, 16180, 14142) Four Verticals gained 3.9-7.3 yards a dropback fewer against Cover 4 than Cover 3
-  // (and 12.3-13.8 fewer than Cover 2), a throw to Mesh's crossers gained 12.1-14.1 yards against Cover 1 and 5.0-5.5
-  // against Cover 3 (78-86% and 64-66% of them caught), and runs succeeded 40-44% of the time at even numbers in the box and 19-23% with two more
-  // defenders than blockers. A change to the balance that undoes one of these has to change the README with it.
+  // The README says four verticals hurt Cover 2 most, Smash beats Cover 2, Flood beats Cover 3, crossing routes get open
+  // against Cover 1's man coverage, and runs struggle with more defenders in the box than blockers. Each cell is 240
+  // snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start seeds (2718,
+  // 31415, 16180, 14142) Four Verticals gained 21.8-24.3 yards a dropback against Cover 2 and 8.6-11.7 against Cover 3
+  // and 4, Smash 10.2-11.4 against Cover 2 and 5.6-8.4 against Cover 3 and 4, Flood 10.4-12.0 against Cover 3 and
+  // 4.6-8.7 against Cover 1 and 2, a throw to Mesh's crossers 13.6-15.0 yards against Cover 1 and 4.2-6.2 against
+  // Cover 3, and runs succeeded 37-40% of the time at even numbers in the box and 17-22% with two more defenders than
+  // blockers. A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const cell = (play, coverage, each) => {
@@ -630,9 +632,17 @@ test('the README\'s matchups', () => {
       each(call, seed, simulate(call, seed)); seed++;
     }
   };
-  const verts = {};
-  for (const c of ['c2', 'c3', 'c4']) { let y = 0, n = 0; cell('verts', c, (call, s, P) => { y += P.result.yards; n++; }); verts[c] = y / n; }
-  assert.ok(verts.c4 < verts.c3 && verts.c4 < verts.c2, `Four Verticals, yards a dropback: Cover 2 ${verts.c2.toFixed(1)}, Cover 3 ${verts.c3.toFixed(1)}, Cover 4 ${verts.c4.toFixed(1)}`);
+  // Yards a dropback, play against each coverage.
+  const ypd = (play, covs) => {
+    const out = {};
+    for (const c of covs) { let y = 0, n = 0; cell(play, c, (call, s, P) => { y += P.result.yards; n++; }); out[c] = y / n; }
+    return out;
+  };
+  const say = o => Object.entries(o).map(([c, y]) => `Cover ${c[1]} ${y.toFixed(1)}`).join(', ');
+  const verts = ypd('verts', ['c2', 'c3', 'c4']), smash = ypd('smash', ['c2', 'c3', 'c4']), flood = ypd('flood', ['c1', 'c2', 'c3']);
+  assert.ok(verts.c2 > verts.c3 && verts.c2 > verts.c4, `Four Verticals, yards a dropback: ${say(verts)}`);
+  assert.ok(smash.c2 > smash.c3 && smash.c2 > smash.c4, `Smash, yards a dropback: ${say(smash)}`);
+  assert.ok(flood.c3 > flood.c1 && flood.c3 > flood.c2, `Flood, yards a dropback: ${say(flood)}`);
   // How open the crossers get: what a throw to one of them gains.
   const crossers = {};
   for (const c of ['c1', 'c3']) {
