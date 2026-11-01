@@ -361,6 +361,47 @@ for (const side of ['O', 'D']) {
   await p.close();
 }
 
+// Before the snap every label can be read on a phone: none is on another player's mark (under center the center's
+// label would be on the quarterback, and in the I the fullback's on the tailback), every formation against every front
+// and shell, calling either side. And each label is knocked out of the lines under it: a stroke in the board's colour
+// round the letters, drawn before any of the letters, so none cuts into the next.
+{
+  const p = await ctx.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const seen = await p.evaluate(() => {
+    const { board, state, simulate, lineUp } = window.chalkTalk, ctx = board.ctx, on = [];
+    for (const formation of ['iform', 'single', 'doubles', 'trips']) for (const front of ['over', 'under', '34', 'nickel']) for (const coverage of ['c1', 'c3']) for (const side of ['O', 'D']) {
+      const play = simulate({ formation, play: 'power', flip: false, front, coverage, pressure: 'four' }, 3);
+      board.setPlay(play); board.t = 0; board.flip = side === 'D'; board.render();
+      const r = board.radius(), fs = board.labelSize();
+      ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+      const marks = play.players.map(q => { const z = board.pos(0, q.i); return [board.sx(z.x), board.sy(z.y)]; });
+      for (const q of play.players) {
+        const [x, y] = board.drawn?.[q.i] ?? [marks[q.i][0], marks[q.i][1] + board.labelDy(q)], w = ctx.measureText(q.label).width;
+        for (const o of play.players) {
+          const [X, Y] = marks[o.i], over = (a0, a1, b0, b1) => Math.min(a1, b1) - Math.max(a0, b0) > 0.5;
+          if (o !== q && over(x - w / 2, x + w / 2, X - r * 0.8, X + r * 0.8) && over(y - fs * 0.38, y + fs * 0.38, Y - r * 0.8, Y + r * 0.8)) on.push(`${side} ${formation} v ${front} ${coverage}: ${q.label} on the ${o.label}`);
+        }
+      }
+    }
+    // the knock-outs, as the board draws them
+    const calls = [], { strokeText, fillText } = ctx;
+    ctx.strokeText = function (t, ...a) { calls.push(['stroke', t, this.strokeStyle]); return strokeText.call(this, t, ...a); };
+    ctx.fillText = function (t, ...a) { calls.push(['fill', t]); return fillText.call(this, t, ...a); };
+    board.flip = state.side === 'D'; lineUp();
+    delete ctx.strokeText; delete ctx.fillText;
+    const n = state.play.players.length, mine = calls.filter(c => state.play.players.some(q => q.label === c[1]));
+    const strokes = mine.filter(c => c[0] === 'stroke');
+    return { on, players: n, strokes: strokes.length, colours: [...new Set(strokes.map(c => c[2]))], board: board.colors.board, first: mine.findIndex(c => c[0] === 'fill') >= strokes.length };
+  });
+  assert.deepEqual(seen.on, [], 'labels on another player\'s mark before the snap');
+  assert.equal(seen.strokes, seen.players, 'a label without its knock-out');
+  assert.ok(seen.board && seen.colours.length === 1 && seen.colours[0] === (await p.evaluate(c => { const x = document.createElement('canvas').getContext('2d'); x.fillStyle = c; return x.fillStyle; }, seen.board)), `the labels' knock-outs are ${seen.colours}, the board is ${seen.board}`);
+  assert.ok(seen.first, 'a label drawn before every knock-out was');
+  await p.close();
+}
+
 // The man the caption names is ringed on the board while his line is up, scrubbing as well as playing: the receiver at
 // the throw. Nobody is ringed before the snap or once the caption makes way for the headline.
 {

@@ -508,10 +508,10 @@ function placeNarrow(who, him, fresh) {
   // the smallest it goes: his name and the first line of his job
   const line = parseFloat(getComputedStyle($('whoJob')).lineHeight);
   const MIN = Math.ceil($('whoPos').getBoundingClientRect().bottom - who.getBoundingClientRect().top + line + 1);
-  // the others' marks, and their labels where they're shown
+  // the others' marks, and their labels where they're shown (where the board drew them: see Board.labelSpots())
   const others = state.play.players.filter(p => p.i !== board.selected).map(p => {
     const q = board.pos(board.t, p.i), x = board.sx(q.x), y = board.sy(q.y);
-    return board.labels ? [[x, y], [x, y + board.labelDy(p)]] : [[x, y]];
+    return board.drawn ? [[x, y], board.drawn[p.i]] : [[x, y]];
   });
   const ends = [true, false].map(top => {
     // Measured from this end's edge of the board: s is where the card starts, and he's at [near, far].

@@ -21,6 +21,7 @@ export class Board {
     this.mineTeam = 'O';
     this.selected = -1;
     this.spot = -1; // the man the caption names, ringed while nobody is picked out
+    this.drawn = null; // where each player's label went in the last frame, by player: [x, y] (see labelSpots())
     this.colors = {};
     this.grain = null;
     this.resize();
@@ -29,7 +30,7 @@ export class Board {
   readColors() {
     const cs = getComputedStyle(this.cv);
     const v = n => cs.getPropertyValue(n).trim();
-    this.colors = { line: v('--field-line'), num: v('--field-num'), side: v('--field-side'), ten: v('--field-ten'), off: v('--off'), def: v('--def'), los: v('--los'), ball: v('--ball'), hot: v('--hot'), chalk: v('--chalk-grain') === '1' };
+    this.colors = { board: v('--board'), line: v('--field-line'), num: v('--field-num'), side: v('--field-side'), ten: v('--field-ten'), off: v('--off'), def: v('--def'), los: v('--los'), ball: v('--ball'), hot: v('--hot'), chalk: v('--chalk-grain') === '1' };
     this.makeGrain();
   }
 
@@ -99,7 +100,7 @@ export class Board {
     const pre = this.t <= 0.001;
     this.assignments(pre ? 1 : 0.35); // after the snap the drawn-up play stays faintly under the trails
     if (!pre) this.trails();
-    this.players();
+    this.players(pre);
     this.ballDraw();
     if (this.grain) {
       ctx.save();
@@ -282,19 +283,19 @@ export class Board {
   labelSize() { return Math.max(8.5, Math.min(12, this.radius() * 1.15)); }
   labelDy(p) { return ((p.team === 'O') !== this.flip ? 1 : -1) * (this.radius() + this.labelSize() * 0.62); }
 
-  players() {
+  // Every mark first, then every label over them, so no line or mark is drawn across a label. Before the snap a label
+  // that would be on another player's mark goes beside him (see labelSpots()); once the play runs they stay in their
+  // usual spots, rather than hopping about as blockers and rushers meet.
+  players(pre = true) {
     const { ctx, play } = this;
     const r = this.radius();
     const { a } = this.at(this.t);
     const carrier = a.c;
     const lw = Math.max(1.8, Math.min(2.8, r * 0.3));
     ctx.lineWidth = lw; ctx.lineCap = 'round';
-    const fs = this.labelSize();
-    ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const at = play.players.map(p => { const { x, y } = this.pos(this.t, p.i); return [this.sx(x), this.sy(y)]; });
     for (const p of play.players) {
-      const { x, y } = this.pos(this.t, p.i);
-      const X = this.sx(x), Y = this.sy(y);
+      const [X, Y] = at[p.i];
       const col = this.teamColor(p.team);
       const dim = this.selected >= 0 && this.selected !== p.i;
       ctx.globalAlpha = dim ? 0.55 : 1;
@@ -317,20 +318,67 @@ export class Board {
         ctx.beginPath(); ctx.arc(X, Y, r * 1.9, 0, Math.PI * 2); ctx.stroke();
         ctx.lineWidth = lw;
       }
-      if (this.labels) {
-        ctx.globalAlpha = dim ? 0.45 : 0.92;
-        ctx.fillText(p.label, X, Y + this.labelDy(p));
-      }
     }
     // The man the caption names: a dashed ring in the bright colour, so he can be found in a crowd.
     if (this.spot >= 0 && this.selected < 0) {
-      const { x, y } = this.pos(this.t, this.spot);
+      const [X, Y] = at[this.spot];
       ctx.globalAlpha = 1; ctx.strokeStyle = this.colors.hot; ctx.lineWidth = Math.max(2.2, lw);
       ctx.setLineDash([r * 0.7, r * 0.45]);
-      ctx.beginPath(); ctx.arc(this.sx(x), this.sy(y), r * 2.1, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(X, Y, r * 2.1, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
+    // Each label is knocked out of what's under it, the way a map's are: a stroke in the board's colour round the
+    // letters, so a route, a block line or a ring passing under one stops just short of it. All the knock-outs go
+    // first, so none of them cuts into a label next to it.
+    this.drawn = !this.labels ? null : pre ? this.labelSpots(at, lw) : play.players.map(p => [at[p.i][0], at[p.i][1] + this.labelDy(p)]);
+    if (this.drawn) {
+      ctx.font = `700 ${this.labelSize()}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = this.colors.board;
+      const alpha = p => (this.selected >= 0 && this.selected !== p.i ? 0.45 : 0.92);
+      for (const p of play.players) { ctx.globalAlpha = alpha(p); ctx.strokeText(p.label, ...this.drawn[p.i]); }
+      for (const p of play.players) { ctx.globalAlpha = alpha(p); ctx.fillStyle = this.teamColor(p.team); ctx.fillText(p.label, ...this.drawn[p.i]); }
+    }
     ctx.globalAlpha = 1;
+  }
+
+  // Where each player's label goes, by player: [x, y], the middle of the word. Its own spot is just past his mark, on
+  // his team's side of the ball (labelDy()). Where that's on another player's mark (under center the center's label is
+  // on the quarterback, and in the I the fullback's on the tailback), it goes beside him, to the right or the left, or
+  // on the other side of his mark, whichever is clear of the others' marks and labels; where none is (on the narrowest
+  // phones the line is too tight for that), it stays in its own spot.
+  labelSpots(at, lw) {
+    const { ctx, play } = this, r = this.radius(), fs = this.labelSize(), half = fs * 0.38;
+    ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    const P = play.players, w = P.map(p => ctx.measureText(p.label).width);
+    // How far each mark's ink reaches from its middle: a circle's round, an X's and the center's square straight across.
+    const reach = P.map(p => (p.team === 'D' ? r * 0.8 : p.label === 'C' ? r * 0.9 : r) + lw / 2);
+    const box = (i, [x, y], pad = 0) => ({ l: x - w[i] / 2 - pad, r: x + w[i] / 2 + pad, t: y - half - pad, b: y + half + pad });
+    const area = (a, b) => Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t));
+    // How much of a word at this spot is on the others' marks. A word that only grazes one, by less than a pixel (about
+    // what its knock-out takes off the mark), doesn't count, and a circle counts only where the word reaches its ink.
+    const onMarks = (i, spot) => {
+      const b = box(i, spot);
+      return at.reduce((n, [X, Y], j) => {
+        const k = reach[j] - 1, m = { l: X - k, r: X + k, t: Y - k, b: Y + k };
+        const round = P[j].team === 'O' && P[j].label !== 'C';
+        const near = Math.hypot(Math.max(b.l - X, 0, X - b.r), Math.max(b.t - Y, 0, Y - b.b));
+        return j === i || (round && near >= k) ? n : n + area(b, m);
+      }, 0);
+    };
+    const spots = P.map(p => [at[p.i][0], at[p.i][1] + this.labelDy(p)]);
+    const onLabels = (i, spot) => { const b = box(i, spot, 0.5); return spots.reduce((n, s, j) => (j === i ? n : n + area(b, box(j, s, 0.5))), 0); };
+    // Beside him, then the other side of his mark, then either side slid along a little (a nose tackle head up on the
+    // center leaves room just past his shoulder): the first that's clear of the others' marks and labels.
+    const tries = i => {
+      const [X, Y] = at[i], dy = this.labelDy(P[i]), aside = r + 2 + w[i] / 2, out = [[X + aside, Y], [X - aside, Y], [X, Y - dy]];
+      for (let s = 1; s <= Math.ceil(r * 1.6); s++) out.push([X + s, Y - dy], [X - s, Y - dy], [X + s, Y + dy], [X - s, Y + dy]);
+      return out.filter(c => !onMarks(i, c) && !onLabels(i, c));
+    };
+    // The ones with the fewest places to go pick first.
+    const moving = P.filter(p => onMarks(p.i, spots[p.i])).map(p => [p.i, tries(p.i).length]).sort((a, b) => a[1] - b[1]);
+    for (const [i] of moving) spots[i] = tries(i)[0] || spots[i];
+    return spots;
   }
 
   ballDraw() {
