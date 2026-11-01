@@ -761,6 +761,48 @@ for (const side of ['O', 'D']) {
   await wide.close();
 }
 
+// On a computer the result card comes up at the top of the right-hand column, beside the board, as the play ends, and
+// the button on the board points across to it. A change of call takes it away and the calls are back at the top, and
+// they don't jump up the screen: the chip just picked stays where it was, from the middle of the screen and from its
+// foot, or as near as the page scrolls. On a phone (or a window made narrow) it comes after the calls, under the board.
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const where = () => p.evaluate(() => {
+    const box = id => document.getElementById(id).getBoundingClientRect(), r = document.getElementById('result');
+    return { first: r.parentElement.firstElementChild.id, after: r.previousElementSibling?.id, shown: !r.hidden, result: box('result').top + scrollY, left: box('result').left, mine: box('mine').top + scrollY, board: document.querySelector('.board-wrap').getBoundingClientRect() };
+  });
+  const top = (await where()).mine;
+  await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
+  const done = await where();
+  assert.ok(done.shown && done.first === 'result', `at 1280 px the result card isn't first in the right-hand column: ${JSON.stringify(done)}`);
+  assert.ok(Math.abs(done.result - top) <= 1 && done.result < done.board.top + 40 && done.left >= done.board.right, `at 1280 px the result card is at ${Math.round(done.left)}, ${Math.round(done.result)} px, not at the top beside the board`);
+  assert.match(await p.textContent('#why'), /Why →$/, 'the button on the board doesn\'t point across to the result');
+  assert.match(await p.textContent('#say'), /beside the board/, 'a screen reader isn\'t told the result is beside the board');
+  // picked from the middle of the screen, then from its foot (where the page can't scroll back far enough)
+  for (const [id, foot] of [['iz', false], ['oz', true]]) {
+    if (foot) await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); scrollTo(0, 0); });
+    const chip = p.locator(`[data-key="Play:${id}"]`);
+    await chip.evaluate((el, foot) => { scrollBy(0, foot ? el.getBoundingClientRect().bottom - innerHeight + 4 : el.getBoundingClientRect().top - innerHeight / 2); }, foot);
+    const before = await p.evaluate(id => ({ chip: document.querySelector(`[data-key="Play:${id}"]`).getBoundingClientRect().top, y: scrollY }), id);
+    assert.ok(before.y > 0 && before.chip > 0 && before.chip < 800, `the chip for ${id} isn't on screen under the result card: ${JSON.stringify(before)}`);
+    await chip.click();
+    const changed = await where();
+    assert.ok(!changed.shown && Math.abs(changed.mine - top) <= 1, `after a change of call at 1280 px your call is ${Math.round(changed.mine)} px down the page, not back at the top (${Math.round(top)} px)`);
+    const seen = await p.evaluate(id => ({ chip: document.querySelector(`[data-key="Play:${id}"]`).getBoundingClientRect().top, mine: document.getElementById('mine').getBoundingClientRect().top, y: scrollY }), id);
+    assert.ok(Math.abs(seen.chip - before.chip) <= 2 || (seen.y === 0 && seen.mine >= 0), `the chip just picked went from ${Math.round(before.chip)} px to ${Math.round(seen.chip)} px on the screen (scrolled ${seen.y} px)`);
+  }
+  await p.setViewportSize({ width: 800, height: 900 });
+  assert.equal((await where()).after, 'theirs', 'in a narrow window the result card isn\'t after the calls');
+  await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#why'), /Why ↓$/, 'in a narrow window the button on the board doesn\'t point down to the result');
+  await p.setViewportSize({ width: 1280, height: 800 });
+  assert.equal((await where()).first, 'result', 'back at 1280 px the result card isn\'t first in the right-hand column');
+  await c.close();
+}
+
 // The smallest phones (320 px wide): after the first snap, when the button reads "Snap again", every control under
 // the board still fits, and nothing scrolls sideways.
 for (const width of [320, 360, 375]) {

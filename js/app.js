@@ -237,8 +237,19 @@ function finish({ hold = false } = {}) {
 // out at the end, and a word about a link that couldn't open.
 function say(text) { $('say').textContent = text; }
 function sayResult() {
-  const beside = $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
-  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. Why it worked is ${beside ? 'beside' : 'under'} the board.`);
+  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. Why it worked is ${resultBeside() ? 'beside' : 'under'} the board.`);
+}
+const resultBeside = () => $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
+
+// On a computer the result card goes at the top of the right-hand column, beside the board, so it's there as the play
+// ends, and when the call changes it goes and the calls are back at the top. On a phone or a tablet it comes after the
+// calls, under the board, with the button on the board to take you down to it. It's moved in the page rather than only
+// drawn somewhere else, so the keyboard and a screen reader come to it where the eye does.
+const wide = matchMedia('(min-width: 960px)');
+function placeResult() {
+  const r = $('result'), focused = r.contains(document.activeElement) ? document.activeElement : null;
+  if (wide.matches) $('mine').before(r); else $('chart').before(r);
+  focused?.focus({ preventScroll: true });
 }
 
 // At the end of the play, the headline and a way down to the explanation, where the caption was.
@@ -246,7 +257,7 @@ function showWhy() {
   setCaption('');
   board.spot = -1; // the caption makes way for the headline, and nobody is named
   draw();
-  $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">↓</span></span>`;
+  $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">${resultBeside() ? '→' : '↓'}</span></span>`;
   $('why').hidden = false;
   placeWhy();
   placeWho(); // draw() placed the card before the button was there
@@ -681,6 +692,10 @@ function afterChange() {
   const rerun = chart && !finished && chart.side === state.side;
   const stale = chart ? finished && chart.side === state.side : redo?.side === state.side; // a finished one, or one gone already
   redo = stale ? { side: state.side, yours } : null;
+  // On a computer the result card at the top of the column goes, and the calls under it would jump up the screen, out
+  // of sight if the page was scrolled down to them: they stay where they were instead, or as near as the page scrolls,
+  // which brings them back to the top of the column.
+  const held = wide.matches && !$('result').hidden ? $('mine').getBoundingClientRect().top : null;
   state.linked = false;
   linkNote = '';
   keepOwn();
@@ -690,6 +705,7 @@ function afterChange() {
   lineUp();
   clearChart();
   if (rerun) runChart();
+  if (held !== null) scrollBy(0, $('mine').getBoundingClientRect().top - held);
   if (focused) document.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus();
 }
 
@@ -1151,6 +1167,8 @@ function techDiagram() {
 
 // ---------------------------------------------------------------- start
 
+placeResult();
+wide.addEventListener('change', placeResult);
 load();
 const link = fromLink();
 const kept = link ? null : keptPlay();
