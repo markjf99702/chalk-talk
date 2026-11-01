@@ -1118,6 +1118,11 @@ function integrate(S) {
     const a = hyp(ax, ay), max = pl.acc * DT;
     if (a > max) { ax *= max / a; ay *= max / a; }
     pl.vx += ax; pl.vy += ay;
+    // Anyone without the ball eases up running at the sideline, in time to stop a step inside it (see the clamp below).
+    if (pl !== S.carrier && pl.vx * pl.x > 0) {
+      const v = Math.sqrt(2 * pl.acc * Math.max(0, SIDELINE - 0.3 - Math.abs(pl.x)));
+      if (Math.abs(pl.vx) > v) pl.vx = Math.sign(pl.vx) * v;
+    }
     pl.x += pl.vx * DT; pl.y += pl.vy * DT;
   }
   // Nobody runs through anybody. A man defender who runs into somebody else's receiver gets picked off (said only while
@@ -1149,7 +1154,11 @@ function integrate(S) {
       }
     }
   }
-  for (const pl of P) { pl.x = clamp(pl.x, -SIDELINE - 1, SIDELINE + 1); }
+  // Only the man with the ball goes out of bounds; everyone else stays a step inside the sideline.
+  for (const pl of P) {
+    const m = pl === S.carrier ? SIDELINE + 1 : SIDELINE - 0.3;
+    if (Math.abs(pl.x) > m) { pl.x = Math.sign(pl.x) * m; if (pl.vx * pl.x > 0) pl.vx = 0; }
+  }
 }
 
 function pairMove(S, b, d) {

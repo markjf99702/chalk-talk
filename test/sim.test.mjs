@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, prepare } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES } from '../js/playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, SIDELINE } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -35,7 +35,7 @@ test('every call against every defense runs to a finish', () => {
   }
 });
 
-test('while the play is live nobody stands on the quarterback after the throw', () => {
+test('while the play is live nobody stands on the quarterback after the throw, and only the ball carrier leaves the field', () => {
   let seed = 271828;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
@@ -48,6 +48,7 @@ test('while the play is live nobody stands on the quarterback after the throw', 
       if (f.t > r.result.t + 1e-9) break;
       for (const p of r.players) {
         const x = f.xy[2 * p.i];
+        if (p.i !== f.c) assert.ok(Math.abs(x) <= SIDELINE, `${what}: the ${p.label} is off the field at x ${x.toFixed(2)}, ${f.t.toFixed(2)}s in, without the ball`);
         if (p.team === 'D' && f.t > thrown) {
           on[p.i] = Math.hypot(x - f.xy[2 * qb], f.xy[2 * p.i + 1] - f.xy[2 * qb + 1]) < 0.5 ? on[p.i] + 1 : 0;
           assert.ok(on[p.i] < 10, `${what}: the ${p.label} has stood on the quarterback for half a second after the throw, at ${f.t.toFixed(2)}s`);
