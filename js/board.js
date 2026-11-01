@@ -359,8 +359,8 @@ export class Board {
     ctx.restore();
   }
   // The result written in marker beside the ball ("+17", "Sack −7"), beside the defender who picked it off, or beside
-  // a small × where an incomplete pass came down. A big play gets bigger writing. It sits on the spot's line, or just
-  // under it where the words over the deep end of the board would cover it.
+  // a small × where an incomplete pass came down. A big play gets bigger writing. With a spot, it sits on the spot's
+  // line; without one, by the × or the man (see markSpot()).
   endMark() {
     const res = this.play.result, m = this.mark;
     if (!m) return;
@@ -372,18 +372,20 @@ export class Board {
       while (b > 0 && !F[b - 1].air) b--; // the first picture after the ball came down
       at = F[b].ball;
     } else at = this.ballAt(this.t);
-    const X = this.sx(at[0]), Y = this.sy(at[1]), alpha = this.markIn();
+    const down = res.kind === 'incomplete' || res.kind === 'throwaway', s = Math.max(3, r * 0.45);
+    let X = this.sx(at[0]);
+    const Y = this.sy(at[1]), alpha = this.markIn();
+    if (down) X = Math.max(s + 2, Math.min(this.w - s - 2, X)); // on the board, if it went out
     ctx.save();
     ctx.globalAlpha = alpha; ctx.strokeStyle = ctx.fillStyle = col; ctx.lineCap = 'round';
-    if (res.kind === 'incomplete' || res.kind === 'throwaway') { // a small ×, where it came down (on the board, if it went out)
-      const s = Math.max(3, r * 0.45), x = Math.max(s + 2, Math.min(this.w - s - 2, X));
+    if (down) { // a small ×, where it came down
       ctx.strokeStyle = this.colors.ball; ctx.lineWidth = Math.max(1.6, r * 0.25);
-      ctx.beginPath(); ctx.moveTo(x - s, Y - s); ctx.lineTo(x + s, Y + s); ctx.moveTo(x + s, Y - s); ctx.lineTo(x - s, Y + s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X - s, Y - s); ctx.lineTo(X + s, Y + s); ctx.moveTo(X + s, Y - s); ctx.lineTo(X - s, Y + s); ctx.stroke();
     }
     const fs = Math.max(18, Math.min(24, this.k * 1.4)) * (m.big ? 1.4 : 1); // a 1 in marker needs 18 px to read
     ctx.font = `400 ${fs}px "Permanent Marker", "Marker Felt", "Comic Sans MS", cursive`;
     ctx.textBaseline = 'middle';
-    const [x, y] = this.markSpot(X, Y, ctx.measureText(m.text).width, fs);
+    const [x, y] = this.markSpot(X, Y, ctx.measureText(m.text).width, fs, ['run', 'catch', 'sack'].includes(res.kind));
     ctx.textAlign = 'left'; ctx.lineJoin = 'round';
     ctx.lineWidth = 4; ctx.strokeStyle = this.colors.board;
     ctx.strokeText(m.text, x, y);
@@ -392,20 +394,37 @@ export class Board {
   }
 
   // Where the writing at the whistle goes, its left end and its middle, for a word w wide and fs tall about the point
-  // X, Y: just beside it, sitting on the line through it or just under the line, or else farther along the line,
-  // whichever is nearest to it while clear of every player's mark and label (a run ends in a pile). It keeps off the
-  // words over the deep end of the board (the matchup, and the button down to the explanation) and inside the board.
-  markSpot(X, Y, w, fs) {
+  // X, Y, clear of every player's mark and label if it can be (a run ends in a pile). It keeps off the words over the
+  // deep end of the board (the matchup, and the button down to the explanation) and inside the board. Along a spot's
+  // line (along), it sits just beside the point, on the line or just under it, or else farther along the line. With no
+  // line (an incomplete pass, an interception), it stays by the × or the man who has the ball: beside him, above him or
+  // under him, as near as it can be, and clear of the marks alone if it can't be clear of the labels too, so it isn't
+  // written by somebody else across the board.
+  markSpot(X, Y, w, fs, along = true) {
     const r = this.radius(), ls = this.labelSize(), P = this.play.players;
-    const boxes = P.map(p => { const q = this.pos(this.t, p.i), x = this.sx(q.x), y = this.sy(q.y); return { l: x - r - 2, r: x + r + 2, t: y - r - 2, b: y + r + 2 }; });
-    if (this.drawn) P.forEach(p => { const [x, y] = this.drawn[p.i], half = (ls * 0.32 * p.label.length) + 2; boxes.push({ l: x - half, r: x + half, t: y - ls / 2, b: y + ls / 2 }); });
+    const marks = P.map(p => { const q = this.pos(this.t, p.i), x = this.sx(q.x), y = this.sy(q.y); return { l: x - r - 2, r: x + r + 2, t: y - r - 2, b: y + r + 2 }; });
+    const labels = this.drawn ? P.map(p => { const [x, y] = this.drawn[p.i], half = (ls * 0.32 * p.label.length) + 2; return { l: x - half, r: x + half, t: y - ls / 2, b: y + ls / 2 }; }) : [];
     const band = this.flip ? [this.h - WORDS, this.h] : [0, WORDS];
-    const clear = (x, y) => x >= 6 && x + w <= this.w - 6 && y - fs / 2 >= 2 && y + fs / 2 <= this.h - 2 && (y + fs / 2 < band[0] || y - fs / 2 > band[1])
-      && !boxes.some(b => x < b.r && x + w > b.l && y - fs * 0.4 < b.b && y + fs * 0.4 > b.t);
+    const hits = (boxes, x, y) => boxes.some(b => x < b.r && x + w > b.l && y - fs * 0.4 < b.b && y + fs * 0.4 > b.t);
+    const clear = (x, y, all = true) => x >= 6 && x + w <= this.w - 6 && y - fs / 2 >= 2 && y + fs / 2 <= this.h - 2 && (y + fs / 2 < band[0] || y - fs / 2 > band[1])
+      && !hits(marks, x, y) && !(all && hits(labels, x, y));
     const gap = r * 1.2 + 4, first = X < this.w * 0.55 ? 1 : -1, tries = [];
-    for (let d = gap; d < this.w; d += 6) for (const sd of [first, -first]) for (const dy of [-0.6, 0.6]) tries.push([sd > 0 ? X + d : X - d - w, Y + dy * fs, d]);
-    const best = tries.find(([x, y]) => clear(x, y));
-    if (best) return best;
+    if (along) {
+      for (let d = gap; d < this.w; d += 6) for (const sd of [first, -first]) for (const dy of [-0.6, 0.6]) tries.push([sd > 0 ? X + d : X - d - w, Y + dy * fs, d]);
+      const best = tries.find(([x, y]) => clear(x, y));
+      if (best) return best;
+    } else {
+      const reach = 4 * fs;
+      for (let dy = -reach; dy <= reach; dy += fs / 4) for (let x = X - w - reach; x <= X + reach; x += 4) {
+        const y = Y + dy, ex = Math.max(x - X, 0, X - (x + w)), ey = Math.max(y - fs / 2 - Y, 0, Y - (y + fs / 2));
+        const d = Math.hypot(ex, ey);
+        if ((ex < gap && ey < r + 2) || d > reach) continue; // not over the × or the man, and not far from him
+        tries.push([x, y, d]);
+      }
+      tries.sort((a, b) => a[2] - b[2]);
+      const best = tries.find(([x, y]) => clear(x, y)) || tries.find(([x, y]) => clear(x, y, false));
+      if (best) return best;
+    }
     return [Math.max(6, Math.min(this.w - 6 - w, first > 0 ? X + gap : X - gap - w)), Y - 0.6 * fs];
   }
 

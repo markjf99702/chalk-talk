@@ -1260,8 +1260,12 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
     ctx.ellipse = function (x, y, rx) { sizes.push(rx); return el.apply(this, arguments); };
     board.t = 1; board.ballDraw(); ctx.ellipse = el;
     out.ball = { rx: Math.max(...sizes), mark: board.radius() };
-    // every kind of ending, over many snaps: what's written, against the headline
+    // every kind of ending, over many snaps: what's written, against the headline. With no spot to chalk a line at (an
+    // incomplete pass, an interception), the writing stays by the × or the man, not across the board from him.
     const PL = ['iz', 'power', 'verts', 'smash', 'flood', 'mesh', 'pa', 'screen'];
+    const spot = board.markSpot;
+    let placed = null;
+    board.markSpot = function (X, Y, w, fs) { const r = spot.apply(this, arguments); placed = { X, Y, w, fs, x: r[0], y: r[1] }; return r; };
     for (let k = 0; k < 160; k++) {
       P = show({ formation: ['iform', 'single', 'doubles', 'trips'][k % 4], play: PL[k % PL.length], flip: k % 2 === 1 }, { front: ['over', 'nickel', '34', 'under'][k % 4], coverage: ['c0', 'c1', 'c2', 'c3', 'c4'][k % 5], pressure: k % 3 ? 'four' : 'blitz' }, 300 + k);
       state.t = board.duration(); finish();
@@ -1270,8 +1274,13 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
       const want = res.kind === 'incomplete' ? 'Incomplete' : res.kind === 'throwaway' ? 'Thrown away' : res.kind === 'int' ? 'Picked off'
         : res.kind === 'sack' ? (n ? `Sack −${n}` : 'Sack') : res.long ? `${n}+` : /^Gain/.test(head) ? `+${n}` : /^Loss/.test(head) ? `−${n}` : 'No gain';
       if (w.length !== 1 || w[0] !== want) out.bad.push(`${head}: wrote ${JSON.stringify(w)}, not "${want}"`);
+      if (['incomplete', 'throwaway', 'int'].includes(res.kind)) {
+        const { X, Y, w: tw, fs, x, y } = placed, far = Math.hypot(Math.max(x - X, 0, X - (x + tw)), Math.max(y - fs / 2 - Y, 0, Y - (y + fs / 2)));
+        if (far > 4 * fs + 0.5) out.bad.push(`seed ${300 + k}, ${head}: "${want}" written ${Math.round(far)} px from ${res.kind === 'int' ? 'the man who has it' : 'where it came down'}`);
+      }
       out.kinds[res.kind] = (out.kinds[res.kind] || 0) + 1;
     }
+    board.markSpot = spot;
     return out;
   });
   assert.deepEqual(seen.before, [], 'something is written at the spot before the whistle');
