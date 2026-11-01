@@ -343,6 +343,28 @@ test('on a run a rusher doesn\'t walk through anybody: a lineman bumps any rushe
   }
 });
 
+test('on a run the ball carrier runs into a rusher held in a block, not through him', () => {
+  // A rusher held in a block moves with it and lets the other linemen by, but the back still has to go round him: a
+  // held defender within reach of the ball carrier can reach out of the block and tackle him.
+  let seed = 4242;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const hand = r.events.find(e => e.kind === 'hand');
+    if (!hand) continue;
+    const on = new Map(); // frames running that a held rusher has been inside half a yard of the ball carrier
+    for (const f of r.frames) {
+      if (f.t > r.result.t + 1e-9) break;
+      if (f.t < hand.t || f.c < 0) continue;
+      for (const d of S.D.filter(d => d.job.kind === 'rush')) {
+        const x = f.xy, n = f.eng[d.i] >= 0 && Math.hypot(x[2 * d.i] - x[2 * f.c], x[2 * d.i + 1] - x[2 * f.c + 1]) < 0.5 ? (on.get(d.i) || 0) + 1 : 0;
+        on.set(d.i, n);
+        assert.ok(n < 6, `${JSON.stringify(call)} seed ${seed - 1}: the ball carrier runs through the ${d.label}, held in a block, at ${f.t.toFixed(2)}s`);
+      }
+    }
+  }
+});
+
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
   const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
   for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {
@@ -383,9 +405,9 @@ test('coverages put the right number deep and the right number rushing', () => {
 
 test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, around 60% complete, a sack on about
-  // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.52-5.06 yards a carry,
+  // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.44-5.18 yards a carry,
   // 57-61% complete, sacks on 2.6-4.4% of dropbacks and interceptions on 2.0-3.5% of throws; at 700 snaps a carry
-  // ranged from 2.6 to 5.4 yards.
+  // ranged from 2.7 to 5.1 yards.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -408,7 +430,7 @@ test('the README\'s matchups', () => {
   // Each cell is 240 snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start
   // seeds (2718, 31415, 16180, 14142) Four Verticals gained 3.9-7.3 yards a dropback fewer against Cover 4 than Cover 3
   // (and 12.3-13.8 fewer than Cover 2), Mesh threw to its crossers on 41-48% of throws against Cover 1 and 15-22%
-  // against Cover 3, and runs succeeded 37-42% of the time at even numbers in the box and 17-20% with two more
+  // against Cover 3, and runs succeeded 40-44% of the time at even numbers in the box and 19-23% with two more
   // defenders than blockers. A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
