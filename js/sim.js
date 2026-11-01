@@ -171,7 +171,7 @@ function buildDefense(S) {
       jobs.set(fs, { kind: 'zone', z: ZONES.deepM3, zid: 'deepM3' });
       if (left_.length) { const rat = left_.sort((a, b) => hyp(a.x, a.y - 7) - hyp(b.x, b.y - 7))[0]; jobs.set(rat, { kind: 'zone', z: ZONES.rat, zid: 'rat' }); left_.splice(left_.indexOf(rat), 1); }
     }
-    for (const d of left_) rush.add(d);
+    for (const d of left_) { rush.add(d); if (cov.id === 'c0') d.extra = true; }
   } else {
     const roles = {
       CBL: cbL, CBR: cbR, FS: fs,
@@ -240,6 +240,9 @@ function buildDefense(S) {
       else if (d.edge) { d.y = 2.5; }
       else if (d.cls === 's' && d.y > 9) { d.y = 8; }
     } else if (j.kind === 'zone' && j.zid === 'rat') { if (d.cls === 's') { d.x = -0.5 * s; d.y = 8; } }
+    // Cover 0's extra blitzer, the man left over after the man-to-man matchups (usually the free safety), walks up over
+    // the gap he'll rush rather than standing deep, where he'd look like a deep safety.
+    else if (j.kind === 'rush' && d.extra && d.y > 4.5) { d.x = j.gap; d.y = 4.5; }
     else if (j.kind === 'rush' && d.blitzer && !d.edge) { d.y = Math.max(3.4, d.y - 1.2); }
   }
   // Nobody stands on top of anybody.

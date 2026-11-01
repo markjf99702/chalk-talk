@@ -515,6 +515,19 @@ test('with a blitzer coming unblocked the quarterback throws hot, before he gets
   assert.ok(hotN / n > 0.4, `${hotN} hot throws in ${n} dropbacks against Cover 0`);
 });
 
+test('Cover 0 looks like Cover 0: the extra blitzer walks up over his gap, and nobody stands deep', () => {
+  // The man left over after the man-to-man matchups used to stand 7.8 yards deep in the middle, where a quarterback
+  // counting safeties would take him for one.
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const flip of [false, true]) {
+    const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: 'c0', pressure: 'blitz', flip }, 7);
+    const what = `${fm.id} ${pl.id} ${fr.id}${flip ? ' flipped' : ''}`;
+    for (const d of S.D) assert.ok(d.y0 <= 6, `${what}: the ${d.label} stands ${d.y0.toFixed(1)} yards deep`);
+    const extra = S.D.filter(d => d.extra);
+    assert.equal(extra.length, 1, `${what}: one extra blitzer`);
+    for (const d of extra) assert.ok(d.y0 <= 5 && Math.abs(d.x0 - d.job.gap) < 1.3, `${what}: the ${d.label} lines up at ${d.x0.toFixed(1)}, ${d.y0.toFixed(1)}, rushing the gap at ${d.job.gap}`);
+  }
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);
