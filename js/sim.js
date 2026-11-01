@@ -77,13 +77,16 @@ export function prepare(call, seed = 1) {
   const fm = byId(FORMATIONS, call.formation), play = byId(PLAYS, call.play);
   const front = byId(FRONTS, call.front), cov = byId(COVERAGES, call.coverage);
   const f = call.flip ? -1 : 1;
+  // Motion before the snap: the Z or the H runs across to the other side, and the teams line up as they will be at the
+  // snap, with him on that side (counted there, and the defense aligned to it); see presnap() for the motion itself.
+  const mo = fm.motion && (call.motion === 'across' || call.motion === 'jet') ? call.motion : null;
   const S = {
     R, seed, call: { ...call }, fm, play, front, cov, s: f, p: f, P: [], O: [], D: [], t: 0, events: [],
     blitz: call.pressure === 'blitz' || cov.id === 'c0', over: false, endAt: Infinity, result: null,
     disguise: !!call.disguise && (cov.id === 'c1' || cov.id === 'c3'), // see the end of buildDefense()
     ball: { x: 0, y: -0.3, z: 0.3, state: 'snap', holder: -1 }, carrier: null, handT: Infinity, throwT: Infinity,
   };
-  for (const [label, x, y, cls] of fm.players) mk(S, 'O', label, cls, x * f, y);
+  for (const [label, x, y, cls] of fm.players) mk(S, 'O', label, cls, (mo && label === fm.motion.who ? fm.motion.to : x) * f, y);
   for (const p of S.O) if (p.label === 'Y' && p.cls === 'wr') p.info = 'Yslot';
   S.QB = S.O.find(p => p.cls === 'qb');
   S.RB = S.O.find(p => p.cls === 'rb');
@@ -94,14 +97,21 @@ export function prepare(call, seed = 1) {
   S.OL.slice().sort((a, b) => a.x - b.x).forEach((o, k) => { o.label = o.info = ['LT', 'LG', 'C', 'RG', 'RT'][k]; });
   const elig = S.O.filter(p => p.cls === 'wr' || p.cls === 'te');
   const side = sg => elig.filter(p => Math.sign(p.x) === sg).sort((a, b) => Math.abs(b.x) - Math.abs(a.x));
-  S.strongList = side(f);
-  S.weakList = side(-f);
+  // The pass plays' side (ps): the strong side, unless a man in motion has left more receivers on the other side (the Z
+  // from I-Form or Singleback): then they go that way, counted from there. (The defense still sets its strength to the
+  // tight end; see buildDefense().)
+  S.ps = side(-f).length > side(f).length ? -f : f;
+  S.strongList = side(S.ps);
+  S.weakList = side(-S.ps);
   S.keys = { RB: S.RB, FB: S.FB };
-  S.strongList.forEach((p, n) => { S.keys['S' + (n + 1)] = p; p.num = n + 1; p.side = f; p.key = 'S' + (n + 1); });
-  S.weakList.forEach((p, n) => { S.keys['W' + (n + 1)] = p; p.num = n + 1; p.side = -f; p.key = 'W' + (n + 1); });
+  S.strongList.forEach((p, n) => { S.keys['S' + (n + 1)] = p; p.num = n + 1; p.side = S.ps; p.key = 'S' + (n + 1); });
+  S.weakList.forEach((p, n) => { S.keys['W' + (n + 1)] = p; p.num = n + 1; p.side = -S.ps; p.key = 'W' + (n + 1); });
   S.te = sg => elig.find(p => p.cls === 'te' && Math.sign(p.x) === sg && p.y > -1 && Math.abs(p.x) < 6);
   S.ends = { [1]: S.te(1), [-1]: S.te(-1) }; // a tight end on the line at the snap, each side
+  // With motion, the same call without it: where everyone lined up before he went, and in man coverage who has him.
+  if (mo) S.from = prepare({ ...call, motion: 'none' }, seed);
   buildDefense(S);
+  if (mo) presnap(S, mo);
   assignOffense(S);
   S.pre = S.P.map(p => ({ x: p.x, y: p.y }));
   // Who is in the protection at the snap: blockers, and backs who check for a blitzer before they go out.
@@ -144,8 +154,8 @@ function buildDefense(S) {
   else { fs.x = -1 * s; fs.y = 9; ss.x = 5 * s; ss.y = 6.5; }
   let nb = null;
   if (front.db === 'nickel') {
-    const r2 = S.keys.S2;
-    nb = r2 && Math.abs(r2.x) > 6 ? mk(S, 'D', 'NB', 'cb', r2.x - s, 4.5) : mk(S, 'D', 'NB', 'cb', teS ? teS.x + 3 * s : 6.5 * s, 5);
+    const r2 = S.O.find(p => p.num === 2 && Math.sign(p.x) === s); // the slot on the defense's strong side
+    nb = r2 && Math.abs(r2.x) > 6 ? mk(S, 'D', 'NB', 'cb', r2.x - Math.sign(r2.x), 4.5) : mk(S, 'D', 'NB', 'cb', teS ? teS.x + 3 * s : 6.5 * s, 5);
   }
   S.CB = [cbL, cbR]; S.FS = fs; S.SS = ss; S.NB = nb;
   const lab = l => S.D.find(d => d.label === l && !d.dl);
@@ -157,7 +167,15 @@ function buildDefense(S) {
   const jobs = new Map();
   const left2 = S.O.filter(p => p.x < 0 && p.num === 2)[0], right2 = S.O.filter(p => p.x > 0 && p.num === 2)[0];
 
-  if (cov.man) {
+  if (cov.man && S.from) {
+    // Man coverage against motion: the jobs they had before he went, so the man who had him runs with him.
+    S.from.D.forEach((d0, k) => {
+      const d = S.D[k], j = d0.job;
+      jobs.set(d, j.kind === 'man' ? { kind: 'man', r: S.P[j.r.i], press: j.press } : j.kind === 'zone' ? { kind: 'zone', z: j.z, zid: j.zid } : { kind: 'rush' });
+      if (j.kind === 'rush') rush.add(d); else rush.delete(d);
+      d.extra = d0.extra;
+    });
+  } else if (cov.man) {
     const recvs = S.O.filter(p => p.num || p.cls === 'rb' || p.cls === 'fb');
     jobs.set(cbL, { kind: 'man', r: left, press: cov.press });
     jobs.set(cbR, { kind: 'man', r: right, press: cov.press });
@@ -217,6 +235,9 @@ function buildDefense(S) {
   for (const cb of S.CB) {
     const r = cb.job.kind === 'man' ? cb.job.r : cb.over;
     cb.x = r.x + shade * Math.sign(r.x); cb.y = depth + (r.y < -1 ? 0.6 : 0);
+    // With no receiver out wide on his side (the Z gone in motion), a corner in a zone stays out wide, 5 yards outside
+    // the tight end.
+    if (cb.job.kind !== 'man' && r.cls === 'te') cb.x = r.x + 5 * Math.sign(r.x);
   }
   const core = sd => { const te = S.te(sd); return te ? te.x : 3 * sd; };
   for (const d of S.D) {
@@ -224,7 +245,7 @@ function buildDefense(S) {
     if (d.cls === 'cb' && d !== S.NB) continue;
     if (j.kind === 'man') {
       const r = j.r;
-      if (r.num && Math.abs(r.x) > 6) { d.x = r.x - Math.sign(r.x) * (cov.id === 'c1' ? 0.9 : 0.6); d.y = cov.id === 'c0' ? 2 : 3.6; }
+      if (r.num && Math.abs(r.x) > 5.5) { d.x = r.x - Math.sign(r.x) * (cov.id === 'c1' ? 0.9 : 0.6); d.y = cov.id === 'c0' ? 2 : 3.6; }
       else if (r.cls === 'te' && d.edge && r.y > -1) { /* an edge man on the line takes the tight end from outside him, a 9-technique: he stays there */ }
       else if (r.cls === 'te') { d.x = r.x + Math.sign(r.x) * 0.5; d.y = d.cls === 'lb' ? 4 : 4.5; }
       else if (d.cls === 's') { d.x = clamp(r.x * 0.5 + d.x * 0.5, -6, 6); d.y = 6; }
@@ -278,6 +299,114 @@ function buildDefense(S) {
   }
 }
 
+// ---------------------------------------------------------------- motion before the snap
+
+// Motion: the board plays the time before the snap. Everyone is set for half a second, then the man in motion goes:
+// back off the line to 2.6 yards behind it (behind a tight end, the tackles and a quarterback under center, in front of
+// one in the shotgun), across, and up to his spot on the other side. Across, he runs over and sets, and the snap comes
+// half a second later; jet, he goes at full speed and the ball is snapped as he gets to the middle, still running: he
+// carries on across behind the line (see jetLead) before he turns up into his route. In man coverage the man who had him runs with him, a step behind and at his own depth (between the line and
+// the linebackers as he crosses the formation); in zone they slide to where they line up against the new formation.
+// The teams have already lined up for the snap (see prepare()): this works out the frames before it and, for jet,
+// where everyone is at the snap, still moving. S.from is the same call lined up before the motion.
+const MO = { across: 8, settle: 0.3, set: 0.5, lag: 0.25, react: 0.35, cross: -2.6 };
+function presnap(S, kind) {
+  const from = S.from, mover = S.O.find(p => p.label === S.fm.motion.who), n = S.P.length;
+  const start = { x: from.P[mover.i].x, y: from.P[mover.i].y }, end = { x: mover.x, y: mover.y };
+  // His path: around the end of the line on his side and back up on the other, clear of the tight ends and tackles.
+  const clear = sd => sd * Math.max(4.5, ...S.O.filter(p => p !== mover && (p.cls === 'ol' || p.cls === 'te') && Math.sign(p.x) === sd && Math.abs(p.x) < 8).map(p => Math.abs(p.x) + 1.6));
+  const s0 = Math.sign(start.x), s1 = Math.sign(end.x);
+  let pts = [start, { x: clear(s0), y: MO.cross }, { x: clear(s1), y: MO.cross }, end];
+  for (let k = 0; k < 2; k++) { // rounded corners (Chaikin's corner cutting)
+    const q = [pts[0]];
+    for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], b = pts[i + 1]; q.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 }, { x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 }); }
+    q.push(pts.at(-1));
+    pts = q;
+  }
+  const len = [0];
+  for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + dist(pts[i], pts[i - 1]));
+  const L = len.at(-1);
+  const along = d => { // the point d yards along the path, and the way it runs there
+    d = clamp(d, 0, L);
+    let i = 1; while (i < pts.length - 1 && len[i] < d) i++;
+    const a = pts[i - 1], b = pts[i], u = (d - len[i - 1]) / ((len[i] - len[i - 1]) || 1);
+    return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, dir: unit(b.x - a.x, b.y - a.y) };
+  };
+  // How far along he is t seconds after he starts: up to speed, and across, easing to a stop at his spot.
+  const jet = kind === 'jet', top = jet ? mover.top : MO.across, acc = mover.acc, dec = acc;
+  const run = t => {
+    if (t <= 0) return 0;
+    const ta = top / acc, da = top * ta / 2;
+    let d = t < ta ? acc * t * t / 2 : da + top * (t - ta);
+    if (!jet) { // the stop: the farthest he can have got and still stop at his spot
+      const ds = top * top / (2 * dec), tc = Math.max(0, (L - da - ds) / top), tStop = ta + tc + top / dec;
+      if (t >= tStop) return L;
+      if (t > ta + tc) { const u = t - ta - tc; d = da + top * tc + top * u - dec * u * u / 2; }
+    }
+    return Math.min(d, L);
+  };
+  const timeTo = d => { let a = 0, b = 20; for (let k = 0; k < 40; k++) { const m = (a + b) / 2; if (run(m) < d) a = m; else b = m; } return b; };
+  // Jet: the snap as he gets within 3 yards of the middle. Across: once he has stopped, and the half second after it.
+  let snapAt;
+  if (jet) {
+    const x = 0.5, i = pts.findIndex((q, k) => k && q.x * s0 <= x && pts[k - 1].x * s0 > x);
+    snapAt = i > 0 ? len[i - 1] + (len[i] - len[i - 1]) * (pts[i - 1].x * s0 - x) / ((pts[i - 1].x - pts[i].x) * s0) : L / 2;
+  }
+  const tRun = jet ? timeTo(snapAt) : timeTo(L - 1e-6);
+  const before = Math.round((MO.settle + tRun + (jet ? 0 : MO.set)) / DT); // frames before the snap
+  const t0 = -before * DT, go = t0 + MO.settle, setAt = go + tRun;
+  const done = go + (jet ? timeTo(L - 1e-6) : tRun); // when the defense has finished sliding (with jet, after the snap)
+  // His defender, in man coverage: the man who has him at the snap.
+  const man = S.D.find(d => d.job.kind === 'man' && d.job.r === mover) || null;
+  const moverAt = t => along(run(t - go));
+  const A = S.D.map((d, k) => ({ x: from.D[k].x, y: from.D[k].y })), B = S.D.map(d => ({ x: d.x, y: d.y }));
+  const smooth = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+  const at = t => { // where everyone is t seconds from the snap (t <= 0)
+    const xy = new Float32Array(n * 2);
+    for (const p of S.O) { const q = p === mover ? moverAt(t) : p; xy[2 * p.i] = q.x; xy[2 * p.i + 1] = q.y; }
+    const u = smooth((t - go - MO.react) / (done - go - MO.react));
+    S.D.forEach((d, k) => {
+      let x = A[k].x + (B[k].x - A[k].x) * u, y = A[k].y + (B[k].y - A[k].y) * u;
+      if (d === man) {
+        // a step behind him, as far to the side of him and as deep as he lines up on him: from how he lined up on
+        // him before the motion to how he will at the snap, as the man in motion gets there
+        const w = smooth(run(t - MO.lag - go) / L), m = moverAt(t - MO.lag);
+        x = m.x + (A[k].x - start.x) * (1 - w) + (B[k].x - end.x) * w;
+        const base = A[k].y + (B[k].y - A[k].y) * w, inside = smooth((7 - Math.abs(x)) / 2);
+        y = base + (clamp(base, 2.3, 3) - base) * inside;
+      }
+      xy[2 * d.i] = x; xy[2 * d.i + 1] = y;
+    });
+    return xy;
+  };
+  S.preFrames = [];
+  for (let k = 0; k < before; k++) {
+    const t = +(t0 + k * DT).toFixed(2);
+    S.preFrames.push({ t, xy: at(t), eng: new Int8Array(n).fill(-1), ball: [0, -0.3, 0.3], c: -1, air: false });
+  }
+  // At the snap: across, everyone is where he lined up for it; jet, they're where the motion has them, moving.
+  const now = at(0), was = at(-DT);
+  for (const p of S.P) {
+    p.x = p.x0 = p.tx = now[2 * p.i]; p.y = p.y0 = p.ty = now[2 * p.i + 1];
+    p.vx = (now[2 * p.i] - was[2 * p.i]) / DT; p.vy = (now[2 * p.i + 1] - was[2 * p.i + 1]) / DT;
+    for (const f of S.preFrames.slice(-12)) p.hist.push(f.xy[2 * p.i], f.xy[2 * p.i + 1]); // where he has been, for those who read him late
+  }
+  mover.spot = end;
+  // Jet: the rest of his way across behind the line, to the far end of the line, before his route turns up the field.
+  if (jet) mover.lead = [{ x: clear(s1), y: MO.cross }];
+  const r = n => ['no', 'one', 'two', 'three', 'four', 'five'][n];
+  const count = sd => S.O.filter(p => (p.cls === 'wr' || p.cls === 'te') && Math.sign(p === mover ? end.x : p.x) === sd).length;
+  S.motion = { kind, who: mover, man, start, end, t0: +t0.toFixed(2), go, setAt, path: pts.filter((q, i) => len[i] <= (jet ? snapAt : L) + 1e-6).concat(jet ? [{ x: mover.x0, y: mover.y0 }] : []) };
+  const line = (t, text, who) => S.events.push({ t: +t.toFixed(2), kind: 'motion', text, who: who.i });
+  line(go, jet ? `The ${mover.label} goes in jet motion, across at full speed.` : `The ${mover.label} goes in motion, across the formation.`, mover);
+  if (man) line(go + (jet ? 0.5 : 0.8), `${cap(defName(S, man))} runs with him: man coverage.`, man);
+  else line(go + (jet ? 0.5 : 0.8), S.cov.man ? 'Nobody follows him.' : 'Nobody follows him: zone.', mover);
+  if (!jet) {
+    const a = count(s1), b = count(-s1);
+    line(setAt, `He sets on the other side: ${a === b ? `${r(a)} receivers each side now` : `${r(a)} receivers on his side now, ${r(b)} on the other`}.`, mover);
+  }
+}
+
 // ---------------------------------------------------------------- the offense's assignments
 
 function assignOffense(S) {
@@ -294,13 +423,14 @@ function assignOffense(S) {
     // Backs run their routes to the side the play says (strong by default, the screen to the back's own side).
     let out = pl.side || S.s;
     if (pl.cls === 'rb' || pl.cls === 'fb') {
-      out = route === 'screen' && !under ? Math.sign(pl.x) || S.s : (map.side === 'W' ? -S.s : S.s);
-      if (pl.cls === 'fb' && (route === 'check' || route === 'bflat')) out = map.side === 'S' && route === 'bflat' ? S.s : -S.s;
+      out = route === 'screen' && !under ? Math.sign(pl.x) || S.s : (map.side === 'W' ? -S.ps : S.ps);
+      if (pl.cls === 'fb' && (route === 'check' || route === 'bflat')) out = map.side === 'S' && route === 'bflat' ? S.ps : -S.ps;
       // A back set off to one side checks down on his own side, outside his own tackle, not across the pocket.
       if (route === 'check' && Math.abs(pl.x) > 0.5) out = Math.sign(pl.x);
     }
     pl.job = { kind: 'route', route, out, delay: r.delay || 0 };
-    pl.path = r.pts.map(([o, u]) => ({ x: clamp(pl.x + o * out, -EDGE + 0.6, EDGE - 0.6), y: r.fromLine ? u : pl.y + u }));
+    const at = pl.spot || pl; // a man in jet motion runs his route from the spot he's on his way to
+    pl.path = (pl.lead || []).concat(r.pts.map(([o, u]) => ({ x: clamp(at.x + o * out, -EDGE + 0.6, EDGE - 0.6), y: r.fromLine ? u : at.y + u })));
   }
   for (const pl of S.O) if (pl.cls !== 'qb' && pl.cls !== 'ol' && pl.job.kind === 'none') pl.job = { kind: 'pro' };
   for (const ol of S.OL) ol.job = { kind: 'pro' };
@@ -381,8 +511,9 @@ function assignRun(S) {
     S.mesh = under ? { x: 0.5 * Math.sign(RB.x || -p), y: -4.6 } : { x: 0.7 * (Math.sign(RB.x) || -p), y: -6 };
     for (const o of S.OL) o.job = { kind: 'pro', draw: true };
     for (const pl of S.O) if (pl.num) pl.job = pl.cls === 'te' && pl.y > -1 ? { kind: 'pro', draw: true } : { kind: 'route', route: 'go', out: pl.side, delay: 0 };
-    for (const pl of S.O) if (pl.job.kind === 'route') pl.path = ROUTES.go.pts.map(([o, u]) => ({ x: clamp(pl.x + o * pl.side, -EDGE, EDGE), y: pl.y + u }));
+    for (const pl of S.O) if (pl.job.kind === 'route') { const at = pl.spot || pl; pl.path = (pl.lead || []).concat(ROUTES.go.pts.map(([o, u]) => ({ x: clamp(at.x + o * pl.side, -EDGE, EDGE), y: at.y + u }))); }
     if (S.FB) S.FB.job = { kind: 'pro' };
+    jetFake(S);
     passPro(S);
     return;
   }
@@ -392,7 +523,7 @@ function assignRun(S) {
   QB.path = under ? [{ x: S.mesh.x - 0.3 * p, y: S.mesh.y + 0.7 }, { x: -2.5 * p, y: -5.5 }] : [{ x: 0.2 * p, y: -5 }, { x: -2.5 * p, y: -5.6 }];
   // WRs block the defensive back over them.
   const dbs = S.D.filter(d => d.cls === 'cb' || d.cls === 's');
-  const wrs = S.O.filter(pl => pl.cls === 'wr' && Math.abs(pl.x) > 5.5);
+  const wrs = S.O.filter(pl => pl.cls === 'wr' && Math.abs(pl.x) > 5.5 && !(S.motion?.kind === 'jet' && pl === S.motion.who));
   const wpick = assign(wrs, dbs, (w, d) => (Math.abs(w.x - d.x) < 5 ? dist(w, d) : Infinity), () => 40);
   wrs.forEach((w, k) => { w.job = { kind: 'stalk', target: wpick[k] >= 0 ? dbs[wpick[k]] : null }; });
 
@@ -458,6 +589,17 @@ function assignRun(S) {
   const blocked = new Set(blockers.map(b => b.job.target).filter(Boolean));
   S.unblocked = box.filter(d => !blocked.has(d));
   if (S.FB && play.scheme !== 'power') S.FB.job.lead = true;
+  jetFake(S);
+}
+
+// On a run, a man in jet motion keeps going across, out to the flat, and takes his defender with him: he isn't one of
+// the receivers blocking the men over them.
+function jetFake(S) {
+  const m = S.motion;
+  if (!m || m.kind !== 'jet') return;
+  const pl = m.who, out = Math.sign(pl.spot.x) || -S.s;
+  pl.job = { kind: 'route', route: 'jet', out, delay: 0 };
+  pl.path = pl.lead.concat(ROUTES.jet.pts.map(([o, u]) => ({ x: clamp(pl.spot.x + o * out, -EDGE + 0.6, EDGE - 0.6), y: pl.spot.y + u })));
 }
 
 // The box: from the end of the line on each side (a tight end within 8 yards of the ball, attached or on the wing, or
@@ -477,7 +619,7 @@ function boxCount(S) {
 
 export function simulate(call, seed = 1) {
   const S = prepare(call, seed);
-  const frames = [];
+  const frames = S.preFrames ? S.preFrames.slice() : [];
   record(S, frames);
   blitzLine(S);
   rotateLine(S);
@@ -496,6 +638,7 @@ export function simulate(call, seed = 1) {
     unblocked: (S.unblocked || []).map(d => d.i), free: (S.freeRushers || []).map(d => d.i), cameFree, protection: S.protection.map(p => p.i),
     players: S.P.map(pl => ({ i: pl.i, team: pl.team, label: pl.label, cls: pl.cls, info: pl.info, x: S.pre[pl.i].x, y: S.pre[pl.i].y })),
     jobs: S.jobText, overlay: S.overlay,
+    motion: S.motion ? { kind: S.motion.kind, who: S.motion.who.i, man: S.motion.man ? S.motion.man.i : -1, t0: S.motion.t0, set: S.motion.setAt } : null,
   };
 }
 
@@ -828,7 +971,7 @@ function isReady(S, r) {
   const R = ROUTES[r.job.route];
   if (S.t < (r.job.delay || 0) + 0.25) return false;
   if (R.readyY) return r.y - r.y0 >= R.readyY;
-  const k = R.ready ?? 1;
+  const k = (R.ready ?? 1) + (r.lead ? r.lead.length : 0); // (after a jet motion's way across, the route's own)
   if (r.wp < k) return false;
   if (S.play.drop !== 'five' && S.play.drop !== 'pa') return true;
   if (R.settle && r.wp >= r.path.length) return r.vy < 0.6;
@@ -1163,9 +1306,12 @@ function cover(S, d) {
   const sideIn = -Math.sign(r.x || 1);
   const lev = (S.cov.id === 'c1' && d.cls === 'cb' ? -0.5 : 0.5) * sideIn;
   const cushion = j.press ? 0.5 : clamp(at.y - r.y0 - t * 2.4, 0.7, 6);
-  const px = L.x + lvx * ls + lev, py = L.y + lvy * ls + cushion;
+  // His man in jet motion, still running across behind the line: he runs with him on his own side of it, over the top
+  // of the linemen, rather than through them, and there's no jamming a man going by at full speed.
+  const jet = S.motion?.kind === 'jet' && r === S.motion.who && Math.abs(L.x) < 7 && L.y < 0.5;
+  const px = L.x + lvx * ls + lev, py = jet ? Math.max(1.5, L.y + lvy * ls + cushion) : L.y + lvy * ls + cushion;
   d.dv = [lvx + (px - d.x) * 2.2, lvy + (py - d.y) * 2.2];
-  if (t < 0.45 && j.press) d.dv = [(r.x + lev * 0.5 - d.x) * 3, (r.y + 1 - d.y) * 3];
+  if (t < 0.45 && j.press && !jet) d.dv = [(r.x + lev * 0.5 - d.x) * 3, (r.y + 1 - d.y) * 3];
   d.ts = d.top;
 }
 
@@ -1180,7 +1326,7 @@ function zone(S, d) {
     // ball is thrown, rather than running with that route and leaving the sideline behind him. Otherwise he widens
     // over the deepest man, as anyone deep does.
     const mine = routes.filter(r => r.x > zx0 - 2 && r.x < zx1 + 2 && r.y > 4).sort((a, b) => b.y - a.y);
-    const two = (d.job.zid === 'deepLH' || d.job.zid === 'deepRH') && S.keys[(Math.sign(z.at[0]) === S.s ? 'S' : 'W') + '2'];
+    const two = (d.job.zid === 'deepLH' || d.job.zid === 'deepRH') && S.keys[(Math.sign(z.at[0]) === S.ps ? 'S' : 'W') + '2'];
     const r = mine[0], k = two && two.job.kind === 'route' && two.y > 8 ? 0.2 : 0.55;
     if (r && r.y > z.at[1] - 7) { tx = clamp(r.x * k + tx * (1 - k), zx0 - 1, zx1 + 1); ty = Math.max(z.at[1], r.y + 3.5); }
     else if (S.look && S.look.x > zx0 && S.look.x < zx1) tx = tx * 0.7 + S.look.x * 0.3;
@@ -1525,6 +1671,9 @@ function finish(S, kind, by, hit) {
 const DEF_NAMES = { DT: 'the 3-technique', NT: 'the nose', M: 'the Mike', W: 'the Will', S: 'the Sam', J: 'the Jack', FS: 'the free safety', SS: 'the strong safety', NB: 'the nickel back' };
 const OFF_NAMES = { QB: 'the quarterback', RB: 'the running back', FB: 'the fullback', LT: 'the left tackle', LG: 'the left guard', C: 'the center', RG: 'the right guard', RT: 'the right tackle' };
 
+// A defender by his position alone: "the cornerback", "the Will".
+const defName = (S, d) => (d.label === 'CB' ? 'the cornerback' : name(S, d));
+
 export function name(S, pl, plain) {
   if (pl.team === 'O') {
     if (OFF_NAMES[pl.label]) return OFF_NAMES[pl.label];
@@ -1573,6 +1722,13 @@ function rotateLine(S) {
 
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
+  const text = jobWords(S, pl), m = S.motion;
+  if (!m || (pl !== m.who && pl !== m.man)) return text;
+  const side = Math.sign(m.end.x) === S.s ? 'strong' : 'weak';
+  if (pl === m.man) return `${text} When the ${m.who.label} goes in motion, he runs with him.`;
+  return `Before the snap he goes in motion across the formation, ${m.kind === 'jet' ? `at full speed toward the ${side} side, and the ball is snapped as he crosses` : `and sets on the ${side} side`}. ${text}`;
+}
+function jobWords(S, pl) {
   const j = pl.job, s = S.s;
   const sideWord = x => ((x * s) >= 0 ? 'strong' : 'weak');
   if (pl.team === 'O') {
@@ -1586,6 +1742,7 @@ function describeJob(S, pl) {
     if (j.kind === 'route' || j.kind === 'fake') {
       const r = ROUTES[j.route];
       if (j.kind === 'fake') return `Fakes taking the handoff, then stays in to ${j.target ? 'block ' + name(S, j.target) : 'pass-block'}.`;
+      if (j.route === 'jet') return 'Keeps running across at full speed, out to the flat, to take his defender away from the run.';
       return S.play.type === 'run' ? 'Runs a go route to take his defender away from the run.' : r.desc;
     }
     if (j.kind === 'pro' && j.stayed) return `Checks for a blitzer before he slips out, and ${name(S, j.target)} is coming: he stays in and blocks him.`;
@@ -1631,6 +1788,8 @@ function describeJob(S, pl) {
 // the quarterback reads has its place in his reads (read: 1 for his first), which the board writes past its end.
 function overlay(S) {
   const out = [];
+  // Motion: his path behind the line, from where he lines up to where he is at the snap, where his route starts.
+  if (S.motion) out.push({ team: 'O', kind: 'motion', i: S.motion.who.i, pts: S.motion.path.map(q => ({ x: q.x, y: q.y })) });
   for (const pl of S.O) {
     const j = pl.job, read = S.play.type === 'pass' ? (S.reads || []).indexOf(pl) + 1 : 0;
     if (j.kind === 'route') out.push({ team: 'O', kind: 'route', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, ...pl.path.map(w => ({ x: w.x, y: Math.min(w.y, pl.y0 + 28) }))], delay: j.delay, settle: !!ROUTES[j.route]?.settle, ...(read ? { read } : {}) });

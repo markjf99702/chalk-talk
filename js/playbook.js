@@ -7,29 +7,31 @@ export const SIDELINE = 26.67;
 export const HASH = 3.08;
 
 // Offensive line: the same five in every formation.
+// motion: who can go in motion (a receiver off the line) and where he sets on the other side, x as written (strength to
+// the right): the Z or the H runs across the formation, behind the line.
 const LINE = [['LT', -3, -0.6, 'ol'], ['LG', -1.5, -0.6, 'ol'], ['C', 0, -0.6, 'ol'], ['RG', 1.5, -0.6, 'ol'], ['RT', 3, -0.6, 'ol']];
 
 export const FORMATIONS = [
   {
-    id: 'iform', name: 'I-Form', personnel: '21', under: true,
+    id: 'iform', name: 'I-Form', personnel: '21', under: true, motion: { who: 'Z', to: -11 },
     blurb: 'Two backs stacked behind the quarterback, a tight end, two receivers. Built to run.',
     players: [['X', -17.5, -0.6, 'wr'], ...LINE, ['Y', 4.6, -0.6, 'te'], ['Z', 14, -1.4, 'wr'],
       ['QB', 0, -1.3, 'qb'], ['FB', 0, -4.3, 'fb'], ['RB', 0, -6.8, 'rb']],
   },
   {
-    id: 'single', name: 'Singleback', personnel: '12', under: true,
+    id: 'single', name: 'Singleback', personnel: '12', under: true, motion: { who: 'Z', to: -10 },
     blurb: 'One back, a tight end at each end of the line, and two receivers a step off the line.',
     players: [['X', -16, -1.4, 'wr'], ['U', -4.6, -0.6, 'te'], ...LINE, ['Y', 4.6, -0.6, 'te'], ['Z', 16, -1.4, 'wr'],
       ['QB', 0, -1.3, 'qb'], ['RB', 0, -6.3, 'rb']],
   },
   {
-    id: 'doubles', name: 'Gun Doubles', personnel: '10', under: false,
+    id: 'doubles', name: 'Gun Doubles', personnel: '10', under: false, motion: { who: 'H', to: 6.5 },
     blurb: 'Shotgun with four receivers, two to each side, and one back beside the quarterback.',
     players: [['X', -18, -0.6, 'wr'], ['H', -10, -1.4, 'wr'], ...LINE, ['Y', 10, -1.4, 'wr'], ['Z', 18, -0.6, 'wr'],
       ['QB', 0, -5, 'qb'], ['RB', -1.6, -5.2, 'rb']],
   },
   {
-    id: 'trips', name: 'Gun Trips', personnel: '11', under: false,
+    id: 'trips', name: 'Gun Trips', personnel: '11', under: false, motion: { who: 'H', to: -10 },
     blurb: 'Shotgun with three receivers to one side and one alone on the other. The tight end is the inside man of the three.',
     players: [['X', -18, -0.6, 'wr'], ...LINE, ['Y', 6.2, -1.4, 'te'], ['H', 11, -1.4, 'wr'], ['Z', 18, -0.6, 'wr'],
       ['QB', 0, -5, 'qb'], ['RB', -1.6, -5.2, 'rb']],
@@ -61,6 +63,8 @@ export const ROUTES = {
   bflat: { ready: 1, name: 'flat', fromLine: true, pts: [[3, -4], [7.5, -0.5], [12.5, 3.3]], desc: 'Flat: out of the backfield to the flat, a few yards past the line.' },
   check: { ready: 1, name: 'check-down', fromLine: true, pts: [[3.2, -1], [3.6, 3]], settle: true, delay: 0.9, desc: 'Check-down: stays in to block if a blitzer comes, otherwise slips out to an open spot short.' },
   screen: { ready: 1, name: 'screen', pts: [[4, 1.2], [7, 2.6]], settle: true, delay: 0.85, desc: 'Screen: blocks for a moment, then slips out behind the rush and waits for the ball with linemen in front.' },
+  // Not a play's route: what a man in jet motion does on a run, from the spot he was heading for, "out" the way he runs.
+  jet: { ready: 1, name: 'jet', pts: [[3, 0.9], [9, 3.4]], desc: 'Jet: keeps running across at full speed, out to the flat, and takes his defender with him.' },
 };
 
 // Each pass play says what every eligible player does, by where he lines up:

@@ -706,6 +706,73 @@ test('a disguise: Cover 1 or Cover 3 lines up like Cover 4, two deep and the cor
   }
 });
 
+test('motion: the board plays the time before the snap, and every call with it runs to a finish', () => {
+  // Every formation, play and coverage, across and jet, a front and a pressure taking turns: the same checks as for a
+  // play without motion, and the frames before the snap come first, a twentieth of a second apart up to the snap, with
+  // nobody jumping. A play without motion starts at the snap.
+  let seed = 61;
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const cv of COVERAGES) for (const motion of ['across', 'jet']) {
+    const call = { formation: fm.id, play: pl.id, front: FRONTS[seed % 4].id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip: seed % 2 === 0, motion };
+    const r = simulate(call, seed++), what = `${JSON.stringify(call)} seed ${seed - 1}`, F = r.frames;
+    assert.ok(KINDS.has(r.result.kind), `${what}: result ${r.result.kind}`);
+    assert.ok(ended(r) && ENDINGS.has(r.events.at(-1).kind), `${what}: the play-by-play doesn't end with the end of the play`);
+    for (let k = 1; k < r.events.length; k++) assert.ok(r.events[k].t >= r.events[k - 1].t, `${what}: the play-by-play goes back in time at "${r.events[k].text}"`);
+    assert.ok(F[0].t < (motion === 'jet' ? -1 : -2.5), `${what}: the motion takes ${-F[0].t} s`);
+    assert.equal(r.motion.t0, F[0].t, what);
+    for (let k = 1; k < F.length; k++) {
+      assert.ok(Math.abs(F[k].t - F[k - 1].t - 0.05) < 1e-6, `${what}: frames ${F[k - 1].t} and ${F[k].t}`);
+      if (F[k].t > 0) break;
+      for (let i = 0; i < 22; i++) {
+        assert.ok(Number.isFinite(F[k].xy[2 * i]) && Number.isFinite(F[k].xy[2 * i + 1]), `${what}: a position went bad`);
+        assert.ok(Math.hypot(F[k].xy[2 * i] - F[k - 1].xy[2 * i], F[k].xy[2 * i + 1] - F[k - 1].xy[2 * i + 1]) < 0.75, `${what}: ${r.players[i].label} jumps before the snap at ${F[k].t}`);
+      }
+    }
+    assert.ok(F.some(f => f.t === 0), `${what}: no frame at the snap`);
+    assert.equal(r.events[0].kind, 'motion', what);
+    assert.equal(simulate({ ...call, motion: 'none' }, seed - 1).frames[0].t, 0, `${what}: without motion it starts at the snap`);
+  }
+});
+
+test('motion: he runs across and is counted on his new side; in man coverage his man runs with him, in zone they slide', () => {
+  // Across: he starts where the formation has him and is set on the other side at the snap, at the spot the playbook
+  // gives him, counted there (Gun Trips becomes two and two, Gun Doubles three and one, and from I-Form and Singleback
+  // his side has more receivers than the tight end's, so the pass plays go his way). Jet: at the snap he's at the
+  // middle, at full speed. In man coverage the man who had him before the motion has him at the snap, on his side of
+  // the field; in zone nobody does, and nobody crosses to the other side of the field to follow him.
+  // (From I-Form and Singleback the Z leaves more receivers on the other side, and the pass plays go that way.)
+  const key = { trips: 'W2', doubles: 'S3', iform: 'S2', single: 'S2' };
+  let seed = 81;
+  for (const fm of FORMATIONS) for (const flip of [false, true]) for (const coverage of ['c1', 'c3', 'c0', 'c2']) for (const motion of ['across', 'jet']) {
+    const call = { formation: fm.id, play: 'smash', front: 'nickel', coverage, pressure: 'four', flip, motion }, what = JSON.stringify(call);
+    const S = prepare(call, seed), r = simulate(call, seed), was = prepare({ ...call, motion: 'none' }, seed);
+    seed++;
+    const who = S.O.find(p => p.label === fm.motion.who), f = flip ? -1 : 1, at = (fr, i) => ({ x: fr.xy[2 * i], y: fr.xy[2 * i + 1] });
+    const snap = r.frames.find(x => x.t === 0), before = r.frames[r.frames.findIndex(x => x.t === 0) - 1];
+    assert.equal(r.motion.who, who.i, what);
+    assert.deepEqual(at(r.frames[0], who.i), { x: Math.fround(was.P[who.i].x), y: Math.fround(was.P[who.i].y) }, `${what}: he starts where the formation has him`);
+    assert.equal(who.key, key[fm.id], `${what}: counted as ${who.key}`);
+    if (motion === 'across') {
+      assert.ok(Math.abs(at(snap, who.i).x - fm.motion.to * f) < 1e-3 && Math.hypot(at(snap, who.i).x - at(before, who.i).x, at(snap, who.i).y - at(before, who.i).y) < 1e-3, `${what}: set on the other side at the snap`);
+      assert.match(r.events.find(e => e.text.startsWith('He sets'))?.text ?? '', fm.id === 'trips' ? /two receivers each side now/ : fm.id === 'doubles' ? /three receivers on his side now, one on the other/ : /two receivers on his side now, one on the other|three receivers on his side now, one on the other/, what);
+    } else {
+      assert.ok(Math.abs(at(snap, who.i).x) < 1, `${what}: at the snap the jet man is at the middle, at ${at(snap, who.i).x.toFixed(1)}`);
+      assert.ok(Math.hypot(at(snap, who.i).x - at(before, who.i).x, at(snap, who.i).y - at(before, who.i).y) / 0.05 > 7, `${what}: still running at full speed at the snap`);
+    }
+    const line = r.events.find(e => e.kind === 'motion' && /follows|runs with him/.test(e.text));
+    if (coverage === 'c0' || coverage === 'c1') {
+      const had = was.D.find(d => d.job.kind === 'man' && d.job.r.i === who.i);
+      assert.equal(r.motion.man, had.i, `${what}: the man who had him before the motion has him at the snap`);
+      assert.ok(Math.sign(at(snap, had.i).x) === Math.sign(fm.motion.to * f) || Math.abs(at(snap, had.i).x) < 6, `${what}: his man ran with him`);
+      assert.ok(Math.hypot(at(snap, had.i).x - at(r.frames[0], had.i).x) > 4, `${what}: his man ran with him`);
+      assert.match(line.text, /runs with him: man coverage\.$/, what);
+    } else {
+      assert.equal(r.motion.man, -1, what);
+      for (const d of S.D) assert.ok(at(r.frames[0], d.i).x * at(snap, d.i).x > -2, `${what}: the ${d.label} crossed the field after him in a zone`);
+      assert.equal(line.text, 'Nobody follows him: zone.', what);
+    }
+  }
+});
+
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
 const caughtAt = r => { const f = r.frames.find(f => f.t > r.events.find(e => e.kind === 'throw').t && !f.air && f.c === r.result.carrier); return f.xy[2 * r.result.carrier + 1]; };
 
