@@ -77,7 +77,7 @@ export const PLAYS = [
   },
   {
     id: 'power', name: 'Power', type: 'run', scheme: 'power', aim: 3.4,
-    blurb: 'A gap scheme: the play-side linemen block down, the end gets kicked out, and the back-side guard pulls through the hole for the linebacker.',
+    blurb: 'A gap scheme: the play-side linemen block down, the end gets kicked out, and the back-side guard pulls through the hole for the linebacker. With no fullback to kick out the end, the pulling guard does it himself.',
   },
   {
     id: 'draw', name: 'Draw', type: 'run', scheme: 'draw', aim: 0.4,

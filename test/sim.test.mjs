@@ -124,9 +124,15 @@ test('the line is named left to right with the strength on either side, and on P
     const lt = S.OL.find(o => o.label === 'LT'), rt = S.OL.find(o => o.label === 'RT');
     assert.ok(lt.x < 0 && rt.x > 0, `${what}: the left tackle is at ${lt.x}, the right tackle at ${rt.x}`);
     for (const o of S.OL) assert.equal(o.info, o.label, `${what}: the ${o.label}'s card is the ${o.info}'s`);
-    const pull = S.O.filter(p => p.job.scheme === 'pull');
+    const pull = S.O.filter(p => p.job.pull || p.job.scheme === 'pull');
     assert.equal(pull.length, 1, `${what}: ${pull.length} men pull`);
     assert.ok(pull[0].x0 * S.aimX < 0, `${what}: the ${pull[0].label} at ${pull[0].x0} pulls, on the play side (aim ${S.aimX})`);
+    // The end man on the play side gets kicked out: by the fullback, or with no fullback by the guard who pulls.
+    const kick = S.O.filter(p => p.job.scheme === 'kick');
+    assert.equal(kick.length, 1, `${what}: ${kick.length} men kick out the end`);
+    assert.equal(kick[0], S.FB || pull[0], `${what}: the ${kick[0].label} kicks out the end`);
+    assert.ok(S.emol && kick[0].job.target === S.emol, `${what}: the kick-out is for the ${kick[0].job.target?.label}, the end man is the ${S.emol?.label}`);
+    assert.match(S.jobText[kick[0].i], S.FB ? /^Kicks out/ : /^Pulls from the back side and kicks out/, `${what}: "${S.jobText[kick[0].i]}"`);
   }
 });
 

@@ -390,8 +390,11 @@ function assignRun(S) {
   for (const b of blockers) {
     let kind = play.scheme;
     if (b.cls === 'fb') kind = play.scheme === 'power' ? 'kick' : 'lead';
-    if (play.scheme === 'power' && b === backG) kind = 'pull';
-    b.job = { kind: 'block', scheme: kind, target: null };
+    // On Power the back-side guard pulls: to lead up through the hole for the linebacker, or, with no fullback to do
+    // it (from the gun, or two tight ends on the line), to kick out the end himself.
+    const pull = play.scheme === 'power' && b === backG;
+    if (pull) kind = S.FB ? 'pull' : 'kick';
+    b.job = { kind: 'block', scheme: kind, target: null, pull };
   }
   // Two levels, the way a line coach draws it. First the men on the line of scrimmage: each is the lineman's or tight
   // end's he lines up on, or in the gap that blocker is responsible for: on a zone the gap to his play side (an outside
@@ -889,7 +892,7 @@ function runBlock(S, pl) {
     const near = pickUp(S, pl, 1.6, true);
     if (near && near !== tgt) { tgt = near; j.target = near; }
   }
-  if (j.scheme === 'pull' && t < 0.55) { // the pulling guard: step back and run along the line
+  if (j.pull && t < 0.55) { // the pulling guard: step back and run along the line
     pl.tx = pl.x0 + p * 4; pl.ty = -1.8; pl.ts = pl.top * 0.85; return;
   }
   if (!tgt) { // nobody yet: a lead blocker goes to the hole, a lineman to his play-side gap, each looking for work
@@ -1413,7 +1416,7 @@ function describeJob(S, pl) {
     if (j.kind === 'stalk') return j.target ? `Blocks ${name(S, j.target)} to keep him off the run.` : 'Blocks downfield.';
     if (j.kind === 'block') {
       const tgt = j.target ? name(S, j.target) : 'the first defender to show up';
-      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `Kicks out ${tgt}, the end man on the line.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.` })[j.scheme] || `Blocks ${tgt}.`;
+      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: j.pull ? `Pulls from the back side and kicks out ${tgt}, the end man on the line.` : `Kicks out ${tgt}, the end man on the line.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.` })[j.scheme] || `Blocks ${tgt}.`;
     }
     return '';
   }
@@ -1449,7 +1452,10 @@ function overlay(S) {
     if (j.kind === 'route') out.push({ team: 'O', kind: 'route', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, ...pl.path.map(w => ({ x: w.x, y: Math.min(w.y, pl.y0 + 28) }))], delay: j.delay, settle: !!ROUTES[j.route]?.settle });
     else if (j.kind === 'block' || j.kind === 'stalk') {
       const tg = j.target;
-      if (j.scheme === 'pull') out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: -1.8 }, { x: S.aimX, y: -1.6 }, { x: S.aimX, y: 1.5 }], to: tg ? tg.i : -1 });
+      if (j.pull && j.scheme === 'kick' && tg) { // along the line behind it, then out at the end man from inside him
+        const kx = tg.x - S.p * 0.8;
+        out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: -1.8 }, { x: kx, y: -1.6 }, { x: kx + S.p * 0.3, y: tg.y - 0.5 }], to: tg.i });
+      } else if (j.pull) out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: -1.8 }, { x: S.aimX, y: -1.6 }, { x: S.aimX, y: 1.5 }], to: tg ? tg.i : -1 });
       else out.push({ team: 'O', kind: 'block', i: pl.i, to: tg ? tg.i : -1, dir: j.scheme });
     } else if (j.kind === 'pro' || j.kind === 'screenOL' || j.kind === 'fake') out.push({ team: 'O', kind: 'pro', i: pl.i, set: pl.set, to: j.target ? j.target.i : -1, screen: j.kind === 'screenOL' ? j.at : null });
     else if (j.kind === 'carry') out.push({ team: 'O', kind: 'carry', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: S.mesh.x, y: S.mesh.y + 0.6 }, { x: S.aimX, y: 0.5 }, { x: S.aimX + (S.aimX - S.mesh.x) * 0.25, y: 4 }] });
