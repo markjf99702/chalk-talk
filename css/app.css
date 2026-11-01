@@ -384,7 +384,7 @@ button:disabled { cursor: default; }
 /* the scrubber, with the clock at its left in the type of the play-by-play's times (a screen reader hears the time
    from the scrubber itself) */
 .scrubber { flex: 1; min-width: 40px; display: flex; align-items: center; gap: 6px; }
-.clock { flex: none; min-width: 2.6em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1; }
+.clock { flex: none; min-width: 3.1em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1; }
 .track { position: relative; flex: 1; min-width: 40px; display: flex; align-items: center; }
 #scrub { position: relative; flex: 1; min-width: 40px; margin: 0; accent-color: var(--accent); }
 #scrub:disabled { opacity: .4; }
@@ -394,6 +394,8 @@ button:disabled { cursor: default; }
 .marks { position: absolute; inset: 0; pointer-events: none; --thumb: 16px; }
 @supports (-webkit-touch-callout: none) { .marks { --thumb: 28px; } }
 .marks i { position: absolute; bottom: 0; width: 2px; height: 5px; border-radius: 1px; background: var(--muted); left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at)); transform: translateX(-50%); }
+/* the snap, on a play with motion before it: a taller mark, there from the start */
+.marks i[data-kind="snap"] { width: 3px; height: 9px; }
 
 /* ---------------------------------------------------------------- panel */
 

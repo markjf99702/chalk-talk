@@ -20,7 +20,7 @@ const RUN_NOTES = {
 
 const state = {
   side: 'O',
-  off: { formation: 'trips', play: 'smash', flip: false },
+  off: { formation: 'trips', play: 'smash', flip: false, motion: 'none' },
   def: { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false },
   auto: true,
   labels: true,
@@ -40,7 +40,13 @@ const state = {
 // Whether call a has everything call b has.
 const same = (a, b) => Object.keys(b).every(f => a[f] === b[f]);
 // A kept call that this version can play, tidied up, or null.
-const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip } : null);
+const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip, motion: MOTIONS.includes(o.motion) ? o.motion : 'none' } : null);
+// Motion before the snap (see presnap() in js/sim.js): none, across (he runs over and sets), or jet (at full speed, the
+// ball snapped as he crosses). Every formation here has a receiver off the line to send.
+const MOTIONS = ['none', 'across', 'jet'];
+const moving = o => (o.motion === 'across' || o.motion === 'jet') && !!byId(FORMATIONS, o.formation).motion;
+// "the H in motion across", "the H in jet motion", or '' with none.
+const motionWords = o => (!moving(o) ? '' : `the ${byId(FORMATIONS, o.formation).motion.who} in ${o.motion === 'jet' ? 'jet motion' : 'motion across'}`);
 const okDef = d => (d && FRONTS.some(f => f.id === d.front) && COVERAGES.some(c => c.id === d.coverage) ? { front: d.front, coverage: d.coverage, pressure: d.pressure === 'blitz' ? 'blitz' : 'four', disguise: d.disguise === true } : null);
 // Only Cover 1 and Cover 3 disguise, showing two deep and rotating at the snap (see the end of buildDefense() in
 // js/sim.js); a call keeps its disguise through a change to another coverage and back, as it keeps its pressure.
@@ -121,6 +127,9 @@ const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.a
 // share of his plays are runs from each formation, the rest passes, and every play stays possible. (A design choice
 // in the direction real offenses lean, more backs and tight ends running more; not a published statistic.)
 const RUN_SHARE = { iform: 0.6, single: 0.55, trips: 0.375, doubles: 0.25 };
+// Calling the defense, his offense puts a man in motion about one snap in three, across or jet alike. (A design
+// choice, so motion comes up as you watch your own defense; not a published statistic.)
+const MOTION_SHARE = 1 / 3;
 // Calling the offense, about one of his snaps in four is a disguise: he plays Cover 1 or Cover 3 on 54% of them, and
 // disguises 46% of those. (A design choice, so a look can't be trusted every time; not a published statistic.)
 const DISGUISE_SHARE = 0.46;
@@ -147,6 +156,8 @@ function rollTheirs() {
       const run = RUN_SHARE[state.off.formation] ?? 0.42, runs = PLAYS.filter(p => p.type === 'run').length;
       state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (PLAYS.length - runs)]));
       state.off.flip = R() < 0.5;
+      const m = R();
+      state.off.motion = m < MOTION_SHARE / 2 ? 'across' : m < MOTION_SHARE ? 'jet' : 'none';
     }
   }
 }
@@ -162,10 +173,10 @@ function lineUp(keep = false) {
   moment = null;
   state.play = simulate(call(), state.seed);
   state.phase = 'pre';
-  state.t = 0;
   board.setPlay(state.play);
   board.mark = endMark(state.play.result);
-  board.t = 0;
+  state.t = board.t = board.start(); // the snap, or before it with a man in motion
+  board.waitSnap = false;
   board.selected = -1;
   board.spot = -1;
   board.spotAll = null;
@@ -220,13 +231,15 @@ function play() {
   if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
   // His call is out now, and stays out until he picks again, unless you're to say what he played first: then it's
   // out once you have (see answer()). For a replay the status line is cleared, so that its end is said again.
+  // A call of his that was hidden stays off the board through any motion before the snap, until the ball is snapped.
+  if (snapped) board.waitSnap = state.auto && !state.seen;
   if (snapped && state.auto) {
     if (!state.seen && state.side === 'O' && state.quiz && !drill) state.ask = { guess: null };
     else if (state.ask?.guess) state.ask = null; // answered last snap: this one shows his call as usual
     state.seen = true;
     say(asking() ? 'What did they play? Name their coverage, in their call.' : `They called: ${theirSummary()}.`);
   } else if (!snapped) say('');
-  if (state.phase === 'done' || state.t >= board.duration()) state.t = 0;
+  if (state.phase === 'done' || state.t >= board.duration()) state.t = board.start();
   state.phase = 'playing';
   clearTimeout(whyTimer);
   if (snapped) keepPlay();
@@ -277,7 +290,7 @@ function replay(e) {
   cancelAnimationFrame(raf);
   clearTimeout(whyTimer);
   moment = { e, until: Math.max(until, e.t) };
-  state.t = Math.max(0, e.t - 1);
+  state.t = Math.max(board.start(), e.t - 1);
   state.phase = 'playing';
   $('why').hidden = true;
   if (board.selected >= 0 && cardClosesOnPlay()) { board.selected = -1; hideWho(); }
@@ -440,36 +453,42 @@ function syncTransport() {
 // The scrubber counts the play's frames, twenty to the second, so an arrow key steps one frame and the far end is the
 // last. What a screen reader hears is the time and what's going on: "1.9 of 4.1 seconds: The quarterback throws to the H
 // on a corner route", and at the end the headline. The clock beside it shows the time the way the play-by-play does,
-// so you can scrub to the moment a line names: "1.9s", and a dash before the snap.
+// so you can scrub to the moment a line names: "1.9s", and a dash before the snap. With a man in motion the time
+// before the snap counts down to it, "−1.2s", as the play-by-play has it, and a mark on the scrubber is at the snap.
+const clock = t => (t < -0.049 ? `\u2212${(-t).toFixed(1)}s` : `${Math.max(0, t).toFixed(1)}s`);
 function syncScrub() {
   const s = $('scrub'), F = state.play?.frames;
   if (!F) return;
-  $('clock').textContent = state.phase === 'pre' ? '–' : `${state.t.toFixed(1)}s`;
+  $('clock').textContent = state.phase === 'pre' ? '–' : clock(state.t);
   const dt = F.length > 1 ? F[1].t - F[0].t : 0.05;
   s.max = String(F.length - 1);
-  s.value = String(Math.min(F.length - 1, Math.round(state.t / dt)));
+  s.value = String(Math.min(F.length - 1, Math.round((state.t - F[0].t) / dt)));
   const now = state.phase === 'pre' ? '' : state.phase === 'done' ? headline(state.play.result) : $('caption').lastElementChild?.textContent;
-  s.setAttribute('aria-valuetext', `${state.t.toFixed(1)} of ${board.duration().toFixed(1)} seconds${now ? `: ${now}` : ''}`);
+  const when = state.t < -0.049 ? `${(-state.t).toFixed(1)} seconds before the snap` : `${Math.max(0, state.t).toFixed(1)} of ${board.duration().toFixed(1)} seconds`;
+  s.setAttribute('aria-valuetext', `${when}${now ? `: ${now}` : ''}`);
 }
 
 // The marks under the scrubber at the handoff, the throw and the catch (or the interception), once the play has been
 // seen to the whistle: as it runs the first time they'd give away how it comes out (a second mark is a catch, none on a
 // pass is a sack), and before the snap whether a hidden play is a run or a pass.
+// The snap's mark, with a man in motion, is there from the start: it gives nothing away.
 let marked = null;
 function syncMarks() {
-  const P = state.phase !== 'pre' && whistled === state.play ? state.play : null;
-  if (marked === P) return;
-  marked = P;
-  const host = $('marks'), F = P?.frames;
+  const seen = state.phase !== 'pre' && whistled === state.play;
+  if (marked?.play === state.play && marked.seen === seen) return;
+  marked = { play: state.play, seen };
+  const host = $('marks'), P = state.play, F = P?.frames;
   host.textContent = '';
   if (!P) return;
   const dt = F[1].t - F[0].t;
-  for (const e of P.events.filter(x => ['hand', 'throw', 'catch', 'int'].includes(x.kind))) {
+  const mark = (kind, t) => {
     const i = document.createElement('i');
-    i.dataset.kind = e.kind;
-    i.style.setProperty('--at', String(Math.min(1, Math.round(e.t / dt) / (F.length - 1))));
+    i.dataset.kind = kind;
+    i.style.setProperty('--at', String(Math.min(1, Math.round((t - F[0].t) / dt) / (F.length - 1))));
     host.append(i);
-  }
+  };
+  if (F[0].t < 0) mark('snap', 0);
+  if (seen) for (const e of P.events.filter(x => ['hand', 'throw', 'catch', 'int'].includes(x.kind))) mark(e.kind, e.t);
 }
 
 $('snap').addEventListener('click', snap);
@@ -626,8 +645,10 @@ function hideWho() { $('who').hidden = true; }
 // over, whether he's in the box. On this board the tells are exact (corners pressed only in man, a Mike only creeps up
 // to blitz), short of a disguise, which shows two deep; they're worded the way they'd hold on a real field.
 function tell(P, i) {
-  const p = P.players[i], { x, y } = p, yd = n => `${Math.round(n)} yards`;
-  const recv = P.players.filter(q => q.team === 'O' && (q.cls === 'wr' || q.cls === 'te'));
+  // (where everyone stands before the snap: with a man in motion, before he goes)
+  const spot = q => ({ ...q, x: P.frames[0].xy[2 * q.i], y: P.frames[0].xy[2 * q.i + 1] });
+  const p = spot(P.players[i]), { x, y } = p, yd = n => `${Math.round(n)} yards`;
+  const recv = P.players.filter(q => q.team === 'O' && (q.cls === 'wr' || q.cls === 'te')).map(spot);
   const over = recv.reduce((a, q) => (Math.abs(q.x - x) < Math.abs(a.x - x) ? q : a));
   const slot = q => recv.some(o => Math.sign(o.x) === Math.sign(q.x) && Math.abs(o.x) > Math.abs(q.x));
   const him = `the ${over.cls === 'te' ? 'tight end' : slot(over) ? 'slot receiver' : 'receiver'} (${over.label})`;
@@ -827,6 +848,11 @@ function offenseChooser(host, readonly) {
   chips(host, 'Strong side', [{ id: 'R', name: 'Right' }, { id: 'L', name: 'Left' }], state.off.flip ? 'L' : 'R', id => set({ flip: id === 'L' }), {
     disabled: readonly, blurb: strongBlurb(fm),
   });
+  if (fm.motion) {
+    chips(host, 'Motion', [{ id: 'none', name: 'None' }, { id: 'across', name: 'Across' }, { id: 'jet', name: 'Jet' }], moving(state.off) ? state.off.motion : 'none', id => set({ motion: id }), {
+      disabled: readonly, blurb: motionBlurb(fm, moving(state.off) ? state.off.motion : 'none'),
+    });
+  }
   chips(host, 'Play', PLAYS, pl.id, id => set({ play: id }), {
     disabled: readonly, blurb: pl.blurb,
     groups: [{ name: 'Runs', items: PLAYS.filter(p => p.type === 'run') }, { name: 'Passes', items: PLAYS.filter(p => p.type === 'pass') }],
@@ -846,6 +872,19 @@ function strongBlurb(fm) {
   if (!balanced) return 'The strong side is the tight end\'s side, or the side with more receivers. Runs go that way, and the defense sets its strength to it.';
   const each = [[count(1, 'te'), 'tight end'], [count(1, 'wr'), 'receiver']].filter(([n]) => n).map(([n, w]) => (n === 1 ? `a ${w}` : `${COUNT[n]} ${w}s`)).join(' and ');
   return `${fm.name} is balanced, ${each} on each side, so the strong side is whichever side you call. The runs and one-sided pass plays like Flood go that way, and the defense sets its strength to it.`;
+}
+
+// What the motion does from this formation: who goes, where he sets and how the receivers count then, and the read.
+function motionBlurb(fm, motion) {
+  const { who, to } = fm.motion, side = to > 0 ? 'strong' : 'weak';
+  const n = sd => fm.players.filter(([label, x, , c]) => (c === 'wr' || c === 'te') && Math.sign(label === who ? to : x) === sd).length;
+  const word = k => ['no', 'one', 'two', 'three', 'four'][k], a = n(Math.sign(to)), b = n(-Math.sign(to));
+  // (counted again once he's set, and a pass play goes to the side with more: see prepare() in js/sim.js)
+  const count = a === b ? `${word(a)} receivers each side` : `${word(a)} receivers on his side and ${word(b)} on the other, so a pass play goes his way`;
+  const read = 'If a defender runs with him, it\'s man coverage; if the defense only slides over, it\'s zone.';
+  if (motion === 'across') return `Before the snap the ${who} runs across the formation, behind the line, and sets on the ${side} side: ${count}. ${read}`;
+  if (motion === 'jet') return `Jet motion: the ${who} runs across the formation at full speed and the ball is snapped as he crosses, so a man covering him has to run with him flat out. He carries on across behind the line and runs his route from the ${side} side. ${read}`;
+  return `Everyone stays put until the snap. Or send the ${who} across the formation first, and watch who goes with him: it shows man or zone.`;
 }
 
 function defenseChooser(host, readonly) {
@@ -921,7 +960,7 @@ function theirSummary() {
   }
   // Where the strength is on the board as you see it: the defense's view is turned around, so their right is your left.
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
-  return `${fm.name}, strength to your ${state.off.flip ? 'right' : 'left'}, ${pl.name}`;
+  return `${fm.name}, strength to your ${state.off.flip ? 'right' : 'left'}, ${moving(state.off) ? `${motionWords(state.off)}, ` : ''}${pl.name}`;
 }
 
 function syncTheirs() {
@@ -946,7 +985,8 @@ function renderMatchup() {
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
   const dim = what => ` <span class="dim">· ${what} hidden</span>`;
-  const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : ` · ${esc(pl.name)}`);
+  const mo = moving(state.off) ? ` · ${fm.motion.who} ${state.off.motion === 'jet' ? 'jet' : 'across'}` : '';
+  const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : `${esc(mo)} · ${esc(pl.name)}`);
   const def = esc(fr.name) + (state.side === 'O' && hidden() ? dim('coverage') : ` · ${esc(cv.name)}${disguised(state.def) ? ' (disguised)' : ''}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ' · Blitz' : ''}`);
   $('matchup').innerHTML = `${off}  vs  ${def}`;
 }
@@ -1092,7 +1132,7 @@ function drillCall() {
     state.def = { front: pers === '10' || pers === '11' ? 'nickel' : 'over', coverage: D.coverage, pressure: D.pressure, disguise: false };
   } else {
     const R = rng(newSeed());
-    state.off = { formation: D.formation, play: R.pick(PLAYS.filter(p => p.type === 'run')).id, flip: R() < 0.5 };
+    state.off = { formation: D.formation, play: R.pick(PLAYS.filter(p => p.type === 'run')).id, flip: R() < 0.5, motion: 'none' };
   }
 }
 function startDrill(id) {
@@ -1222,7 +1262,8 @@ function renderJobs() {
     const row = document.createElement('div');
     row.className = 'chips';
     // left to right on the board, and from the line back where two are in a file (the center, the quarterback, the backs)
-    const men = P.players.filter(p => p.team === team).sort((a, b) => board.sx(a.x) - board.sx(b.x) || Math.abs(a.y) - Math.abs(b.y));
+    const at = p => P.frames[0].xy[2 * p.i], deep = p => Math.abs(P.frames[0].xy[2 * p.i + 1]); // as they line up
+    const men = P.players.filter(p => p.team === team).sort((a, b) => board.sx(at(a)) - board.sx(at(b)) || deep(a) - deep(b));
     for (const p of men) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -1267,8 +1308,9 @@ function boardWords(P) {
   const lr = sd => ((sd > 0) !== board.flip ? 'right' : 'left'); // sd: the offense's right (+1) or left (-1)
   const strong = P.call.flip ? -1 : 1;
   const many = (n, one, more) => (n === 1 ? `a ${one}` : `${COUNT[n] || n} ${more}`);
+  const lined = p => P.frames[0].xy[2 * p.i]; // where he lines up (with motion, before he goes)
   const side = sd => {
-    const on = P.players.filter(p => p.team === 'O' && Math.sign(p.x) === sd);
+    const on = P.players.filter(p => p.team === 'O' && Math.sign(lined(p)) === sd);
     const parts = [[on.filter(p => p.cls === 'te').length, 'tight end', 'tight ends'], [on.filter(p => p.cls === 'wr').length, 'receiver', 'receivers']];
     return parts.filter(([n]) => n).map(([n, one, more]) => many(n, one, more)).join(' and ') || 'nobody';
   };
@@ -1279,7 +1321,9 @@ function boardWords(P) {
   const depth = y => (y < 2.5 ? 'pressed' : y < 6 ? 'about 5 yards off' : '7 yards or more off'); // as the corners' read says
   const cbs = P.players.filter(p => p.label === 'CB').map(p => depth(p.y));
   const corners = cbs.length === 2 && cbs[0] === cbs[1] ? `both corners ${cbs[0]}` : cbs.map((d, k) => `${k ? 'the other' : 'one corner'} ${d}`).join(', ');
-  return `${fm.name}, strong ${lr(strong)}: ${sides}; ${backfield}. The defense: ${deep}, ${P.box.box} in the box against ${P.box.blockers} blockers, ${corners}.`;
+  // His motion, where it's yours or both calls are shown: the other coach's is part of his play, hidden until the snap.
+  const m = P.motion && (state.side === 'O' || !state.auto) ? ` Before the snap the ${P.players[P.motion.who].label} goes in ${P.motion.kind === 'jet' ? 'jet motion' : 'motion'} across to the ${lr(Math.sign(P.players[P.motion.who].x) || 1)}.` : '';
+  return `${fm.name}, strong ${lr(strong)}: ${sides}; ${backfield}.${m} The defense${P.motion ? ' at the snap' : ''}: ${deep}, ${P.box.box} in the box against ${P.box.blockers} blockers, ${corners}.`;
 }
 
 // ---------------------------------------------------------------- the result
@@ -1332,17 +1376,18 @@ function showResult() {
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
   // (While you're asked what they played, the coverage waits: Cover 0 is said as a blitz, as it is.)
   const blitz = state.def.pressure === 'blitz' || cv.id === 'c0';
-  $('resVs').textContent = asking() ? `${pl.name} from ${fm.name} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
-    : `${pl.name} from ${fm.name} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.`;
+  const from = `${pl.name} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
+  $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
+    : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.`;
   // Each line's time is a button that watches that moment again on the board (see replay()).
   const story = $('story');
   story.textContent = '';
   for (const e of P.events) {
-    const li = document.createElement('li'), b = document.createElement('button'), at = `${e.t.toFixed(1)}s`;
+    const li = document.createElement('li'), b = document.createElement('button'), at = clock(e.t);
     b.type = 'button';
     b.className = 't';
     b.textContent = at;
-    b.setAttribute('aria-label', `${at}: watch it again`);
+    b.setAttribute('aria-label', `${e.t < -0.049 ? `${(-e.t).toFixed(1)} seconds before the snap` : at}: watch it again`);
     b.addEventListener('click', () => replay(e));
     const text = document.createElement('span');
     text.textContent = words(e);
@@ -1383,6 +1428,12 @@ function coachNote(P) {
     : corner < 2.5 ? 'Corners: pressed up on the receivers. Corners press in man coverage.'
       : corner < 6 ? 'Corners: about 5 yards off and outside the receivers. Cover 2 corners sit there to take the flat.'
         : 'Corners: 7 yards or more off. They drop deep, to a third or a quarter of the field.');
+  // Motion: who went with him, which says man or zone.
+  if (P.motion) {
+    const m = P.motion, who = P.players[m.who].label;
+    reads.push(m.man >= 0 ? `Motion: ${nm(P, m.man).replace(/^a corner$/, 'a cornerback')} ran with the ${who}. Someone running with a man in motion means man coverage.`
+      : `Motion: nobody ran with the ${who}; the defense only slid over. That means zone.`);
+  }
   reads.push(`Box: ${P.box.box} defenders near the line against ${P.box.blockers} blockers.`);
   const rushers = P.overlay.filter(o => o.kind === 'rush').length;
   if (pl.id === 'screen') { // the rushers come free by design: "came unblocked" would read as the protection failing
@@ -1493,7 +1544,7 @@ function resetShare() {
 }
 $('share').addEventListener('click', async () => {
   const c = call();
-  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0].join('.');
+  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none'].join('.');
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
   resetShare();
@@ -1512,22 +1563,23 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise): 'ok' once it's set
-// up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front or coverage this version doesn't have
-// (the address is cleared either way), '' when there's none. A link from before there were disguises ends at the seed,
-// and opens without one.
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion): 'ok' once it's
+// set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front or coverage this version doesn't
+// have (the address is cleared either way), '' when there's none. A link from before there were disguises ends at the
+// seed, and one from before motion at the disguise: they open without them.
 let linkNote = '';
 function fromLink() {
   const hash = location.hash;
   if (!hash.startsWith('#p=')) return '';
   history.replaceState(null, '', location.pathname + location.search);
-  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01]))?/);
+  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01])(?:\.(\w+))?)?/);
   if (!m) return 'bad';
-  const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise] = m;
+  const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion] = m;
+  if (motion && !MOTIONS.includes(motion)) return 'unknown';
   if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
   Object.assign(state, { side, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
   drill = drilled = null;
-  state.off = { formation, play: playId, flip: flip === '1' };
+  state.off = { formation, play: playId, flip: flip === '1', motion: motion || 'none' };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four', disguise: disguise === '1' };
   linkNote = '';
   return 'ok';
@@ -1589,7 +1641,9 @@ function drawIdle() {
 // The bars are the success rate: a few long runs after the catch swing the average yards a lot (one row can average 20
 // yards a play while its typical snap is an incompletion), so the average is the small number beside each bar.
 function chartHint() {
-  const fm = byId(FORMATIONS, state.off.formation).name;
+  // the formation, and the motion when it's yours, or his and out (before then his chart's plays have none)
+  const off = { ...state.off, motion: chart ? chart.motion : state.side === 'O' || !hidden() ? state.off.motion : 'none' };
+  const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
   if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
   return `How often your play succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
@@ -1620,10 +1674,11 @@ async function runChart() {
   button.setAttribute('aria-disabled', 'true');
   const base = call();
   if (state.side === 'O' && hidden()) Object.assign(base, { pressure: 'four', disguise: false });
+  if (state.side === 'D' && hidden()) base.motion = 'none'; // his motion is part of his hidden play
   const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
     : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0 }));
-  chart = { rows, pressure: base.pressure, disguise: !!base.disguise, side: state.side };
+  chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();
@@ -1705,10 +1760,11 @@ function playbook() {
     + techDiagram() + dl([...TECHNIQUES, ...FRONTS.map(f => [f.name, f.blurb])]));
   sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. The corners help too: up close and pressing means man; about five yards off means Cover 2; seven or more means a deep zone, thirds or quarters. Defenses disguise it, though, and so can the ones on this board: see Disguise.'], ['Disguise', 'Lining up to look like one coverage and playing another. Here Cover 1 and Cover 3 can show two deep, the way Cover 4 lines up, and rotate at the snap: the strong safety comes down and the free safety runs to the middle, leaving one deep. The other coach does it about one snap in four. So read the safeties again at the snap: if one comes down, it\'s one deep after all, and the corners say which. Dropping into deep thirds is Cover 3; running with their receivers is Cover 1.']]));
   sec('Run plays', false, dl(PLAYS.filter(p => p.type === 'run').map(p => [p.name, p.blurb])));
-  sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation.']]));
-  // drag6 and bflat are the same routes as drag and flat at another depth or from the backfield, so they're listed once.
+  sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation. A man in motion is counted where he sets: from Gun Trips the H going across leaves two each side, and the routes go by the new count.']]));
+  // drag6 and bflat are the same routes as drag and flat at another depth or from the backfield, so they're listed once;
+  // jet is what a man in jet motion does on a run, under "Jet motion" in the words coaches use.
   const routeDesc = { flat: 'Out toward the sideline about four yards past the line, run by a receiver or by a back coming out of the backfield.' };
-  sec('Routes', false, dl(Object.entries(ROUTES).filter(([k]) => !['drag6', 'bflat'].includes(k)).map(([k, r]) => [r.name.replace(/^\w/, c => c.toUpperCase()), routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())])));
+  sec('Routes', false, dl(Object.entries(ROUTES).filter(([k]) => !['drag6', 'bflat', 'jet'].includes(k)).map(([k, r]) => [r.name.replace(/^\w/, c => c.toUpperCase()), routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())])));
   sec('How to read the board', false, keyList());
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
   // areas in ZONES (js/playbook.js), as the player cards name them.
@@ -1716,6 +1772,8 @@ function playbook() {
     ['Strong side and weak side', 'The strong side is the tight end\'s side, or the side with more receivers; the weak side is the other one. The defense sets its strength to it: the Sam and the strong safety go to the strong side, the Will to the weak side.'],
     ['Play side and back side', 'On a run, the play side is where the ball is going and the back side is the other half of the line. Every run on this board is drawn up to the strong side.'],
     ['The box', 'The area near the line where defenders play the run. The board counts it out to 3 yards past the end of the line on each side (the tight end, or the tackle where there\'s no tight end) and up to 8 yards deep. More defenders in the box than there are blockers makes a run hard: there aren\'t enough blockers to go round.'],
+    ['Motion', 'A receiver off the line running across the formation before the snap. The defense has to answer it, and how it does gives the coverage away: in man coverage the man covering him runs with him; in zone the defenders only slide over. Once he sets he\'s counted on his new side, so three receivers to one side can become two and two.'],
+    ['Jet motion', 'Motion at full speed, with the ball snapped as he crosses the formation. A man covering him has to run with him flat out. On a run he keeps going, out to the flat, and takes his defender with him.'],
     ['Shotgun', 'The quarterback lines up about five yards behind the center and takes a short snap through the air, instead of under center with his hands on the ball. He sees the defense from there, and needs only a short drop to throw.'],
     ['Press', 'A corner lined up a yard or so off the receiver, right in his face, to jam him at the snap and stay on him. Corners press in man coverage.'],
     ['Leverage', 'Which side of a receiver a defender lines up on. With outside leverage he\'s a step outside him, so the receiver\'s easy way is inside; with inside leverage it\'s the other way round.'],
@@ -1747,6 +1805,7 @@ const BOARD_KEY = [
   ['The ball', 'At the center\'s feet before the snap. Thrown, it rises off the field, with its shadow under it.', 'ball'],
   ['Lines with arrows', 'Routes for receivers and the path for a ball carrier. The quarterback\'s drop is the short broken line behind him.', 'route'],
   ['A dashed line with an arrow', 'A route that starts late: the back blocks first, then goes out.', 'late'],
+  ['A zigzag behind the line', 'Motion: before the snap he runs across the formation, and his route starts where the zigzag ends.', 'motion'],
   ['Numbers on routes', 'The order the quarterback reads them: 1 is the first receiver he looks at, then 2, and so on. They\'re up before the snap, on your own pass play, or theirs once it\'s out.', 'reads'],
   ['A line with a bar across the end', 'A block.', 'block'],
   ['Dashed line to a bubble', 'A zone drop: the defender goes to that area.', 'zone'],
@@ -1783,6 +1842,7 @@ function keyArt(kind) {
     ball: ball(22, 26) + '<ellipse cx="50" cy="30" rx="4.4" ry="2.4" style="fill: var(--field-line)" opacity=".25"/>' + ball(50, 14),
     route: arrow([[12, 36], [12, 11], [54, 11]], 'o') + O(12, 36),
     late: arrow([[14, 34], [56, 14]], 'o', ' stroke-dasharray="6 4"') + O(14, 34),
+    motion: line([[10, 34], [15, 37.5], [20, 32.5], [25, 37.5], [30, 32.5], [35, 37.5], [40, 32.5], [44, 35]], 'o') + arrow([[44, 35], [44, 9]], 'o') + O(10, 34),
     reads: arrow([[12, 37], [12, 15], [38, 15]], 'o') + num(47, 15, 1) + arrow([[58, 37], [58, 21]], 'o') + num(58, 12, 2) + O(12, 37) + O(58, 37),
     block: line([[18, 32], [37, 21.5]], 'o') + `<path class="o" d="M34.4 16.9L39.6 26.1"/>` + O(18, 32) + X(54, 12),
     zone: line([[12, 34], [46, 15]], 'd', ' stroke-dasharray="4 5"') + '<ellipse class="fd" cx="46" cy="15" rx="20" ry="10" opacity=".16"/>'

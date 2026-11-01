@@ -24,6 +24,7 @@ export class Board {
     this.labels = true;
     this.showMine = true;
     this.showTheirs = false;
+    this.waitSnap = false; // the other side's call came out with this snap: its drawn-up play waits for the ball to be snapped
     this.mineTeam = 'O';
     this.selected = -1;
     this.spot = -1; // the man the caption names, ringed while nobody is picked out
@@ -84,11 +85,13 @@ export class Board {
   }
 
   duration() { return this.play ? this.play.frames[this.play.frames.length - 1].t : 0; }
+  // When the frames start: at the snap, or before it, with a man in motion (the time before the snap counts below 0).
+  start() { return this.play ? this.play.frames[0].t : 0; }
 
   // Frame lookup, blending between the two nearest recorded frames.
   at(t) {
     const F = this.play.frames, dt = F.length > 1 ? F[1].t - F[0].t : 0.05;
-    const f = Math.max(0, Math.min(F.length - 1, t / dt));
+    const f = Math.max(0, Math.min(F.length - 1, (t - F[0].t) / dt));
     const i = Math.floor(f), j = Math.min(F.length - 1, i + 1), u = f - i;
     return { a: F[i], b: F[j], u, i };
   }
@@ -161,9 +164,10 @@ export class Board {
     if (!this.play) return;
     this.frame(this.t);
     this.field();
-    const pre = this.t <= 0.001, over = !pre && this.t >= this.play.result.t - 1e-6;
+    // Lined up, before anyone moves (a man in motion goes before the snap, and leaves a trail like anyone else).
+    const pre = this.t <= this.start() + 0.001, over = !pre && this.t >= this.play.result.t - 1e-6;
     // After the snap the drawn-up play stays faintly under the trails, fading to it over the first half second.
-    this.assignments(pre ? 1 : 1 - 0.65 * Math.min(1, this.t / 0.5));
+    this.assignments(pre ? 1 : 1 - 0.65 * Math.min(1, Math.max(0, this.t) / 0.5));
     if (!pre) { this.trails(); this.throwLine(); }
     if (over) this.spotLine();
     this.players(pre);
@@ -227,11 +231,17 @@ export class Board {
 
   teamColor(team) { return team === 'O' ? this.colors.off : this.colors.def; }
 
+  // Whether a team's drawn-up play is shown: the other side's once it's out, but not before the snap if it was hidden
+  // until the snap (see waitSnap).
+  shows(team) { return team === this.mineTeam ? this.showMine : this.showTheirs && !(this.waitSnap && this.t < -1e-6); }
+
   // The drawn-up play: routes, blocks, rush lanes, zone drops, man assignments.
   assignments(alpha) {
     const { ctx, play } = this;
-    const show = team => (team === this.mineTeam ? this.showMine : this.showTheirs);
-    const P = play.players;
+    const show = team => this.shows(team);
+    // Where each man's lines start: his spot at the snap, or before it (while a man goes in motion and the defense
+    // moves with him), wherever he is.
+    const P = this.t < -1e-6 ? play.players.map(p => this.pos(this.t, p.i)) : play.players;
     const lw = Math.max(1.6, Math.min(2.6, this.k * 0.18));
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const o of play.overlay) {
@@ -241,7 +251,9 @@ export class Board {
       ctx.globalAlpha = alpha * (sel ? 0.95 : 0.25);
       ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = lw;
       const from = P[o.i];
-      if (o.kind === 'route' || o.kind === 'carry' || o.kind === 'qb' || o.kind === 'pull') {
+      if (o.kind === 'motion') { // a zigzag behind the line, the way a playbook draws motion, to where his route starts
+        this.zigzag(o.pts);
+      } else if (o.kind === 'route' || o.kind === 'carry' || o.kind === 'qb' || o.kind === 'pull') {
         const pts = o.pts;
         ctx.setLineDash(o.kind === 'qb' ? [3, 4] : o.delay ? [6, 4] : []);
         this.poly(pts);
@@ -262,7 +274,7 @@ export class Board {
       } else if (o.kind === 'rush') {
         // A blitzer's arrow: the bright colour, and a shape of its own as well, so it isn't told apart by colour alone
         // (WCAG 2.2, 1.4.1 Use of Color): a thicker line and a second head set back along it.
-        const [a, to] = o.pts, big = o.blitz ? 1.2 : 1;
+        const [a0, to] = o.pts, big = o.blitz ? 1.2 : 1, a = this.t < -1e-6 ? from : a0;
         // A blitzer's arrow stops at the front of the offensive line, where its heads can be seen, rather than going on
         // under the blockers' marks into his gap.
         const front = -0.6 + this.radius() / this.k + 0.25;
@@ -296,7 +308,7 @@ export class Board {
   // like a label's. Only where the routes are shown, so a hidden call stays hidden.
   readNumbers() {
     const routes = this.play.overlay.filter(o => o.kind === 'route' && o.read).sort((a, b) => a.read - b.read);
-    if (!routes.length || !(this.mineTeam === 'O' ? this.showMine : this.showTheirs)) return;
+    if (!routes.length || !this.shows('O')) return;
     const { ctx } = this, fs = this.readSize();
     ctx.save();
     ctx.font = `400 ${fs}px "Patrick Hand", "Marker Felt", "Comic Sans MS", cursive`;
@@ -346,6 +358,25 @@ export class Board {
       taken.push(box(spot[0], spot[1], w, 1));
       return spot;
     });
+  }
+
+  // A line drawn as a zigzag, a little either side of it, about a yard to each zig (and as many as fit).
+  zigzag(pts) {
+    const { ctx } = this, S = pts.map(p => [this.sx(p.x), this.sy(p.y)]), amp = Math.max(2.5, this.k * 0.3), step = Math.max(6, this.k * 0.9);
+    const len = S.slice(1).reduce((n, b, i) => n + Math.hypot(b[0] - S[i][0], b[1] - S[i][1]), 0), zigs = Math.max(2, Math.round(len / step));
+    const at = d => { // the point d pixels along the line, and the way it runs there
+      for (let i = 1; i < S.length; i++) {
+        const a = S[i - 1], b = S[i], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (d <= l || i === S.length - 1) { const u = l ? Math.min(1, d / l) : 0; return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, (b[0] - a[0]) / (l || 1), (b[1] - a[1]) / (l || 1)]; }
+        d -= l;
+      }
+      return [...S[0], 1, 0];
+    };
+    ctx.beginPath();
+    ctx.moveTo(...S[0]);
+    for (let k = 1; k < zigs; k++) { const [x, y, ux, uy] = at(len * k / zigs), sd = k % 2 ? 1 : -1; ctx.lineTo(x - uy * amp * sd, y + ux * amp * sd); }
+    ctx.lineTo(...S.at(-1));
+    ctx.stroke();
   }
 
   poly(pts) {
