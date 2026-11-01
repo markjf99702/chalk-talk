@@ -634,11 +634,12 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
 
 test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, about two passes in three complete, a
-  // sack on about one dropback in twenty-two. From twelve start seeds (77 + k * 7919) this recipe gives 3.66-5.30 yards
+  // sack on about one dropback in twenty-two. From twelve start seeds (77 + k * 7919) this recipe gives 3.73-5.41 yards
   // a carry, 64.7-68.9% complete, sacks on 3.0-4.5% of dropbacks and interceptions on 1.1-2.2% of throws; at 700 snaps
   // a carry ranged from 3.1 to 5.1 yards. Four of those twelve start seeds come out above the 66% completion bound
-  // (66.1-68.9%), two sit just over the 1% interception floor (1.1%) and one just under the 5.3-yard ceiling (5.296);
-  // this one gives 64.9%, 2.0% and 4.14.
+  // (66.1-68.9%), two sit just over the 1% interception floor (1.1%), and one is over the 5.3-yard ceiling (5.41) with
+  // two just under it (5.28, 5.23): a back who gets past the linebackers too often goes the distance, and a few 60-yard
+  // runs move the average. This one gives 64.9%, 2.0% and 4.53.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -662,7 +663,7 @@ test('the README\'s matchups', () => {
   // 31415, 16180, 14142) Four Verticals gained 21.8-24.3 yards a dropback against Cover 2 and 8.6-11.7 against Cover 3
   // and 4, Smash 10.2-11.4 against Cover 2 and 5.6-8.4 against Cover 3 and 4, Flood 10.4-12.0 against Cover 3 and
   // 4.6-8.7 against Cover 1 and 2, a throw to Mesh's crossers 13.6-15.0 yards against Cover 1 and 4.2-6.2 against
-  // Cover 3, and runs succeeded 37-40% of the time at even numbers in the box and 17-22% with two more defenders than
+  // Cover 3, and runs succeeded 36-40% of the time at even numbers in the box and 18-25% with two more defenders than
   // blockers. A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
