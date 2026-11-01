@@ -120,7 +120,8 @@ function rollTheirs() {
 
 const board = new Board($('board'));
 
-function lineUp() {
+// keep: the result card stays where it is, faded, until this play's comes in (see snap()); otherwise it goes.
+function lineUp(keep = false) {
   cancelAnimationFrame(raf); // a frame of the last play still to come would run its clock on into this one
   state.play = simulate(call(), state.seed);
   state.phase = 'pre';
@@ -131,7 +132,8 @@ function lineUp() {
   board.spot = -1;
   hideWho();
   $('why').hidden = true;
-  $('result').hidden = true;
+  $('result').hidden = !keep;
+  staleResult(keep);
   say('');
   syncBoard();
   syncTransport();
@@ -265,9 +267,18 @@ function toBoard() { if (!stuckBoard()) $('board').scrollIntoView({ block: 'near
 function snap() {
   if (state.phase !== 'pre') { // Snap again: same calls, a new roll of the dice
     state.seed = newSeed();
-    lineUp();
+    // Someone reading the result card keeps his place on the page: the last result stays, faded, until this one's is in.
+    // (A change of call, New look or a shared link takes it away: those are up at the choosers.)
+    lineUp(!$('result').hidden);
   }
   play();
+}
+// The last result, faded and out of reach while the next snap of the same calls plays, or back as it was.
+function staleResult(on) {
+  const r = $('result');
+  r.classList.toggle('stale', on);
+  r.inert = on;
+  if (on) r.setAttribute('aria-hidden', 'true'); else r.removeAttribute('aria-hidden');
 }
 
 // The last two things that happened in the last 2.2 seconds, the older one above and fainter, so two that happen close
@@ -326,7 +337,8 @@ function syncScrub() {
 }
 
 $('snap').addEventListener('click', snap);
-// The result card's buttons go away with it as the next play lines up, so the focus goes on to Snap.
+// The result card's buttons go with it, or fade out of reach with it, as the next play lines up, so the focus goes on
+// to Snap.
 const toSnap = () => $('snap').focus({ preventScroll: true });
 $('again').addEventListener('click', () => { toSnap(); snap(); if (matchMedia('(max-width: 959px)').matches) toBoard(); });
 $('play').addEventListener('click', () => (state.phase === 'playing' ? pause() : play()));
@@ -702,12 +714,14 @@ $('auto').addEventListener('change', e => {
 // The board says what it did until the snap, even when nothing there shows it: calling the defense, a new play from the
 // same formation and strong side lines up just like the last one.
 function newLook(e) {
-  if (e?.currentTarget.closest('#result')) toSnap();
+  const fromResult = !!e?.currentTarget.closest('#result');
+  if (fromResult) toSnap();
   const formation = () => `${state.off.formation} ${state.off.flip}`, was = formation();
   rollTheirs();
   afterChange();
   setCaption(state.side === 'D' && formation() === was ? 'New look: same formation, a new play.' : 'New look: they\'ve changed their call.');
-  toBoard();
+  // From the result card, which goes, to their card just under the board where it stays at the top of a phone.
+  if (fromResult && stuckBoard()) $('theirs').scrollIntoView({ block: 'start', behavior: smooth() }); else toBoard();
 }
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);
@@ -759,6 +773,7 @@ function showResult() {
   resetShare();
   $('actionsNote').textContent = `Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
   $('result').hidden = false;
+  staleResult(false);
   syncTheirs();
 }
 

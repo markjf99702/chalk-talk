@@ -95,7 +95,7 @@ const mid = await page.waitForFunction(() => {
   return { at: +s.value / +s.max, played: state.t / board.duration() };
 }, null, { timeout: 15000 }).then(h => h.jsonValue());
 assert.ok(Math.abs(mid.at - mid.played) < 0.05, `the scrubber is at ${mid.at.toFixed(2)} of the way with ${mid.played.toFixed(2)} of the play shown`);
-await page.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+await page.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
 assert.ok((await page.textContent('#resHead')).trim().length > 3, 'the result has a headline');
 assert.ok(await page.$$eval('#story li', li => li.length) >= 1, 'the play-by-play has at least one line');
 assert.ok((await page.textContent('#note')).trim().length > 40, 'the coach\'s note is there');
@@ -202,7 +202,7 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
 // A shared link opens the exact same play. Copying it says so on the button.
 await page.click('[data-side="O"]');
 await page.click('#snap');
-await page.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+await page.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
 const head = await page.textContent('#resHead');
 await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
 await page.click('#share');
@@ -857,6 +857,44 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Snap again while reading the result card: the reader keeps his place. The last result stays where it was, faded and
+// out of reach, until the new one comes in at the end of the play, rather than going and taking the page under the
+// board with it. New look from the result card goes on to their card, just under the board. On a phone too short for
+// the board to stay at the top, Snap again brings the board back into view.
+{
+  const still = async q => { for (let a = -1, b = -2; a !== b;) { a = await q.evaluate(() => scrollY); await new Promise(r => setTimeout(r, 150)); b = await q.evaluate(() => scrollY); } };
+  const p = await phone();
+  await p.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); document.querySelector('#result .actions').scrollIntoView({ block: 'end' }); });
+  const note = () => p.evaluate(() => document.getElementById('note').getBoundingClientRect().top);
+  const before = await note(), seed = await p.evaluate(() => window.chalkTalk.state.seed);
+  assert.ok(before > await p.evaluate(() => document.querySelector('.stage').getBoundingClientRect().bottom) && before < 844, `the coach's note is at ${Math.round(before)} px`);
+  await p.click('#again');
+  await new Promise(r => setTimeout(r, 300));
+  const during = await p.evaluate(() => { const r = document.getElementById('result'); return { playing: window.chalkTalk.state.phase === 'playing', stale: r.classList.contains('stale'), inert: r.inert, hidden: r.getAttribute('aria-hidden') }; });
+  const now = await note();
+  assert.ok(Math.abs(now - before) < 100, `Snap again moved the coach's note from ${Math.round(before)} px to ${Math.round(now)} px while the play runs`);
+  assert.deepEqual(during, { playing: true, stale: true, inert: true, hidden: 'true' }, 'the last result while the next snap plays');
+  await p.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
+  assert.equal(await p.evaluate(() => document.getElementById('result').inert || document.getElementById('result').hasAttribute('aria-hidden')), false, 'the new result is out of reach');
+  assert.notEqual(await p.evaluate(() => window.chalkTalk.state.seed), seed, 'Snap again replayed the same snap');
+  await p.evaluate(() => document.querySelector('#result .actions').scrollIntoView({ block: 'end' }));
+  await p.click('#newLook');
+  await still(p);
+  const theirs = await p.evaluate(() => ({ top: document.getElementById('theirs').getBoundingClientRect().top, stage: document.querySelector('.stage').getBoundingClientRect().bottom }));
+  assert.ok(theirs.top >= theirs.stage && theirs.top < theirs.stage + 30, `after New look from the result card their card is at ${Math.round(theirs.top)} px, the board ending at ${Math.round(theirs.stage)} px`);
+  await p.context().close();
+  const c = await browser.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, hasTouch: true });
+  const q = await c.newPage();
+  q.on('pageerror', e => problems.push(e.message));
+  await q.goto(base);
+  await q.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); document.querySelector('#result .actions').scrollIntoView({ block: 'end' }); });
+  await q.click('#again');
+  await still(q);
+  const b = await q.evaluate(() => { const r = document.getElementById('board').getBoundingClientRect(); return { t: r.top, b: r.bottom }; });
+  assert.ok(b.t >= 0 && b.b <= 667, `at 375x667 the board is at ${Math.round(b.t)}-${Math.round(b.b)} px after Snap again`);
+  await c.close();
+}
+
 // The read after the snap says what the corners showed: pressed in man, about 5 yards off in Cover 2, 7 or more off in
 // the deep zones. And the playbook says the board's defenses line up in what they play, as they do.
 {
@@ -932,7 +970,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
 }
 
 // From the keyboard: a pick keeps focus on the chip picked (the choosers are drawn again on every pick), the result
-// card's buttons hand it to Snap as the card goes away, and the chart's button keeps it while it runs.
+// card's buttons hand it to Snap as the card goes away or fades out of reach, and the chart's button keeps it while it runs.
 {
   const p = await phone();
   const focused = () => p.evaluate(() => document.activeElement.dataset.key || document.activeElement.id || document.activeElement.tagName);
@@ -945,10 +983,13 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.equal(await focused(), 'Strong side:L', 'Space on a chip lost the focus');
   await p.evaluate(() => { window.chalkTalk.snap(); window.chalkTalk.finish(); });
   for (const id of ['again', 'newLook']) {
-    await p.evaluate(() => { const { state, snap, finish } = window.chalkTalk; if (state.phase === 'pre') { snap(); finish(); } });
+    // the play the last one snapped is still running, under a faded card: it finishes, and the card comes back
+    await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; if (state.phase === 'pre') snap(); state.t = board.duration(); finish(); });
+    assert.equal(await p.evaluate(() => document.getElementById('result').inert), false);
     await p.focus(`#${id}`);
+    assert.equal(await focused(), id);
     await p.keyboard.press('Enter');
-    assert.equal(await focused(), 'snap', `#${id} dropped the focus as the result card went away`);
+    assert.equal(await focused(), 'snap', `#${id} dropped the focus as the result card went or faded`);
   }
   await p.focus('#runChart');
   await p.keyboard.press('Enter');
@@ -1027,7 +1068,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.reload();
   assert.deepEqual(await now(), before, 'a reload before the snap changed the play or gave their call away');
   await p.click('#snap');
-  await p.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+  await p.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
   const head = await p.textContent('#resHead'), done = await now();
   await p.reload();
   assert.deepEqual(await now(), done, 'a reload after the play lost it');
@@ -1126,7 +1167,7 @@ for (const [width, height] of [[390, 844], [375, 667]]) {
     return asked;
   });
   // Where the board stays at the top, Snap again and New look leave the page where it is; the Why button scrolls it.
-  assert.ok(smooth.length >= (height < 700 ? 3 : 1) && smooth.every(b => b !== 'smooth'), `${width}x${height}: with reduced motion the page scrolled: ${smooth}`);
+  assert.ok(smooth.length >= (height < 700 ? 3 : 2) && smooth.every(b => b !== 'smooth'), `${width}x${height}: with reduced motion the page scrolled: ${smooth}`);
   await c.close();
 }
 

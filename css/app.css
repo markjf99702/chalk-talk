@@ -409,6 +409,9 @@ button:disabled { cursor: default; }
 }
 .ghost:disabled, .ghost[aria-disabled="true"] { opacity: .5; }
 .ghost[aria-disabled="true"] { cursor: default; }
+/* the last result, while the next snap of the same calls plays (see snap() in js/app.js) */
+.result.stale { opacity: .35; transition: opacity .2s; }
+@media (prefers-reduced-motion: reduce) { .result.stale { transition: none; } }
 .actions-note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .share-msg { margin: 8px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .share-msg:empty { display: none; }
