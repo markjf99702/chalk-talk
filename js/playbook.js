@@ -86,7 +86,7 @@ export const PLAYS = [
   {
     id: 'verts', name: 'Four Verticals', type: 'pass', drop: 'five', reads: ['S2', 'W2', 'S3', 'S1', 'W1', 'RB'],
     routes: r => ({ S1: 'go', S2: 'seam', S3: 'seam', W1: 'go', W2: 'seam', RB: 'check', FB: 'check' }),
-    blurb: 'Four receivers run straight down the field, more than the deep defenders can each stay over. Against two deep safeties each has a receiver on either side of him, and he can\'t be over both.',
+    blurb: 'Four receivers run straight down the field: only Cover 4 has a deep defender for each of them. Against two deep safeties, each has a receiver on either side of him, and he can\'t be over both.',
   },
   {
     id: 'smash', name: 'Smash', type: 'pass', drop: 'five', reads: ['S2', 'S1', 'W2', 'W1', 'RB', 'FB'],
