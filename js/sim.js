@@ -1151,6 +1151,12 @@ function engage(S) {
   for (const b of S.O) {
     if (b.eng < 0) continue;
     const d = S.P[b.eng];
+    // On a draw, a pass rusher who sees the handoff go by him may play off his block to get at the ball carrier, the
+    // way a rusher is taught to read the draw on his way to the quarterback: two in five do.
+    if (S.play.scheme === 'draw' && !d.drawRead && S.carrier && S.carrier !== S.QB && d.job.kind === 'rush' && t >= S.handT + d.lag && dist(d, S.carrier) < 2.5) {
+      d.drawRead = true;
+      if (S.R.chance(0.4)) d.shedAt = Math.min(d.shedAt, t + S.R.range(0.1, 0.6));
+    }
     if (t >= d.shedAt) { release(S, b, d, false); continue; }
   }
 }

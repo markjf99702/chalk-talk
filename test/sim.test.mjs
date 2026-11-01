@@ -463,6 +463,17 @@ test('the quarterback passes over a first read covered by a deep defender', () =
   assert.ok(throws > 80 && corner / throws < 0.4, `Mesh against Cover 3 throws to its first read, the corner route, on ${corner} of ${throws} throws`);
 });
 
+test('a draw against zone coverage is stopped short some of the time: pass rushers read it on the way by', () => {
+  // 384 draws against Cover 2, 3 and 4. When no rusher came off his block for the back, 85% gained 4 yards or more
+  // (the NFL's 2023 designed runs: 43%, nflverse play-by-play); now 73%.
+  let seed = 1, n = 0, won = 0;
+  for (const coverage of ['c2', 'c3', 'c4']) for (let k = 0; k < 2; k++) for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const r = simulate({ formation: fm.id, play: 'draw', front: fr.id, coverage, pressure, flip }, seed++).result;
+    n++; if (Math.round(r.yards) >= 4) won++;
+  }
+  assert.ok(won / n < 0.78, `${won} of ${n} draws against zone coverage gained 4 yards or more`);
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);
