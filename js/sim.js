@@ -80,6 +80,7 @@ export function prepare(call, seed = 1) {
   const S = {
     R, seed, call: { ...call }, fm, play, front, cov, s: f, p: f, P: [], O: [], D: [], t: 0, events: [],
     blitz: call.pressure === 'blitz' || cov.id === 'c0', over: false, endAt: Infinity, result: null,
+    disguise: !!call.disguise && (cov.id === 'c1' || cov.id === 'c3'), // see the end of buildDefense()
     ball: { x: 0, y: -0.3, z: 0.3, state: 'snap', holder: -1 }, carrier: null, handT: Infinity, throwT: Infinity,
   };
   for (const [label, x, y, cls] of fm.players) mk(S, 'O', label, cls, x * f, y);
@@ -244,6 +245,19 @@ function buildDefense(S) {
     // the gap he'll rush rather than standing deep, where he'd look like a deep safety.
     else if (j.kind === 'rush' && d.extra && d.y > 4.5) { d.x = j.gap; d.y = 4.5; }
     else if (j.kind === 'rush' && d.blitzer && !d.edge) { d.y = Math.max(3.4, d.y - 1.2); }
+  }
+  // A disguise: Cover 1 or Cover 3 lined up as two deep, the way Cover 4 lines up, with both safeties 12.5 yards deep
+  // over a half of the field each and the corners 7 yards off. At the snap the safeties rotate (see rotate()): the free
+  // safety to the deep middle, the strong safety down to where he'd have lined up, and in Cover 1 the corners play
+  // their men from off the ball, rather than pressed.
+  if (S.disguise) {
+    for (const sf of [fs, ss]) if (sf.job.kind !== 'rush') sf.home = { x: sf.x, y: sf.y };
+    fs.x = -7.5 * s; fs.y = 12.5; ss.x = 7.5 * s; ss.y = 12.5;
+    for (const cb of S.CB) {
+      const r = cb.job.kind === 'man' ? cb.job.r : cb.over;
+      cb.y = 7 + (r.y < -1 ? 0.6 : 0);
+      if (cb.job.kind === 'man') cb.job.press = false;
+    }
   }
   // Nobody stands on top of anybody.
   for (let k = 0; k < 4; k++) for (const a of S.D) for (const b of S.D) {
@@ -466,6 +480,7 @@ export function simulate(call, seed = 1) {
   const frames = [];
   record(S, frames);
   blitzLine(S);
+  rotateLine(S);
   while (!S.over) {
     step(S);
     record(S, frames);
@@ -1049,6 +1064,7 @@ function defense(S, d) {
   }
   if (ballOut) return breakOnBall(S, d);
   if (j.kind === 'rush') return rush(S, d);
+  if (rotate(S, d)) return;
   if (runLook(S, t - d.lag) && d.cls !== 'cb') return bite(S, d);
   if (t < 0.12) { d.tx = d.x; d.ty = d.y; d.ts = 0; return; }
   if (j.kind === 'man') return cover(S, d);
@@ -1086,12 +1102,23 @@ function scrape(S, d, c) {
   d.want = c;
 }
 
+// A disguise, at the snap (see the end of buildDefense()): a safety in a zone runs flat out from the two-deep look to
+// the spot he'd have lined up in, and plays his zone from there. (One in man coverage plays his man as if he'd lined up
+// there: see cover().)
+function rotate(S, d) {
+  if (!d.home || d.rotated || d.job.kind !== 'zone') return false;
+  if (dist(d, d.home) < 1 || S.t > 1.2) { d.rotated = true; return false; }
+  d.tx = d.home.x; d.ty = d.home.y; d.ts = d.top;
+  return true;
+}
+
 function bite(S, d) {
-  // The run fake (or the real run, before the ball carrier is clear): linebackers come downhill, safeties creep.
+  // The run fake (or the real run, before the ball carrier is clear): linebackers come downhill, safeties creep, from
+  // where they lined up (or, after a disguise, the spot they rotated to).
   const rb = S.RB || S.QB;
   const target = S.play.type === 'run' && S.carrier && S.carrier !== S.QB ? S.carrier : rb;
   if (d.cls === 'lb') { d.tx = target.x + (S.aimX ?? 0) * 0.3; d.ty = Math.max(0.6, d.y0 - 2.5); d.ts = d.top * 0.75; }
-  else if (d.cls === 's') { d.tx = d.x; d.ty = d.y0 - 2.2; d.ts = d.top * 0.5; }
+  else if (d.cls === 's') { d.tx = d.x; d.ty = (d.home ? d.home.y : d.y0) - 2.2; d.ts = d.top * 0.5; }
   else { d.tx = target.x; d.ty = target.y; d.ts = d.top; }
   d.want = target;
 }
@@ -1118,12 +1145,15 @@ function lagged(p, ticks) {
 
 function cover(S, d) {
   const j = d.job, r = j.r, t = S.t;
+  // Where he plays him from: where he lined up, or, after a disguise, the spot he rotates to (see the end of
+  // buildDefense()), so a safety who showed deep comes down to his man.
+  const at = d.home || { x: d.x0, y: d.y0 };
   if (r.job.kind !== 'route' || (r.job.delay && t < r.job.delay)) {
     // His man stayed in to block. In Cover 0 he joins the rush; otherwise he sits underneath and reads.
     // So does the man on a back who blocks for a moment before the screen: he sees a blocker and comes after the passer.
     const screen = r.job.route === 'screen' && (S.cov.id === 'c0' || S.cov.id === 'c1') && t > 0.6;
     if (screen || (t > 0.9 && (S.cov.id === 'c0' || r.cls === 'rb' || r.cls === 'fb') && r.job.kind !== 'route')) { d.job = { kind: 'rush', gap: d.x * 0.3 }; d.addOn = true; return rush(S, d); }
-    d.tx = d.x0 * 0.7 + r.x * 0.3; d.ty = d.y0; d.ts = 2; return;
+    d.tx = at.x * 0.7 + r.x * 0.3; d.ty = at.y; d.ts = d.home ? d.top : 2; return;
   }
   // He sees his man a moment late: where the receiver was, carried forward at the speed he was going then.
   // On a hard cut he keeps going the old way for that moment, and that is the separation.
@@ -1132,7 +1162,7 @@ function cover(S, d) {
   const lvx = (L.x - L2.x) / (2 * DT), lvy = (L.y - L2.y) / (2 * DT), ls = lagT * DT;
   const sideIn = -Math.sign(r.x || 1);
   const lev = (S.cov.id === 'c1' && d.cls === 'cb' ? -0.5 : 0.5) * sideIn;
-  const cushion = j.press ? 0.5 : clamp(d.y0 - r.y0 - t * 2.4, 0.7, 6);
+  const cushion = j.press ? 0.5 : clamp(at.y - r.y0 - t * 2.4, 0.7, 6);
   const px = L.x + lvx * ls + lev, py = L.y + lvy * ls + cushion;
   d.dv = [lvx + (px - d.x) * 2.2, lvy + (py - d.y) * 2.2];
   if (t < 0.45 && j.press) d.dv = [(r.x + lev * 0.5 - d.x) * 3, (r.y + 1 - d.y) * 3];
@@ -1534,6 +1564,13 @@ function blitzLine(S) {
   S.events.push({ t: 2 * DT, kind: 'blitz', text: cap(text), who: men[0].i, all: men.map(d => d.i) });
 }
 
+// Right after the snap, a disguise unmasked: "The strong safety rotates down at the snap: Cover 3." (A moment after the
+// blitzers' line, and pointing at him.)
+function rotateLine(S) {
+  if (!S.disguise) return;
+  S.events.push({ t: +(3 * DT).toFixed(2), kind: 'rotate', text: `The strong safety rotates down at the snap: ${S.cov.name}.`, who: S.SS.i, cov: S.cov.id });
+}
+
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
   const j = pl.job, s = S.s;
@@ -1573,15 +1610,19 @@ function describeJob(S, pl) {
     : j.kind === 'man' && j.r === S.RB ? ' On this run his man has the ball: he runs with him to the line, a step outside him, and meets him there.'
     : j.kind === 'man' && pl.cls === 'cb' ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
     : ' On this run he reads it and comes downhill to the ball.';
+  // A disguise: how he lines up, and what he does about it at the snap (see the end of buildDefense()).
+  const look = !S.disguise ? '' : pl === S.FS ? ' He lines up deep over half the field, as if it were two deep, and rotates to the middle at the snap: the disguise.'
+    : pl === S.SS ? ' He lines up deep, as if it were two deep, and rotates down at the snap: the disguise.'
+      : pl.label === 'CB' && j.kind === 'man' ? ' He lines up 7 yards off, the way a corner in a deep zone does: part of the disguise.' : '';
   if (j.kind === 'man') {
     const man = `man-to-man on ${name(S, j.r)}${j.press ? ', pressed up at the line' : ''}`;
-    return run ? `On a pass he'd play ${man}.${onRun}` : `Plays ${man}, and goes wherever he goes.`;
+    return (run ? `On a pass he'd play ${man}.${onRun}` : `Plays ${man}, and goes wherever he goes.`) + look;
   }
   if (j.kind === 'zone') {
     // Strong and weak side, the way coaches say it, so it reads right from either side of the board.
     const z = j.z, sd = Math.sign(z.at[0]) * s > 0 ? 'strong' : 'weak';
     const area = !z.at[0] ? `the ${z.name}` : z.name === 'deep quarter' ? `the ${Math.abs(z.at[0]) > 10 ? 'outside' : 'inside'} quarter on the ${sd} side` : `the ${sd}-side ${z.name}`;
-    return run ? `On a pass he'd play zone in ${area}.${onRun}` : `Plays zone in ${area} and ${z.deep ? 'stays deeper than anyone in his area' : 'breaks on the ball when it\'s thrown'}.`;
+    return (run ? `On a pass he'd play zone in ${area}.${onRun}` : `Plays zone in ${area} and ${z.deep ? 'stays deeper than anyone in his area' : 'breaks on the ball when it\'s thrown'}.`) + look;
   }
   return '';
 }

@@ -672,6 +672,40 @@ test('every coverage lines up its own way: the safeties deep and the corners\' d
   assert.equal(new Set(one).size, COVERAGES.length, `two coverages look the same: ${one.join('; ')}`);
 });
 
+test('a disguise: Cover 1 or Cover 3 lines up like Cover 4, two deep and the corners off, and rotates at the snap', () => {
+  // The look a disguised call shows is Cover 4's, against every formation, front, pressure and strong side: two safeties
+  // deep and the corners 7 or more off (as the question after the snap reads it: see the test above). At the snap the
+  // strong safety comes down and the free safety heads for the middle, and the play-by-play says so, naming the
+  // coverage. Only Cover 1 and Cover 3 disguise; any other call with it lines up as it always does.
+  const look = S => { const c = Math.min(...S.D.filter(d => d.label === 'CB').map(d => d.y)); return `${S.box.high} deep, corners ${c < 2.5 ? 'pressed' : c < 6 ? 'about 5 off' : '7 or more off'}`; };
+  let seed = 41;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const base = { formation: fm.id, play: 'smash', front: fr.id, pressure, flip };
+    const c4 = look(prepare({ ...base, coverage: 'c4' }, seed));
+    for (const coverage of ['c1', 'c3']) {
+      const call = { ...base, coverage, disguise: true }, what = JSON.stringify(call);
+      const S = prepare(call, seed);
+      assert.equal(look(S), c4, `${what}: lines up like Cover 4`);
+      assert.notEqual(look(prepare({ ...call, disguise: false }, seed)), c4, `${what}: without the disguise it doesn't`);
+      const r = simulate(call, seed), at = t => r.frames.find(f => f.t >= t - 1e-9).xy, ss = S.SS.i, fs = S.FS.i;
+      // In a zone he comes down to the spot he'd have lined up in; in man he comes down to play his man (but no farther
+      // than his man lets him: one running deep keeps him deep).
+      assert.ok(at(1)[2 * ss + 1] < S.SS.y - 1, `${what}: the strong safety comes down at the snap, from ${S.SS.y.toFixed(1)} to ${at(1)[2 * ss + 1].toFixed(1)} yards in a second`);
+      if (S.SS.job.kind === 'zone') assert.ok(Math.hypot(at(1)[2 * ss] - S.SS.home.x, at(1)[2 * ss + 1] - S.SS.home.y) < 3, `${what}: the strong safety gets most of the way to his zone's spot in a second`);
+      assert.ok(Math.abs(at(1)[2 * fs]) < Math.abs(S.FS.x) - 4, `${what}: the free safety heads for the middle, from ${S.FS.x.toFixed(1)} to ${at(1)[2 * fs].toFixed(1)} in a second`);
+      const e = r.events.find(x => x.kind === 'rotate');
+      assert.equal(e?.text, `The strong safety rotates down at the snap: ${COVERAGES.find(c => c.id === coverage).name}.`, what);
+      assert.equal(e.who, ss, what);
+      assert.ok(!simulate({ ...call, disguise: false }, seed).events.some(x => x.kind === 'rotate'), `${what}: no rotation without the disguise`);
+    }
+    for (const coverage of ['c0', 'c2', 'c4']) {
+      const call = { ...base, coverage };
+      assert.equal(JSON.stringify(simulate({ ...call, disguise: true }, seed).frames.at(-1).xy), JSON.stringify(simulate(call, seed).frames.at(-1).xy), `${JSON.stringify(call)}: only Cover 1 and Cover 3 disguise`);
+    }
+    seed++;
+  }
+});
+
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
 const caughtAt = r => { const f = r.frames.find(f => f.t > r.events.find(e => e.kind === 'throw').t && !f.air && f.c === r.result.carrier); return f.xy[2 * r.result.carrier + 1]; };
 
