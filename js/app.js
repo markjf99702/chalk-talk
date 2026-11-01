@@ -93,6 +93,10 @@ const hidden = () => state.auto && state.phase === 'pre' && !state.seen;
 
 // The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on. It's
 // never the call they had (New look always changes something), short of ten unlucky rolls in a row.
+// Calling the defense, his play leans on his personnel, so reading it before the snap tells you something: about this
+// share of his plays are runs from each formation, the rest passes, and every play stays possible. (A design choice
+// in the direction real offenses lean, more backs and tight ends running more; not a published statistic.)
+const RUN_SHARE = { iform: 0.6, single: 0.55, trips: 0.375, doubles: 0.25 };
 function rollTheirs() {
   state.seen = false;
   const R = rng(newSeed());
@@ -110,7 +114,8 @@ function rollTheirs() {
       state.def.pressure = R() < 0.25 ? 'blitz' : 'four';
     } else {
       state.off.formation = R.pick(FORMATIONS).id;
-      state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? 0.105 : 0.083]));
+      const run = RUN_SHARE[state.off.formation] ?? 0.42, runs = PLAYS.filter(p => p.type === 'run').length;
+      state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (PLAYS.length - runs)]));
       state.off.flip = R() < 0.5;
     }
   }
@@ -722,7 +727,7 @@ function syncTheirs() {
   }
   if (hidden()) hint.textContent = state.side === 'O'
     ? 'Hidden until the snap. Read their alignment: how many safeties are deep, how far off the corners are, how many defenders are in the box. Then call the play that beats it: change your play and they keep their call; change your personnel and they\'ll substitute.'
-    : 'Hidden until the snap. You can see their formation; the play is a surprise. Change your call to match it: they keep theirs.';
+    : 'Hidden until the snap. You can see their formation; the play is a surprise. Read their personnel: two backs or two tight ends lean run, four receivers lean pass. Change your call to match it: they keep theirs.';
   else if (state.phase === 'pre') hint.textContent = `Same call as last snap: ${theirSummary()}. New look gets you a new one.`;
   else hint.textContent = `They called: ${theirSummary()}.`;
 }
@@ -1081,7 +1086,7 @@ function playbook() {
   const pos = keys => keys.map(k => [`${k.replace(/34|slot/, '')} · ${POSITIONS[k][0]}`, POSITIONS[k][1]]);
   sec('Offense positions', false, dl(pos(['QB', 'RB', 'FB', 'X', 'Z', 'H', 'Y', 'U', 'LT', 'LG', 'C', 'RG', 'RT'])));
   sec('Defense positions', false, dl(pos(['DE', 'DT', 'NT', 'S', 'M', 'W', 'J', 'CB', 'NB', 'FS', 'SS'])));
-  sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb])));
+  sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p><p>Personnel is the defense's first read: two backs or two tight ends lean run, four receivers lean pass.</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb])));
   sec('Fronts and techniques', false, `<p>Technique numbers tell a defensive lineman where to line up against the offensive line. Gaps between the blockers are lettered from the center out: A between the center and a guard, B between guard and tackle, C outside the tackle, D outside the tight end.</p>`
     + techDiagram() + dl([...TECHNIQUES, ...FRONTS.map(f => [f.name, f.blurb])]));
   sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. The corners help too: up close and pressing means man; about five yards off means Cover 2; seven or more means a deep zone, thirds or quarters. Real defenses disguise it, rotating a safety down or back at the snap. The defenses on this board line up in what they\'ll play.']]));
@@ -1210,4 +1215,4 @@ if ('serviceWorker' in navigator && !document.documentElement.hasAttribute('data
 }
 
 // For the screenshot and test scripts.
-window.chalkTalk = { state, board, lineUp, play, pause, snap, finish, simulate };
+window.chalkTalk = { state, board, lineUp, play, pause, snap, finish, simulate, rollTheirs };

@@ -14,7 +14,7 @@
 
 ## How it works
 
-- **Pick a side.** Call the offense (formation, strong side, play) or the defense (front, coverage, pressure). The other coach picks his call at random, the way a real one might: nickel against three receivers, base against two backs. Or turn that off and call both sides to study one matchup.
+- **Pick a side.** Call the offense (formation, strong side, play) or the defense (front, coverage, pressure). The other coach picks his call at random, the way a real one might: nickel against three receivers, base against two backs, and on offense more runs with two backs or two tight ends and more passes with four receivers. Or turn that off and call both sides to study one matchup.
 - **Read it before the snap.** The other side's call stays hidden until the snap, but its alignment doesn't: count the safeties deep, see how far off the corners are and count the defenders in the box, the way a quarterback does. Don't like the look? Change your play and he keeps his call, the way an audible works; change your personnel and he substitutes. New look gets you another one.
 - **Snap it.** Every player has a job and does it: receivers run their routes, linemen block whoever they're assigned, rushers try to beat their blockers, man defenders chase their receivers a moment late, zone defenders guard their areas, and the quarterback goes through his reads and throws where nobody can get there first. The same call can come out differently each time.
 - **Watch it back.** Scrub through the play, slow it to half speed, and see the drawn-up play faintly under the trails of where everyone actually went.

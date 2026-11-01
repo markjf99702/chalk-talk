@@ -1178,6 +1178,34 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
+// Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback
+// 55%, Gun Trips 35 to 40% and Gun Doubles about 25%, and every play stays possible from every formation. The card says
+// what to read before the snap, and so does the playbook. Calling the offense, the card doesn't.
+{
+  const p = await phone();
+  const READ = 'Read their personnel: two backs or two tight ends lean run, four receivers lean pass.';
+  assert.ok(!(await p.textContent('#theirsHint')).includes(READ), 'calling the offense, the card says to read their personnel');
+  assert.ok((await p.textContent('#pbGrid')).includes('Personnel is the defense\'s first read: two backs or two tight ends lean run, four receivers lean pass.'), 'the playbook\'s formations say what personnel tells the defense');
+  await p.click('[data-side="D"]');
+  assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap\. .*Read their personnel: two backs or two tight ends lean run, four receivers lean pass\./);
+  const picks = await p.evaluate(() => {
+    const { state, rollTheirs } = window.chalkTalk, runs = ['iz', 'oz', 'power', 'draw'], seen = {};
+    for (let k = 0; k < 6000; k++) {
+      rollTheirs();
+      const f = (seen[state.off.formation] ||= { n: 0, run: 0, plays: {} });
+      f.n++;
+      if (runs.includes(state.off.play)) f.run++;
+      f.plays[state.off.play] = true;
+    }
+    return Object.fromEntries(Object.entries(seen).map(([f, { n, run, plays }]) => [f, { n, run: run / n, plays: Object.keys(plays).length }]));
+  });
+  for (const [f, lo, hi] of [['iform', 0.54, 0.66], ['single', 0.49, 0.61], ['trips', 0.32, 0.43], ['doubles', 0.2, 0.3]]) {
+    assert.ok(picks[f].run >= lo && picks[f].run <= hi, `${f} runs ${(picks[f].run * 100).toFixed(1)}% of the time (${picks[f].n} picks), not ${lo * 100}-${hi * 100}%`);
+    assert.equal(picks[f].plays, 11, `${f}: only ${picks[f].plays} of the 11 plays came up`);
+  }
+  await p.context().close();
+}
+
 // Snap again while reading the result card: the reader keeps his place. The last result stays where it was, faded and
 // out of reach, until the new one comes in at the end of the play, rather than going and taking the page under the
 // board with it. New look from the result card goes on to their card, just under the board. On a phone too short for
