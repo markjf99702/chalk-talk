@@ -280,6 +280,33 @@ test('a run names the hole: one line, when the ball carrier gets to the line aft
   assert.ok(named > 100, `only ${named} runs got to the line`);
 });
 
+test('the play-by-play names the run at the handoff, and the blitzers right after the snap', () => {
+  let seed = 271000, blitzes = 0;
+  const RUN = { zone: /^Handoff to the running back, aiming just outside the guard\.$/, reach: /^Handoff to the running back, heading for the edge\.$/, draw: /^A late handoff to the running back, under the rush\.$/ };
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    const hand = r.events.find(e => e.kind === 'hand');
+    if (hand) {
+      const want = pl.scheme === 'power' ? (S.FB ? /^Handoff to the running back, behind the pulling guard\.$/ : /^Handoff to the running back, inside the pulling guard's kick-out\.$/) : RUN[pl.scheme];
+      assert.match(hand.text, want, `${what}: "${hand.text}"`);
+    }
+    const men = S.D.filter(d => d.job.kind === 'rush' && d.blitzer).map(d => d.i).sort((a, b) => a - b);
+    const lines = r.events.filter(e => e.kind === 'blitz');
+    if (!men.length) { assert.equal(lines.length, 0, `${what}: "${lines[0]?.text}" with nobody blitzing`); continue; }
+    assert.equal(lines.length, 1, `${what}: ${lines.length} blitz lines`);
+    const b = lines[0];
+    assert.ok(b.t > 0 && b.t <= 0.15 && r.events[0] === b, `${what}: the blitz is named at ${b.t}s, after "${r.events[0].text}"`);
+    assert.deepEqual([...b.all].sort((x, y) => x - y), men, `${what}: "${b.text}" points at the wrong men`);
+    assert.ok(b.all.includes(b.who), `${what}: the blitz line points at somebody who isn't blitzing`);
+    assert.match(b.text, cv.id === 'c0' ? /^Cover 0: the [\w ]+( and the [\w ]+)* blitz(es)?\.$/ : /^The [\w ]+(, the [\w ]+)*( and the [\w ]+)? blitz(es)?\.$/, `${what}: "${b.text}"`);
+    assert.equal(/ and /.test(b.text), men.length > 1, `${what}: "${b.text}" for ${men.length} blitzers`);
+    blitzes++;
+  }
+  assert.ok(blitzes > 300, `only ${blitzes} snaps had a blitz`);
+});
+
 test('every line of the play-by-play that names a man says which man, for the board to point at', () => {
   let seed = 4000;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {

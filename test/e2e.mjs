@@ -432,6 +432,19 @@ for (const side of ['O', 'D']) {
   assert.ok(ring.caption, 'the throw is in the caption');
   assert.equal(ring.spot, ring.who, 'at the throw the ring is on somebody other than the receiver');
   assert.equal(ring.end, -1, 'somebody is still ringed once the headline replaces the caption');
+  // Right after the snap the caption names the blitzers, and every one of them is ringed.
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c0.blitz.262');
+  await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
+  const blitz = await p.evaluate(() => {
+    const { state, board, pause, lineUp } = window.chalkTalk, s = document.getElementById('scrub');
+    pause(); lineUp();
+    const b = state.play.events.find(e => e.kind === 'blitz');
+    s.disabled = false; s.value = '3'; s.dispatchEvent(new Event('input')); // 0.15 s in
+    return { text: b.text, all: b.all, rung: board.spotAll, caption: document.getElementById('caption').textContent };
+  });
+  assert.match(blitz.text, /^Cover 0: the .+ and the .+ blitz\.$/);
+  assert.ok(blitz.caption.includes(blitz.text), `just after the snap the caption says "${blitz.caption}"`);
+  assert.deepEqual(blitz.rung, blitz.all, 'the blitzers the caption names aren\'t all ringed');
   await p.close();
 }
 

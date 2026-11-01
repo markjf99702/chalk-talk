@@ -136,6 +136,7 @@ function lineUp(keep = false) {
   board.t = 0;
   board.selected = -1;
   board.spot = -1;
+  board.spotAll = null;
   hideWho();
   $('why').hidden = true;
   $('result').hidden = !keep;
@@ -257,7 +258,7 @@ function placeResult() {
 // At the end of the play, the headline and a way down to the explanation, where the caption was.
 function showWhy() {
   setCaption('');
-  board.spot = -1; // the caption makes way for the headline, and nobody is named
+  board.spot = -1; board.spotAll = null; // the caption makes way for the headline, and nobody is named
   draw();
   $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">${resultBeside() ? '→' : '↓'}</span></span>`;
   $('why').hidden = false;
@@ -315,6 +316,7 @@ function caption() {
   const evs = state.play.events.filter(e => e.t <= state.t + 0.001 && state.t - e.t < 2.2 && e.kind !== 'shed');
   setCaption(evs.slice(-2).map(e => e.text));
   board.spot = evs.at(-1)?.who ?? -1;
+  board.spotAll = evs.at(-1)?.all || null;
 }
 // Each line of the caption in its own span, which has a soft backing in the board's colour so it reads over the trails.
 // A line still up stays as it is, so a screen reader reads each line once, when it's new.

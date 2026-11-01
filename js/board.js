@@ -21,6 +21,7 @@ export class Board {
     this.mineTeam = 'O';
     this.selected = -1;
     this.spot = -1; // the man the caption names, ringed while nobody is picked out
+    this.spotAll = null; // or the men, where it names more than one (the blitzers)
     this.drawn = null; // where each player's label went in the last frame, by player: [x, y] (see labelSpots())
     this.colors = {};
     this.grain = null;
@@ -319,12 +320,12 @@ export class Board {
         ctx.lineWidth = lw;
       }
     }
-    // The man the caption names: a dashed ring in the bright colour, so he can be found in a crowd.
+    // The man the caption names (or the men: the blitzers): a dashed ring in the bright colour, so he can be found in a
+    // crowd.
     if (this.spot >= 0 && this.selected < 0) {
-      const [X, Y] = at[this.spot];
       ctx.globalAlpha = 1; ctx.strokeStyle = this.colors.hot; ctx.lineWidth = Math.max(2.2, lw);
       ctx.setLineDash([r * 0.7, r * 0.45]);
-      ctx.beginPath(); ctx.arc(X, Y, r * 2.1, 0, Math.PI * 2); ctx.stroke();
+      for (const i of this.spotAll || [this.spot]) { const [X, Y] = at[i]; ctx.beginPath(); ctx.arc(X, Y, r * 2.1, 0, Math.PI * 2); ctx.stroke(); }
       ctx.setLineDash([]);
     }
     // Each label is knocked out of what's under it, the way a map's are: a stroke in the board's colour round the

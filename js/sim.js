@@ -465,6 +465,7 @@ export function simulate(call, seed = 1) {
   const S = prepare(call, seed);
   const frames = [];
   record(S, frames);
+  blitzLine(S);
   while (!S.over) {
     step(S);
     record(S, frames);
@@ -711,7 +712,7 @@ function qb(S, pl) {
     if (hasBall && S.RB && (dist(S.RB, pl) < 1.35 || t > 1.1) && t > (S.handAt || 0.25)) {
       giveBall(S, S.RB);
       S.handT = t;
-      ev(S, 'hand', `Handoff to ${name(S, S.RB)}.`, { who: S.RB.i });
+      ev(S, 'hand', handoffText(S), { who: S.RB.i });
     }
     return;
   }
@@ -1506,6 +1507,26 @@ const yardWord = n => (n === 1 ? '1 yard' : `${n} yards`);
 export const yardText = y => (y >= 0.5 ? `${yardWord(Math.round(y))} downfield` : y <= -0.5 ? `${yardWord(Math.round(-y))} behind the line` : 'at the line of scrimmage');
 // "a corner route", "an out route"; the check-down and the screen are what they are.
 const routeText = id => { const n = ROUTES[id]?.name; return !n ? 'his route' : id === 'check' || id === 'screen' ? `the ${n}` : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n} route`; };
+
+// The handoff, and where the run is headed: "Handoff to the running back, heading for the edge." On Power the back
+// follows the pulling guard up through the hole, or, with no fullback, cuts inside the guard's kick-out block.
+function handoffText(S) {
+  const rb = name(S, S.RB);
+  if (S.play.scheme === 'draw') return `A late handoff to ${rb}, under the rush.`;
+  const where = { zone: 'aiming just outside the guard', reach: 'heading for the edge', power: S.FB ? 'behind the pulling guard' : 'inside the pulling guard\'s kick-out' }[S.play.scheme];
+  return `Handoff to ${rb}${where ? `, ${where}` : ''}.`;
+}
+
+// Right after the snap, the men who blitz, by name: "The Will and the Sam blitz." (Their call is out at the snap, so
+// this gives nothing away.) In Cover 0, everyone who isn't covering a receiver. The line points at all of them.
+function blitzLine(S) {
+  const men = S.D.filter(d => d.job.kind === 'rush' && d.blitzer).sort((a, b) => a.x - b.x);
+  if (!men.length) return;
+  const names = men.map(d => name(S, d));
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+  const text = `${S.cov.id === 'c0' ? 'Cover 0: ' : ''}${list} ${men.length > 1 ? 'blitz' : 'blitzes'}.`;
+  S.events.push({ t: 2 * DT, kind: 'blitz', text: cap(text), who: men[0].i, all: men.map(d => d.i) });
+}
 
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
