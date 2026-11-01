@@ -403,6 +403,24 @@ test('coverages put the right number deep and the right number rushing', () => {
   assert.equal(zero.deep, 0); assert.equal(zero.man, 5); assert.equal(zero.rush, 6);
 });
 
+// Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
+const caughtAt = r => { const f = r.frames.find(f => f.t > r.events.find(e => e.kind === 'throw').t && !f.air && f.c === r.result.carrier); return f.xy[2 * r.result.carrier + 1]; };
+
+test('a deep catch is run down from behind: no long run after every catch 15 yards downfield', () => {
+  // 640 snaps of the four plays that throw deep. From four start seeds (31, 1000, 5000, 77777) catches 15+ yards
+  // downfield gain 5.9-8.1 yards after the catch on average; before the men chasing a deep catch got him more often,
+  // 10.2-14.6. (NFL 2023 regular season: 5.2, from nflverse play-by-play.)
+  let seed = 31, n = 0, yac = 0;
+  for (const fm of FORMATIONS) for (const play of ['verts', 'smash', 'mesh', 'pa']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    const r = simulate({ formation: fm.id, play, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 }, seed++);
+    if (r.result.kind !== 'catch') continue;
+    const at = caughtAt(r);
+    if (at >= 15) { n++; yac += r.result.yards - at; }
+  }
+  assert.ok(n > 40, `${n} deep catches`);
+  assert.ok(yac / n < 10, `${n} catches 15+ yards downfield gain ${(yac / n).toFixed(1)} yards after the catch on average`);
+});
+
 test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, around 60% complete, a sack on about
   // one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gives 3.44-5.18 yards a carry,

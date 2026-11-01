@@ -1303,7 +1303,10 @@ function contact(S) {
     d.tried = t;
     let pt = { dl: 0.82, de: 0.84, lb: 0.88, s: 0.85, cb: 0.81 }[d.cls];
     pt += { qb: 0.08, rb: -0.1, wr: -0.04, te: 0.02, fb: 0.03 }[c.cls] || 0;
-    pt += head > 0.3 ? 0.04 : head < -0.4 ? (dd > 1.1 ? -0.4 : -0.14) : 0;
+    // From behind is harder, and a dive from behind harder still; but a receiver who caught it deep is run down by
+    // defenders who were running with him, and they get him more often than a back running away from them.
+    const deep = S.caught && S.catchY >= 15;
+    pt += head > 0.3 ? 0.04 : head < -0.4 ? (dd > 1.1 ? (deep ? -0.25 : -0.4) : (deep ? -0.06 : -0.14)) : 0;
     if (blocked) pt = 0.14;
     if (S.D.some(o => o !== d && o.eng < 0 && dist(o, c) < 1.6)) pt += 0.12;
     if (R.chance(pt)) {
@@ -1315,7 +1318,9 @@ function contact(S) {
       else ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i });
       return finish(S, c === S.QB && S.play.type === 'run' ? 'run' : S.caught ? 'catch' : 'run', d, hit);
     }
-    d.missUntil = t + 0.8;
+    // A defender who misses is left behind for a moment; one chasing down a deep catch from behind is back in the
+    // chase a step later.
+    d.missUntil = t + (deep && head < -0.4 ? 0.3 : 0.8);
     c.vx *= 0.75; c.vy *= 0.75;
     if (qbHeld) { ev(S, 'escape', `${cap(name(S, S.QB, true))} slips out of ${name(S, d)}'s grasp.`, { who: S.QB.i }); S.QB.tx = S.QB.x - (d.x - S.QB.x) * 2; continue; }
     ev(S, 'miss', `${cap(name(S, c))} breaks a tackle from ${name(S, d)}.`, { who: d.i });
