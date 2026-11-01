@@ -148,9 +148,10 @@ button:disabled { cursor: default; }
   .grid { grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr); align-items: start; }
   .stage { position: sticky; top: 12px; }
 }
-/* On a phone tall enough, the board stays at the top while you change the call underneath it, and what the page scrolls
-   into view stops just under it instead of behind it (--stage-h is the board's height, set in js/app.js). */
-@media (max-width: 959px) and (min-height: 700px) {
+/* On a phone held upright (or a tablet), the board stays at the top while you change the call underneath it, and what
+   the page scrolls into view stops just under it instead of behind it (--stage-h is the board's height, set in
+   js/app.js). The same query is in js/app.js. */
+@media (max-width: 959px) and (min-height: 700px), (max-width: 959px) and (orientation: portrait) {
   .stage { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: max(6px, env(safe-area-inset-top)); margin-top: -6px; }
   html { scroll-padding-top: calc(var(--stage-h, 0px) + 8px); }
   /* once it has stuck (see js/app.js), a soft edge under it, so what scrolls under it goes under something */
@@ -171,6 +172,12 @@ button:disabled { cursor: default; }
 @media (max-width: 620px) {
   .board-wrap { border-width: 4px; border-radius: 10px; }
   #board { aspect-ratio: 1.3; }
+}
+/* A phone shorter than 700 px (an iPhone SE, or a phone with its browser's toolbars showing) draws the board a little
+   flatter, so the calls have room under it: about 220 px tall on an iPhone SE instead of 260. (Any flatter and the
+   words along the top would cover a deep safety before the snap.) */
+@media (max-width: 959px) and (max-height: 699px) and (orientation: portrait) {
+  #board { aspect-ratio: 1.5; }
 }
 
 /* The words on the board sit over the deep field, where nobody is for most of the play: along the top, or along the

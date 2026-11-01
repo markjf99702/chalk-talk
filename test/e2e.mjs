@@ -877,6 +877,36 @@ for (const [width, height, edge] of [[390, 844, true], [844, 390, false]]) {
   await c.close();
 }
 
+// A phone shorter than 700 px held upright (an iPhone SE, or a phone with its browser's toolbars showing) keeps the
+// board at the top too, drawn a little flatter, so the calls have room under it; a taller phone keeps the board it had.
+// Tabbing down the page, the focus doesn't go behind it.
+for (const [width, height, tall] of [[375, 667, [215, 230]], [390, 844, [262, 276]]]) {
+  const c = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.evaluate(() => scrollTo(0, 700));
+  await new Promise(r => setTimeout(r, 300));
+  const at = await p.evaluate(() => {
+    const board = document.getElementById('board').getBoundingClientRect(), stage = document.querySelector('.stage');
+    return { top: stage.getBoundingClientRect().top, bottom: stage.getBoundingClientRect().bottom, board: board.height, stuck: stage.classList.contains('stuck'), scrolled: scrollY };
+  });
+  assert.ok(at.scrolled > 300 && Math.abs(at.top) <= 1 && at.stuck, `${width}x${height}: the board doesn't stay at the top: ${JSON.stringify(at)}`);
+  assert.ok(at.board >= tall[0] && at.board <= tall[1], `${width}x${height}: the board is ${Math.round(at.board)} px tall`);
+  assert.ok(height - at.bottom >= 330, `${width}x${height}: only ${Math.round(height - at.bottom)} px under the board for the calls`);
+  await p.evaluate(() => scrollTo(0, 0));
+  await p.focus('#snap');
+  let on = null;
+  for (let k = 0; k < 20 && !on; k++) {
+    await p.keyboard.press('Tab');
+    on = await p.evaluate(() => { const el = document.activeElement; return el.dataset.key?.startsWith('Play:') && el.getAttribute('aria-checked') === 'true' ? el.dataset.key : null; });
+  }
+  assert.ok(on, `${width}x${height}: Tab from Snap never reached the play picked`);
+  const seen = await p.evaluate(() => ({ chip: document.activeElement.getBoundingClientRect().top, stage: document.querySelector('.stage').getBoundingClientRect().bottom }));
+  assert.ok(seen.chip >= seen.stage, `${width}x${height}: the focused chip (${on}) is at ${Math.round(seen.chip)} px, behind the board, which ends at ${Math.round(seen.stage)} px`);
+  await c.close();
+}
+
 // A tablet held upright keeps the board at the top too, over more than half the screen. Tabbing down the page, the
 // focus doesn't go behind it (WCAG 2.2, 2.4.11 Focus Not Obscured): the page scrolls a focused chip to below the board.
 {
@@ -1215,8 +1245,8 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
 
 // Snap again while reading the result card: the reader keeps his place. The last result stays where it was, faded and
 // out of reach, until the new one comes in at the end of the play, rather than going and taking the page under the
-// board with it. New look from the result card goes on to their card, just under the board. On a phone too short for
-// the board to stay at the top, Snap again brings the board back into view.
+// board with it. New look from the result card goes on to their card, just under the board. Where the board doesn't
+// stay at the top (a laptop's window made small, 700 by 600), Snap again brings the board back into view.
 {
   const still = async q => { for (let a = -1, b = -2; a !== b;) { a = await q.evaluate(() => scrollY); await new Promise(r => setTimeout(r, 150)); b = await q.evaluate(() => scrollY); } };
   const p = await phone();
@@ -1239,15 +1269,16 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   const theirs = await p.evaluate(() => ({ top: document.getElementById('theirs').getBoundingClientRect().top, stage: document.querySelector('.stage').getBoundingClientRect().bottom }));
   assert.ok(theirs.top >= theirs.stage && theirs.top < theirs.stage + 30, `after New look from the result card their card is at ${Math.round(theirs.top)} px, the board ending at ${Math.round(theirs.stage)} px`);
   await p.context().close();
-  const c = await browser.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, hasTouch: true });
+  const c = await browser.newContext({ viewport: { width: 700, height: 600 } });
   const q = await c.newPage();
   q.on('pageerror', e => problems.push(e.message));
   await q.goto(base);
   await q.evaluate(() => { const { snap, finish } = window.chalkTalk; snap(); finish(); document.querySelector('#result .actions').scrollIntoView({ block: 'end' }); });
+  assert.ok(await q.evaluate(() => document.getElementById('board').getBoundingClientRect().bottom < 0), 'at 700x600 the board was still in view before Snap again');
   await q.click('#again');
   await still(q);
   const b = await q.evaluate(() => { const r = document.getElementById('board').getBoundingClientRect(); return { t: r.top, b: r.bottom }; });
-  assert.ok(b.t >= 0 && b.b <= 667, `at 375x667 the board is at ${Math.round(b.t)}-${Math.round(b.b)} px after Snap again`);
+  assert.ok(b.t >= 0 && b.b <= 600, `at 700x600 the board is at ${Math.round(b.t)}-${Math.round(b.b)} px after Snap again`);
   await c.close();
 }
 
@@ -1593,8 +1624,8 @@ assert.deepEqual([schemes.light.colors.chalk, schemes.dark.colors.chalk], [false
 
 // Names a screen reader says, from the accessibility tree: the labels toggle, the speeds, a formation with its personnel,
 // the card's close button and the board as a picture. And with reduced motion asked for, nothing scrolls smoothly, with
-// the board stuck at the top of a phone or on one too short for that.
-for (const [width, height] of [[390, 844], [375, 667]]) {
+// the board stuck at the top of a phone, short or tall, or in a window where it doesn't stay at the top.
+for (const [width, height, stuck] of [[390, 844, true], [375, 667, true], [700, 600, false]]) {
   const c = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, hasTouch: true, reducedMotion: 'reduce' });
   const p = await c.newPage();
   await p.goto(base);
@@ -1619,7 +1650,7 @@ for (const [width, height] of [[390, 844], [375, 667]]) {
   // Where the board stays at the top, Snap again and New look leave the page where it is; the Why button scrolls it.
   // And the Why button comes up without its fade.
   assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('why')).animationName), 'none', `${width}x${height}: with reduced motion the button to the explanation fades in`);
-  assert.ok(smooth.length >= (height < 700 ? 3 : 2) && smooth.every(b => b !== 'smooth'), `${width}x${height}: with reduced motion the page scrolled: ${smooth}`);
+  assert.ok(smooth.length >= (stuck ? 2 : 3) && smooth.every(b => b !== 'smooth'), `${width}x${height}: with reduced motion the page scrolled: ${smooth}`);
   await c.close();
 }
 

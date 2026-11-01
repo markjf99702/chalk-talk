@@ -272,8 +272,8 @@ onButton($('why'), () => {
   $('result').scrollIntoView({ block: 'start', behavior: smooth() });
   $('resHead').focus({ preventScroll: true });
 });
-// A phone held upright, tall enough that the board stays at the top of the screen (the same query as in css/app.css).
-const stuckBoard = () => matchMedia('(max-width: 959px) and (min-height: 700px)').matches;
+// A phone held upright, or a tablet, where the board stays at the top of the screen (the same query as in css/app.css).
+const stuckBoard = () => matchMedia('(max-width: 959px) and (min-height: 700px), (max-width: 959px) and (orientation: portrait)').matches;
 // The board back into view after a button down the page, unless it's there anyway, stuck at the top: scrolled "into
 // view" there, it would go below the page's scroll padding, which is the board's own height.
 function toBoard() { if (!stuckBoard()) $('board').scrollIntoView({ block: 'nearest', behavior: smooth() }); }
