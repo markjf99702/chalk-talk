@@ -1015,11 +1015,12 @@ async function runChart() {
   drawBars();
   let slice = performance.now();
   // The first time round, a row at a time ("Running… 2 of 5"); then every row again, FIRST more each time ("Running…
-  // 40 of 100 each"), so they all settle together. A change of call once every row has its first numbers ends the run
-  // (see afterChange), and the chart goes, as a finished one does.
+  // 40 of 100"), so they all settle together. (Short enough to stay beside the heading on a computer: with "each" on
+  // the end it went under it, and the chart jumped down and back.) A change of call once every row has its first
+  // numbers ends the run (see afterChange), and the chart goes, as a finished one does.
   for (let round = 1; round * FIRST <= SNAPS; round++) {
     for (const [i, r] of rows.entries()) {
-      button.textContent = round === 1 ? `Running… ${i + 1} of ${rows.length}` : `Running… ${round * FIRST} of ${SNAPS} each`;
+      button.textContent = round === 1 ? `Running… ${i + 1} of ${rows.length}` : `Running… ${round * FIRST} of ${SNAPS}`;
       for (let k = 0; k < FIRST; k++) {
         if (performance.now() - slice > 10 || state.phase === 'playing') {
           await breather();

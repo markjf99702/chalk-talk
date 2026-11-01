@@ -751,6 +751,13 @@ for (const side of ['O', 'D']) {
     return { ...seen, open: !who.hidden, why: !!document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.closest('#why') };
   });
   assert.deepEqual(clear, { card: 'QB', top: true, caption: false, open: true, why: true }, 'on a bigger board the card at the deep end hides the caption or the button down to the explanation');
+  // The chart's button stays beside its heading while it runs, its longest words included, so the chart under it
+  // doesn't jump down and back up.
+  const chartHead = () => p.evaluate(() => Math.round(document.querySelector('.chart-head').getBoundingClientRect().height));
+  const idleHead = await chartHead();
+  await p.click('#runChart');
+  await p.waitForFunction(() => document.getElementById('runChart').textContent.startsWith('Running… 100 of 100'), null, { timeout: 30000 });
+  assert.equal(await chartHead(), idleHead, `at 1280 px the chart's button goes under its heading while it reads "${await p.textContent('#runChart')}"`);
   await wide.close();
 }
 
@@ -1389,7 +1396,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   const rows = () => p.$$eval('#bars .bar-row:not(.waiting):not(.idle)', r => r.length);
   const snaps = () => p.$$eval('#bars .bar-row:not(.waiting):not(.idle)', r => r.map(x => +x.title.match(/over (\d+) snaps$/)[1]));
   const ready = () => p.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 60000 });
-  const settling = () => p.waitForFunction(() => /^Running… [4-8]0 of 100 each$/.test(document.getElementById('runChart').textContent), null, { timeout: 30000 });
+  const settling = () => p.waitForFunction(() => /^Running… [4-8]0 of 100$/.test(document.getElementById('runChart').textContent), null, { timeout: 30000 });
   await p.click('#runChart');
   await p.getByRole('radio', { name: 'Mesh' }).click();
   assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), 'true', 'changing the call stopped the chart');
