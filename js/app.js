@@ -1830,6 +1830,7 @@ addEventListener('storage', e => {
     if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
     takeQuiz(s);
     $('quiz').checked = state.quiz;
+    if (!state.quiz && asking()) reveal(); // turned off there: the question goes here too, and his call is out
     syncTransport();
     draw();
   } catch { /* something this version can't read: keep ours */ }

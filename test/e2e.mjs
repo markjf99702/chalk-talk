@@ -1971,6 +1971,17 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#snap');
   assert.equal(await p.isVisible('#theirsAsk'), false, 'asked calling the defense');
   assert.match(await p.textContent('#theirsHint'), /^They called: /);
+  // Turned off in another tab while this one is asking: the question goes here too, and his call is out.
+  await p.click('[data-side="O"]');
+  await p.click('#theirsLook');
+  await p.click('#snap');
+  assert.deepEqual(await buttons('#theirsAsk'), COVS);
+  const other = await c.newPage();
+  await other.goto(base);
+  await other.click('#quiz');
+  await p.waitForFunction(() => !document.getElementById('quiz').checked);
+  assert.equal(await p.isVisible('#theirsAsk'), false, 'the question stayed up after another tab turned it off');
+  assert.doesNotMatch(await p.textContent('#matchup'), /hidden/, 'his call stayed hidden after another tab turned the question off');
   await c.close();
 }
 
