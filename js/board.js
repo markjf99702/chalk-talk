@@ -10,6 +10,9 @@ const Y_LOW = -12;
 // How far the words over the deep end of the board reach into it, in CSS pixels: the matchup line, and the caption or
 // the button down to the explanation under it (.matchup, .caption and .why in css/app.css).
 const WORDS = 72;
+// Zoomed to the line (on a phone, when it's asked for), the board is this many times as big, centred on the ball, with
+// the ball this far down from the deep end, so the linebackers stay clear of the words there and the backs show.
+const ZOOM = 2, BALL_AT = 0.57;
 
 export class Board {
   constructor(canvas) {
@@ -27,6 +30,7 @@ export class Board {
     this.spotAll = null; // or the men, where it names more than one (the blitzers)
     this.drawn = null; // where each player's label went in the last frame, by player: [x, y] (see labelSpots())
     this.mark = null; // what's written at the spot when the whistle blows: { text, big, win } (set by js/app.js)
+    this.zoomU = 0; // how far zoomed to the line, 0 to 1 (js/app.js eases it in and out: see frame())
     this.still = matchMedia('(prefers-reduced-motion: reduce)');
     this.colors = {};
     this.grain = null;
@@ -75,6 +79,7 @@ export class Board {
   setPlay(play, t = 0) {
     this.play = play; this.t = t;
     this.camTrack = play ? camera(play, this.rangeY) : null;
+    this.zoomTrack = play ? zoomCamera(play, this.w / (this.k0 * ZOOM), this.h / (this.k0 * ZOOM)) : null;
     this.pull = play ? this.pullTop() : null;
   }
 
@@ -104,6 +109,8 @@ export class Board {
   // field in the middle of the board (this.ox) when it's narrower than the board. It follows the ball; at the whistle
   // of a play that ended past the line, it eases back over half a second to take in the whole play (see pullTop()),
   // or with reduced motion asked for, goes there at once. Scrubbed back before the whistle, it's following again.
+  // Zoomed to the line, it's twice as big, on the ball (see zoomCamera()), and stays on it at the whistle; part way
+  // in or out, the view is part way from one to the other.
   frame(t) {
     let bottom = Y_LOW + this.cam(t), top = bottom + this.rangeY;
     if (this.pull !== null && t >= this.play.result.t - 1e-6) {
@@ -111,9 +118,19 @@ export class Board {
       bottom += (Y_LOW - bottom) * u;
       top += (this.pull - top) * u;
     }
+    let k = this.h / (top - bottom), ox = (this.w - W_YDS * k) / 2;
+    if (this.zoomU > 0 && this.zoomTrack) {
+      const { i, u } = this.at(t), Z = this.zoomTrack, at = a => a[i] + ((a[i + 1] ?? a[i]) - a[i]) * u;
+      const kz = this.k0 * ZOOM, topz = at(Z.y) + this.h * BALL_AT / kz;
+      const oxz = Math.min(0, Math.max(this.w - W_YDS * kz, this.w / 2 - (at(Z.x) + W_YDS / 2) * kz)); // the field across the board
+      // the view as a box in yards, part way from one camera's to the other's
+      const z = this.zoomU, mix = (a, b) => a + (b - a) * z;
+      const left = mix(-ox / k, -oxz / kz), tp = mix(top, topz), bt = mix(bottom, topz - this.h / kz);
+      top = tp; k = this.h / (tp - bt); ox = -left * k;
+    }
     this.top = top;
-    this.k = this.h / (top - bottom);
-    this.ox = (this.w - W_YDS * this.k) / 2;
+    this.k = k;
+    this.ox = ox;
   }
 
   // Where the camera pulls back to at the whistle, the yard at the top of the view, or null where it stays. Once a
@@ -631,6 +648,21 @@ export class Board {
 
 // Easing in and out, for t from 0 to 1.
 const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+// Zoomed to the line, where the view is centred, frame by frame ({ x, y } in yards), for a view w by h yards: on the
+// ball before the snap, and then the ball can move about the middle of the view, a sixth of the view's width to each
+// side and an eighth of its height up or down, before the view follows it, quickly enough to keep a thrown ball in
+// sight.
+function zoomCamera(play, w, h) {
+  const F = play.frames, x = new Float32Array(F.length), y = new Float32Array(F.length);
+  let cx = F[0].ball[0], cy = F[0].ball[1];
+  F.forEach((f, n) => {
+    const [bx, by] = f.ball, wx = Math.max(bx - w / 6, Math.min(bx + w / 6, cx)), wy = Math.max(by - h / 8, Math.min(by + h / 8, cy));
+    cx += (wx - cx) * 0.3; cy += (wy - cy) * 0.3;
+    x[n] = cx; y[n] = cy;
+  });
+  return { x, y };
+}
 
 // Follow a long play down the field: the view slides up when the ball gets near the top.
 function camera(play, rangeY) {

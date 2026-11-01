@@ -259,6 +259,31 @@ button:disabled { cursor: default; }
 @keyframes why-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .why { animation: none; } }
 
+/* Zoom to the line: on a narrow board only, in the corner at the backfield's end, away from the words, under the
+   player's card if that's at this end. A magnifier with a plus to zoom in, a minus once it has. */
+.zoom {
+  display: none;
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+  color: var(--ink);
+  box-shadow: 0 4px 12px -8px rgba(0, 0, 0, .55);
+  place-items: center;
+}
+.narrow .zoom { display: grid; }
+.flipped .zoom { bottom: auto; top: 8px; }
+/* 44 px to tap */
+.zoom::before { content: ''; position: absolute; inset: -6px; }
+.zoom svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.zoom[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.zoom[aria-pressed="true"] .zoom-in { display: none; }
+
 .who {
   position: absolute;
   left: 8px;
@@ -612,7 +637,7 @@ button:disabled { cursor: default; }
 /* Forced colours (Windows High Contrast) replace every background, and with them the only sign of what's picked: the
    picked chip, side, speed and the labels toggle take the system's highlight colours, and Snap keeps an outline. */
 @media (forced-colors: active) {
-  .side-pick button[aria-checked="true"], .seg button[aria-checked="true"], .chip[aria-checked="true"], .tool.toggle[aria-pressed="true"], .tool.toggle[aria-expanded="true"] {
+  .side-pick button[aria-checked="true"], .seg button[aria-checked="true"], .chip[aria-checked="true"], .tool.toggle[aria-pressed="true"], .tool.toggle[aria-expanded="true"], .zoom[aria-pressed="true"] {
     background: SelectedItem;
     color: SelectedItemText;
     border: 1px solid SelectedItem;

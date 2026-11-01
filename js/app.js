@@ -25,6 +25,7 @@ const state = {
   auto: true,
   labels: true,
   speed: 1,
+  zoom: false, // zoomed to the line, on a narrow board (not kept: each visit starts with the whole field)
   seed: newSeed(),
   linked: false, // showing a shared play: both calls, until the first change
   seen: false, // the other coach's call has been out since he picked it: a snap showed it
@@ -437,6 +438,25 @@ $('scrub').addEventListener('input', e => {
 });
 for (const b of document.querySelectorAll('[data-speed]')) b.addEventListener('click', () => { state.speed = +b.dataset.speed; save(); syncTransport(); });
 $('labels').addEventListener('click', () => { state.labels = !state.labels; board.labels = state.labels; save(); syncTransport(); draw(); });
+// Zoom to the line, on a narrow board: twice as big, on the ball, so the linemen and their labels can be told apart.
+// The magnifier again zooms back out. It eases in and out over a third of a second, or at once with reduced motion
+// asked for; tapping and the drawn-up play work the same zoomed in.
+$('zoom').addEventListener('click', () => { state.zoom = !state.zoom; syncZoom(true); });
+let zoomRaf = 0;
+function syncZoom(ease = false) {
+  const to = state.zoom && narrow() ? 1 : 0, from = board.zoomU, t0 = performance.now();
+  $('zoom').setAttribute('aria-pressed', String(state.zoom));
+  cancelAnimationFrame(zoomRaf);
+  const step = now => {
+    const u = !ease || board.still.matches ? 1 : Math.min(1, (now - t0) / 330);
+    board.zoomU = from + (to - from) * (u < 0.5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2);
+    if (state.phase !== 'playing') draw(); // (a play running draws it every frame anyway)
+    if (u < 1) zoomRaf = requestAnimationFrame(step);
+    else if (!$('who').hidden) placeWho(true);
+  };
+  step(t0);
+}
+
 // Key: how to read the board, in a card just under the board on a phone (where the board stays at the top, so the two
 // are on the screen together) and at the top of the column beside it on a computer. Key again, or its ×, puts it away.
 $('keyOpen').addEventListener('click', () => { if ($('key').hidden) openKey(); else closeKey(); });
@@ -1416,7 +1436,7 @@ const BOARD_KEY = [
   ['Rings', 'As the play runs, a dashed ring in the bright colour is round the man the words on the board are about. A thin ring is round the player you tapped.', 'rings'],
   ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.', 'trail'],
   ['Dotted line from the quarterback', 'The throw: from where the ball left his hand to where it came down.', 'throw'],
-  ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play. After a play that went past the line, the board pulls back to show all of it, from the backfield to the spot.', 'whistle'],
+  ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play. After a play that went past the line, the board pulls back to show all of it, from the backfield to the spot, unless it\'s zoomed to the line.', 'whistle'],
 ];
 function keyList() {
   return `<dl class="key-list">${BOARD_KEY.map(([term, words, art]) => `<div class="key-row"><dt><span class="key-art" aria-hidden="true">${keyArt(art)}</span>${esc(term)}</dt><dd>${esc(words)}</dd></div>`).join('')}</dl>`;
@@ -1505,6 +1525,7 @@ const fit = () => {
   document.documentElement.style.setProperty('--stage-h', `${document.querySelector('.stage').offsetHeight}px`);
   board.resize();
   $('board').parentElement.classList.toggle('narrow', board.w < 620);
+  syncZoom(); // only on a narrow board
   draw();
   placeWhy();
   if (!$('who').hidden) { syncMore(); placeWho(true); } // placed again for the board's new size

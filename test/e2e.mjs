@@ -1367,6 +1367,73 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// Zoom to the line, on a phone: off until it's asked for, with a magnifier in the corner at the backfield's end (the
+// top when calling the defense turns the board around), and none on a computer. Zoomed in, the board is twice as big,
+// centred on the ball, so the linemen are about 19 px apart rather than 10, and a tap still finds the man under the
+// finger. Through the play the view follows the ball, so it never leaves the board, deep passes and long runs too. The
+// magnifier again zooms back out, and a reload starts with the whole field.
+{
+  const p = await phone();
+  const look = () => p.evaluate(() => {
+    const { board, state } = window.chalkTalk, z = document.getElementById('zoom'), b = z.getBoundingClientRect(), cv = board.cv.getBoundingClientRect();
+    board.render();
+    const at = label => { const q = state.play.players.find(x => x.label === label), w = board.pos(board.t, q.i); return [board.sx(w.x), board.sy(w.y)]; };
+    const ball = board.ballAt(board.t);
+    return { pressed: z.getAttribute('aria-pressed'), shown: b.width > 0, corner: [Math.round(cv.right - b.right), Math.round(cv.bottom - b.bottom), Math.round(b.top - cv.top)],
+      u: board.zoomU, k: board.k, k0: board.k0, w: board.w, h: board.h, gap: Math.hypot(at('LG')[0] - at('C')[0], at('LG')[1] - at('C')[1]), ball: [board.sx(ball[0]), board.sy(ball[1])], c: at('C') };
+  });
+  const out = await look();
+  assert.deepEqual([out.pressed, out.shown, out.u], ['false', true, 0], 'on a phone the magnifier isn\'t there, or the board starts zoomed');
+  assert.ok(out.corner[0] < 12 && out.corner[1] < 12, `the magnifier isn't in the bottom right corner: ${out.corner}`);
+  assert.ok(Math.abs(out.k - out.k0) < 1e-6 && out.gap < 12, `unzoomed, the linemen are ${out.gap.toFixed(1)} px apart`);
+  await p.click('#zoom');
+  await p.waitForFunction(() => window.chalkTalk.board.zoomU === 1, null, { timeout: 3000 });
+  const zoomed = await look();
+  assert.equal(zoomed.pressed, 'true');
+  assert.ok(Math.abs(zoomed.k - 2 * zoomed.k0) < 1e-6, `zoomed, the board is ${(zoomed.k / zoomed.k0).toFixed(2)} times as big`);
+  assert.ok(zoomed.gap > 17 && zoomed.gap < 22, `zoomed, the linemen are ${zoomed.gap.toFixed(1)} px apart`);
+  assert.ok(Math.abs(zoomed.ball[0] - zoomed.w / 2) < 2 && Math.abs(zoomed.ball[1] - 0.57 * zoomed.h) < 2, `zoomed, the ball is at ${zoomed.ball.map(Math.round)} on a ${zoomed.w}x${Math.round(zoomed.h)} board`);
+  // a tap on the center, zoomed in, opens his card
+  const c = await p.evaluate(([x, y]) => { const r = window.chalkTalk.board.cv.getBoundingClientRect(); return [r.left + x, r.top + y]; }, zoomed.c);
+  await p.mouse.click(c[0], c[1]);
+  assert.match(await p.textContent('#whoPos'), /^C · Center/, 'a tap on the center, zoomed in, didn\'t open his card');
+  // the ball stays on the board through the play, on deep passes and long runs, calling either side
+  const lost = await p.evaluate(() => {
+    const { board, state, lineUp, simulate } = window.chalkTalk, out = [];
+    const calls = [['O', 'doubles', 'verts', 'c2'], ['O', 'single', 'oz', 'c0'], ['D', 'trips', 'pa', 'c3'], ['O', 'iform', 'power', 'c1'], ['D', 'single', 'smash', 'c2']];
+    for (const [side, formation, play, coverage] of calls) for (let seed = 1; seed <= 12; seed++) {
+      board.flip = side === 'D';
+      board.setPlay(simulate({ formation, play, flip: false, front: 'over', coverage, pressure: 'four' }, seed));
+      const F = board.play.frames;
+      for (const f of F) {
+        board.frame(f.t);
+        const x = board.sx(f.ball[0]), y = board.sy(f.ball[1]);
+        if (x < 0 || x > board.w || y < 0 || y > board.h) { out.push(`${side} ${formation} ${play} ${coverage} seed ${seed} at ${f.t.toFixed(2)} s: ${Math.round(x)}, ${Math.round(y)}`); break; }
+      }
+    }
+    board.flip = state.side === 'D';
+    lineUp();
+    return out;
+  });
+  assert.deepEqual(lost, [], 'zoomed in, the ball left the board');
+  await p.click('#zoom');
+  await p.waitForFunction(() => window.chalkTalk.board.zoomU === 0, null, { timeout: 3000 });
+  const back = await look();
+  assert.ok(back.pressed === 'false' && Math.abs(back.k - back.k0) < 1e-6, 'the magnifier again didn\'t zoom back out');
+  // calling the defense, it's at the top; a reload starts unzoomed; a computer has none
+  await p.click('#zoom');
+  await p.click('[data-side="D"]');
+  const flipped = await look();
+  assert.ok(flipped.corner[0] < 12 && flipped.corner[2] < 12, `calling the defense, the magnifier isn't in the top right corner: ${flipped.corner}`);
+  assert.equal(flipped.pressed, 'true', 'calling the other side zoomed back out');
+  await p.reload();
+  assert.deepEqual((await look()).pressed, 'false', 'a reload started zoomed in');
+  await p.setViewportSize({ width: 1280, height: 800 });
+  await p.waitForFunction(() => window.chalkTalk.board.w > 700);
+  assert.equal((await look()).shown, false, 'a computer has the magnifier');
+  await p.context().close();
+}
+
 // How to read the board has a drawing of each mark, in the board's own colours in both looks (and on the chalkboard,
 // its chalk dust), with rows for the line of scrimmage and the ball. It's in the playbook, and Key, under the board,
 // opens it in a card: on a phone just under the board, which stays at the top of the screen, and on a computer at the
