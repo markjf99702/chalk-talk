@@ -306,17 +306,22 @@ test('coverages put the right number deep and the right number rushing', () => {
 });
 
 test('over many snaps the numbers look like football', () => {
+  // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, around 60% complete, a sack on about
+  // one dropback in thirty. From twelve start seeds (77 + k * 7919) this recipe gives 3.80-4.90 yards a carry, 57-61%
+  // complete, sacks on 2.6-4.4% of dropbacks and interceptions on 2.0-3.5% of throws; at 700 snaps a carry ranged
+  // from 3.1 to 6.1 yards.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
-  const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0 };
-  for (let k = 0; k < 700; k++) {
+  const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
+  for (let k = 0; k < 2100; k++) {
     const pl = pick(PLAYS);
     const r = simulate({ formation: pick(FORMATIONS).id, play: pl.id, front: pick(FRONTS).id, coverage: pick(COVERAGES).id, pressure: k % 4 ? 'four' : 'blitz' }, seed).result;
     if (pl.type === 'run') { run.n++; run.y += r.yards; }
-    else { pass.n++; if (r.kind === 'sack') pass.sack++; else pass.att++; if (r.kind === 'catch') pass.comp++; }
+    else { pass.n++; if (r.kind === 'sack') pass.sack++; else pass.att++; if (r.kind === 'catch') pass.comp++; if (r.kind === 'int') pass.int++; }
   }
-  const ypc = run.y / run.n, comp = pass.comp / pass.att, sack = pass.sack / pass.n;
-  assert.ok(ypc > 2.5 && ypc < 6, `yards a carry ${ypc.toFixed(2)}`);
-  assert.ok(comp > 0.45 && comp < 0.78, `completion rate ${comp.toFixed(2)}`);
-  assert.ok(sack > 0.015 && sack < 0.14, `sack rate ${sack.toFixed(3)}`);
+  const ypc = run.y / run.n, comp = pass.comp / pass.att, sack = pass.sack / pass.n, int = pass.int / pass.att;
+  assert.ok(ypc > 3.3 && ypc < 5.3, `yards a carry ${ypc.toFixed(2)}`);
+  assert.ok(comp > 0.52 && comp < 0.66, `completion rate ${comp.toFixed(3)}`);
+  assert.ok(sack > 0.02 && sack < 0.06, `sack rate ${sack.toFixed(3)}`);
+  assert.ok(int > 0.01 && int < 0.05, `interception rate ${int.toFixed(3)}`);
 });
