@@ -408,6 +408,24 @@ test('the Cover 2 corner stays in the flat: he lets a slant go inside and widens
   assert.ok(n > 60 && outside / n > 0.5, `the corner is outside the slant 0.3 s after the throw on ${outside} of ${n} looks`);
 });
 
+test('against a quick drop, a deep corner stops backing up once the quarterback has set up', () => {
+  // Slant-Flat against Cover 3 and Cover 4, 64 looks each: from the moment the quarterback is set to when the ball gets
+  // there, the corners in the deep zones back up 0.7 (Cover 3) and 0.2 yards (Cover 4) on average. When they kept
+  // backpedaling until the ball was in the air, 3.7 and 2.3, and the slant ran on under them.
+  let seed = 1;
+  for (const coverage of ['c3', 'c4']) {
+    let n = 0, back = 0;
+    for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+      const call = { formation: fm.id, play: 'slants', front: fr.id, coverage, pressure, flip };
+      const r = simulate(call, seed), S = prepare(call, seed); seed++;
+      const thrown = r.frames.findIndex(f => f.air), there = r.frames.findIndex((f, k) => k > thrown && !f.air), set = r.frames.findIndex(f => f.t >= S.readAt + 0.1);
+      if (thrown < 0) continue;
+      for (const cb of S.CB) { n++; back += r.frames[there].xy[2 * cb.i + 1] - r.frames[set].xy[2 * cb.i + 1]; }
+    }
+    assert.ok(back / n < 1.5, `${coverage}: the deep corners back up ${(back / n).toFixed(1)} yards after the quarterback sets`);
+  }
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);

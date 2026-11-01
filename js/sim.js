@@ -1052,6 +1052,9 @@ function zone(S, d) {
     const r = mine[0];
     if (r && r.y > z.at[1] - 7) { tx = clamp(r.x * 0.55 + tx * 0.45, zx0 - 1, zx1 + 1); ty = Math.max(z.at[1], r.y + 3.5); }
     else if (S.look && S.look.x > zx0 && S.look.x < zx1) tx = tx * 0.7 + S.look.x * 0.3;
+    // A quick drop is the sign of a quick throw: once the quarterback has set up, a deep defender with nobody coming
+    // at him stops backing up and sits, ready to drive on the ball.
+    if (S.play.drop === 'quick' && t > S.readAt && !(r && r.y > d.y - 6)) ty = Math.min(ty, d.y);
     d.ts = d.y < ty - 2 ? d.top * 0.78 : d.top * 0.9;
   } else {
     // A flat defender (the Cover 2 corner) stays in the flat: he plays the man coming out into it before one breaking
