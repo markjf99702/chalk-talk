@@ -559,7 +559,7 @@ function arrive(S) {
   const b = S.ball, R = S.R;
   const r = b.target >= 0 ? S.P[b.target] : null;
   const P = { x: b.tx, y: b.ty };
-  if (!r) { b.state = 'dead'; ev(S, 'away', 'It lands out of bounds. Incomplete.'); return finish(S, 'throwaway'); }
+  if (!r) { b.state = 'dead'; if (S.awayTo) ev(S, 'away', 'It hits the ground. Incomplete.', { who: S.awayTo.i }); else ev(S, 'away', 'It lands out of bounds. Incomplete.'); return finish(S, 'throwaway'); }
   if (Math.abs(P.x) > SIDELINE) { b.state = 'dead'; ev(S, 'inc', `Thrown out of bounds, out of ${name(S, r)}'s reach. Incomplete.`, { who: r.i }); return finish(S, 'incomplete'); }
   const rd = dist(r, P);
   let near = null, nd = 99;
@@ -716,7 +716,7 @@ function qb(S, pl) {
   for (const d of S.D) if (d.eng < 0 && d.job.kind === 'rush') { const dd = dist(d, pl); if (dd < rd) { rd = dd; rn = d; } }
   if (rn && rd < 3 && t > 0.6) { const [ux] = unit(pl.x - rn.x, pl.y - rn.y); pl.tx = pl.x + ux * 2; pl.ty = pl.y + 0.3; pl.ts = 2; }
   if (t < S.readAt) {
-    if (rd < 1.5 && t > 0.5) hurry(S, pl);
+    if (rd < 1.5 && t > 0.5) hurry(S, pl, false);
     return;
   }
   if (S.play.drop === 'screen') {
@@ -748,7 +748,7 @@ function qb(S, pl) {
     if (best && best.w > 0.3) return throwTo(S, best.r, best.P, best.tf, 'after nothing else came open');
     if (t > S.hold) return throwAway(S, pl);
   }
-  if (rd < 1.5) hurry(S, pl);
+  if (rd < 2.2) hurry(S, pl, rd);
 }
 
 // Why he threw to read k: the reads before it are counted, not listed, so the caption stays short ("read 4, with the
@@ -777,19 +777,44 @@ function bestWindow(S) {
   return best;
 }
 
-function hurry(S, pl) {
+// A rusher closing in on him. Within about two yards, a quarter of the time each twentieth of a second he feels him in
+// time to get rid of it: to a man open, or, with nobody open, he throws it away. Within a step and a half he also
+// throws to a man open whenever he sees one. rd (how far off the rusher is) is false while he's still dropping back:
+// then only a man open, or now and then a throwaway.
+function hurry(S, pl, rd) {
   const best = bestWindow(S);
-  if (best && best.w > 0.9 + S.R.normal() * 0.6) return throwTo(S, best.r, best.P, best.tf, 'under pressure');
-  if (S.R.chance(0.025)) return throwAway(S, pl);
+  const open = best && best.w > 0.9 + S.R.normal() * 0.6;
+  if (rd === false || rd < 1.5) {
+    if (open) return throwTo(S, best.r, best.P, best.tf, 'under pressure');
+    if (S.R.chance(0.025)) return throwAway(S, pl);
+    if (rd === false) return;
+  }
+  if (!S.R.chance(0.25)) return;
+  if (open) return throwTo(S, best.r, best.P, best.tf, 'under pressure');
+  return throwAway(S, pl);
 }
 
+// Thrown away: a throw from the pocket has to go in the direction and vicinity of an eligible receiver, or it's
+// intentional grounding (NFL rule 8-2-1). So it goes to the receiver nearest the sideline on his side of the field:
+// out of bounds past him if he's near the sideline, or into the ground just in front of him, where nobody can catch
+// it.
 function throwAway(S, pl) {
   const sd = pl.x >= 0 ? 1 : -1;
-  const P = { x: sd * (SIDELINE + 3), y: Math.max(pl.y + 8, 4) };
+  const outs = S.O.filter(r => r.job.kind === 'route');
+  const r = outs.filter(r => Math.sign(r.x) === sd).sort((a, b) => Math.abs(b.x) - Math.abs(a.x))[0] || outs.sort((a, b) => Math.abs(b.x) - Math.abs(a.x))[0];
+  let P = { x: sd * (SIDELINE + 3), y: Math.max(pl.y + 8, 4) };
+  const out = r && Math.abs(r.x) > SIDELINE - 6;
+  // Where he'll be when it gets there (twice: how long it takes depends on where it goes).
+  if (r) for (let k = 0, tf = 0.8; k < 2; k++) {
+    const at = predict(r, tf), [ux, uy] = unit(at.x - pl.x, at.y - pl.y);
+    P = out ? { x: (Math.sign(r.x) || sd) * (SIDELINE + 2), y: Math.max(at.y, 1) } : { x: at.x - ux * 1.5, y: at.y - uy * 1.5 };
+    const dd = hyp(P.x - pl.x, P.y - pl.y); tf = 0.1 + dd / ballSpeed(dd);
+  }
   const d = hyp(P.x - pl.x, P.y - pl.y);
   S.ball.target = -1;
+  S.awayTo = r && !out ? r : null;
   throwTo(S, null, P, 0.1 + d / ballSpeed(d), '');
-  ev(S, 'away', `${cap(name(S, pl, true))} throws it away.`, { who: pl.i });
+  ev(S, 'away', `${cap(name(S, pl, true))} throws it away${!r ? '' : out ? `, out of bounds past ${name(S, r)}` : `, into the ground in front of ${name(S, r)}`}.`, { who: pl.i });
 }
 
 // Where the receiver will be when the ball gets there, and how close anyone else can get by then.

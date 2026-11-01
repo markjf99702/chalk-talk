@@ -474,6 +474,29 @@ test('a draw against zone coverage is stopped short some of the time: pass rushe
   assert.ok(won / n < 0.78, `${won} of ${n} draws against zone coverage gained 4 yards or more`);
 });
 
+test('with a rusher closing in and nobody open, the quarterback throws it away, toward a receiver', () => {
+  // Smash from Singleback against Cover 2 rushing four: the tight ends' corner routes rarely come open and the back's
+  // check-down is the last read, so a rusher often gets there first. 128 dropbacks: 19 sacks now; 52 when he threw it
+  // away only once a rusher had hold of him.
+  let seed = 1, sacks = 0;
+  for (let k = 0; k < 32; k++) for (const fr of FRONTS) if (simulate({ formation: 'single', play: 'smash', front: fr.id, coverage: 'c2', pressure: 'four', flip: k % 2 === 1 }, seed++).result.kind === 'sack') sacks++;
+  assert.ok(sacks < 128 / 3, `Smash from Singleback against Cover 2: sacked on ${sacks} of 128 dropbacks`);
+  // A throwaway from the pocket goes in the direction and vicinity of a receiver (NFL rule 8-2-1, intentional
+  // grounding): over 1,280 dropbacks every one comes down within 8 yards of one. Thrown 3 yards out of bounds at the
+  // quarterback's sideline, as they were, most came down 10 to 30 yards from anybody.
+  seed = 1;
+  let n = 0;
+  for (let k = 0; k < 2; k++) for (const fm of FORMATIONS) for (const play of ['verts', 'smash', 'mesh', 'pa']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    const r = simulate({ formation: fm.id, play, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 }, seed++);
+    if (r.result.kind !== 'throwaway') continue;
+    n++;
+    const f = r.frames.filter(f => f.air).at(-1);
+    const near = Math.min(...r.players.filter(p => p.team === 'O' && p.cls !== 'qb' && p.cls !== 'ol').map(p => Math.hypot(f.xy[2 * p.i] - f.ball[0], f.xy[2 * p.i + 1] - f.ball[1])));
+    assert.ok(near < 8.5, `${JSON.stringify(r.call)} seed ${seed - 1}: thrown away ${near.toFixed(1)} yards from the nearest receiver`);
+  }
+  assert.ok(n >= 5, `${n} throwaways`);
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);
