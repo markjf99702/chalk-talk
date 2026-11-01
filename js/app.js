@@ -133,6 +133,7 @@ function lineUp(keep = false) {
   state.phase = 'pre';
   state.t = 0;
   board.setPlay(state.play);
+  board.mark = endMark(state.play.result);
   board.t = 0;
   board.selected = -1;
   board.spot = -1;
@@ -893,12 +894,23 @@ const success = res => (res.kind === 'run' || res.kind === 'catch') && gained(re
 // The verdict over the headline, and which side's colour it's in. A big play is a run of 10 yards or more or a catch of
 // 20 or more (see "Big play" in the playbook), and a gain short of 4 yards counts for the defense, which looks like a
 // mistake unless it says why.
+const bigPlay = res => success(res) && gained(res) >= (res.kind === 'run' ? 10 : 20);
 function kicker(res) {
   const n = gained(res), carried = res.kind === 'run' || res.kind === 'catch';
   if (res.kind === 'int') return ['A takeaway for the defense', 'D'];
-  if (success(res)) return [n >= (res.kind === 'run' ? 10 : 20) ? 'A big play for the offense' : 'A win for the offense', 'O'];
+  if (success(res)) return [bigPlay(res) ? 'A big play for the offense' : 'A win for the offense', 'O'];
   if (carried && n >= 0) return ['A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'];
   return ['A win for the defense', 'D'];
+}
+
+// What's written in marker on the board at the whistle (see Board.endMark()), the yards as the headline counts them:
+// "+17", "−3", "Sack −7", "Incomplete", "Picked off". A big play's is written bigger, and it's in the colour of the
+// side that won the play, as the verdict over the headline is.
+function endMark(res) {
+  const n = gained(res);
+  const text = { incomplete: 'Incomplete', throwaway: 'Thrown away', int: 'Picked off' }[res.kind]
+    || (res.kind === 'sack' ? (n ? `Sack −${-n}` : 'Sack') : res.long ? `${Math.min(n, 60)}+` : n > 0 ? `+${n}` : n < 0 ? `−${-n}` : 'No gain');
+  return { text, big: bigPlay(res), win: kicker(res)[1] };
 }
 
 function headline(res) {
@@ -1274,6 +1286,8 @@ function playbook() {
     ['Dotted line to a receiver', 'Man-to-man coverage on that receiver.'],
     ['Arrows from the defense', 'Pass rush. A blitzer\'s arrow is drawn thicker, with a double head, in the bright colour.'],
     ['Trails', 'Once the play is running, each man leaves a trail of where he went. The drawn-up play stays faintly underneath, so you can see where it broke down.'],
+    ['Dotted line from the quarterback', 'The throw: from where the ball left his hand to where it came down.'],
+    ['At the whistle', 'A line across the field where the ball is spotted, with the gain written beside it ("+17", "Sack −7"), or "Incomplete" by an × where the pass came down. A big play is written bigger. Both are in the colour of the side that won the play.'],
   ]));
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
   // areas in ZONES (js/playbook.js), as the player cards name them.

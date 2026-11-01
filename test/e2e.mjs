@@ -1215,6 +1215,73 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// The end of the play is chalked on the board: at the whistle (not before) the gain is written in marker by the ball,
+// as the headline counts it ("+30", "Sack −7", "Incomplete" by an × where it came down, "Picked off"), bigger for a big
+// play, with a line across the field at the spot of a run, a catch or a sack. The throw leaves a dotted line from his
+// hand to the catch. The drawn-up play fades over the first half second, and the football is a little bigger on a
+// phone than a player's mark would make it.
+{
+  const p = await phone();
+  const seen = await p.evaluate(() => {
+    const { state, board, lineUp, finish } = window.chalkTalk, ctx = board.ctx;
+    const marker = () => { const out = []; const ft = ctx.fillText; ctx.fillText = function (t, x, y) { if (/Marker/.test(ctx.font)) out.push({ t, size: parseFloat(ctx.font.replace(/^\d+ /, '')) }); return ft.apply(this, arguments); }; board.render(); ctx.fillText = ft; return out; };
+    const at = t => { board.t = t; return marker(); };
+    const show = (off, def, seed) => { state.auto = false; Object.assign(state, { off, def, seed }); lineUp(); return state.play; };
+    const out = { kinds: {}, bad: [] };
+    // a catch for 30 yards: nothing written before the whistle, "+30" at it, in big writing
+    let P = show({ formation: 'trips', play: 'smash', flip: false }, { front: 'nickel', coverage: 'c2', pressure: 'four' }, 15);
+    out.before = at(P.result.t - 0.1);
+    out.after = at(board.duration());
+    out.head = (() => { state.t = board.duration(); finish(); return document.getElementById('resHead').textContent; })();
+    // the throw: dotted, from where the ball left his hand to where it was caught
+    const F = P.frames, a = F.findIndex(f => f.air);
+    let b = a; while (F[b + 1].air) b++;
+    const lines = [], poly = board.poly;
+    board.poly = function (pts) { lines.push(pts.map(q => [+q.x.toFixed(2), +q.y.toFixed(2)])); return poly.call(this, pts); };
+    board.t = F[a - 1].t; board.throwLine(); out.throwBefore = lines.length;
+    board.t = board.duration(); board.throwLine(); out.throwAfter = lines.at(-1);
+    board.poly = poly;
+    out.throwWant = [[+F[a - 1].ball[0].toFixed(2), +F[a - 1].ball[1].toFixed(2)], [+F[b + 1].ball[0].toFixed(2), +F[b + 1].ball[1].toFixed(2)]];
+    // the drawn-up play fades over half a second at the snap
+    const alphas = [], asg = board.assignments;
+    board.assignments = function (al) { alphas.push(+al.toFixed(3)); return asg.call(this, al); };
+    for (const t of [0, 0.25, 0.5, 2]) { board.t = t; board.render(); }
+    board.assignments = asg;
+    out.alphas = alphas;
+    // the football, a little bigger than a player's mark on a phone
+    const el = ctx.ellipse, sizes = [];
+    ctx.ellipse = function (x, y, rx) { sizes.push(rx); return el.apply(this, arguments); };
+    board.t = 1; board.ballDraw(); ctx.ellipse = el;
+    out.ball = { rx: Math.max(...sizes), mark: board.radius() };
+    // every kind of ending, over many snaps: what's written, against the headline
+    const PL = ['iz', 'power', 'verts', 'smash', 'flood', 'mesh', 'pa', 'screen'];
+    for (let k = 0; k < 160; k++) {
+      P = show({ formation: ['iform', 'single', 'doubles', 'trips'][k % 4], play: PL[k % PL.length], flip: k % 2 === 1 }, { front: ['over', 'nickel', '34', 'under'][k % 4], coverage: ['c0', 'c1', 'c2', 'c3', 'c4'][k % 5], pressure: k % 3 ? 'four' : 'blitz' }, 300 + k);
+      state.t = board.duration(); finish();
+      const head = document.getElementById('resHead').textContent, w = at(board.duration()).map(x => x.t), res = P.result;
+      const n = head.match(/(\d+)\+? yards?/)?.[1];
+      const want = res.kind === 'incomplete' ? 'Incomplete' : res.kind === 'throwaway' ? 'Thrown away' : res.kind === 'int' ? 'Picked off'
+        : res.kind === 'sack' ? (n ? `Sack −${n}` : 'Sack') : res.long ? `${n}+` : /^Gain/.test(head) ? `+${n}` : /^Loss/.test(head) ? `−${n}` : 'No gain';
+      if (w.length !== 1 || w[0] !== want) out.bad.push(`${head}: wrote ${JSON.stringify(w)}, not "${want}"`);
+      out.kinds[res.kind] = (out.kinds[res.kind] || 0) + 1;
+    }
+    return out;
+  });
+  assert.deepEqual(seen.before, [], 'something is written at the spot before the whistle');
+  assert.equal(seen.head, 'Gain of 30 yards');
+  assert.equal(seen.after.length, 1);
+  assert.equal(seen.after[0].t, '+30');
+  assert.ok(seen.after[0].size >= 18 * 1.4 - 0.01, `a big play's writing is ${seen.after[0].size} px`);
+  assert.equal(seen.throwBefore, 0, 'a throw line before the throw');
+  assert.deepEqual(seen.throwAfter, seen.throwWant, 'the throw line isn\'t from his hand to the catch');
+  assert.deepEqual(seen.alphas, [1, 0.675, 0.35, 0.35], 'the drawn-up play at the snap and after it');
+  assert.ok(seen.ball.rx >= 7 * 0.62 - 0.01 && seen.ball.mark < 7, `on a phone the football is ${seen.ball.rx} px across a half, with a player's mark ${seen.ball.mark}`);
+  assert.deepEqual(seen.bad, [], 'what\'s written at the whistle, against the headline');
+  assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => seen.kinds[k]), `only these endings came up: ${JSON.stringify(seen.kinds)}`);
+  assert.match(await p.evaluate(() => [...document.querySelectorAll('.pb dt')].find(dt => dt.textContent === 'At the whistle').nextElementSibling.textContent), /"Incomplete" by an ×/);
+  await p.context().close();
+}
+
 // A blitzer's arrow is told apart by its shape as well as its colour (WCAG 2.2, 1.4.1 Use of Color): a thicker line and
 // a double head, against one head on every other rusher's.
 {

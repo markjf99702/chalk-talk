@@ -7,6 +7,9 @@ const W_YDS = SIDELINE * 2 + 1.6; // a little room outside each sideline
 // The bottom of the view, behind the offense: the deepest a back or a dropping quarterback goes (about nine yards), and
 // room past that for his label, so it isn't cut off at the edge.
 const Y_LOW = -12;
+// How far the words over the deep end of the board reach into it, in CSS pixels: the matchup line, and the caption or
+// the button down to the explanation under it (.matchup, .caption and .why in css/app.css).
+const WORDS = 72;
 
 export class Board {
   constructor(canvas) {
@@ -23,6 +26,8 @@ export class Board {
     this.spot = -1; // the man the caption names, ringed while nobody is picked out
     this.spotAll = null; // or the men, where it names more than one (the blitzers)
     this.drawn = null; // where each player's label went in the last frame, by player: [x, y] (see labelSpots())
+    this.mark = null; // what's written at the spot when the whistle blows: { text, big, win } (set by js/app.js)
+    this.still = matchMedia('(prefers-reduced-motion: reduce)');
     this.colors = {};
     this.grain = null;
     this.resize();
@@ -98,11 +103,14 @@ export class Board {
     if (!this.play) return;
     this.camY = this.cam(this.t);
     this.field();
-    const pre = this.t <= 0.001;
-    this.assignments(pre ? 1 : 0.35); // after the snap the drawn-up play stays faintly under the trails
-    if (!pre) this.trails();
+    const pre = this.t <= 0.001, over = !pre && this.t >= this.play.result.t - 1e-6;
+    // After the snap the drawn-up play stays faintly under the trails, fading to it over the first half second.
+    this.assignments(pre ? 1 : 1 - 0.65 * Math.min(1, this.t / 0.5));
+    if (!pre) { this.trails(); this.throwLine(); }
+    if (over) this.spotLine();
     this.players(pre);
     this.ballDraw();
+    if (over) this.endMark();
     if (this.grain) {
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
@@ -278,6 +286,95 @@ export class Board {
     ctx.globalAlpha = 1;
   }
 
+  // The throw: a dotted chalk line from where the ball left his hand to where it's got to, and once it's down, to where
+  // it came down. It stays with the trails.
+  throwLine() {
+    const { ctx } = this, F = this.play.frames, a = F.findIndex(f => f.air);
+    if (a < 1) return;
+    const { i } = this.at(this.t);
+    if (i < a) return;
+    let b = a;
+    while (b + 1 < F.length && F[b + 1].air) b++;
+    const from = F[a - 1].ball, to = i > b ? (F[b + 1] || F[b]).ball : this.ballAt(this.t);
+    ctx.save();
+    ctx.globalAlpha = 0.8; ctx.strokeStyle = this.colors.ball; ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1.6, Math.min(2.4, this.k * 0.16));
+    ctx.setLineDash([0.1, Math.max(4, this.k * 0.45)]);
+    this.poly([{ x: from[0], y: from[1] }, { x: to[0], y: to[1] }]);
+    ctx.restore();
+  }
+
+  // The marks at the whistle, how far the play went, in the colour of the side that won it (see endMark()).
+  // How far along they are: drawn on over a quarter of a second, or at once with reduced motion asked for.
+  markIn() { return this.still.matches ? 1 : Math.min(1, (this.t - this.play.result.t) / 0.25); }
+  // Where a run, a catch or a sack ended: a chalk line across the field at the spot, drawn out from the ball.
+  spotLine() {
+    const res = this.play.result;
+    if (!this.mark || !['run', 'catch', 'sack'].includes(res.kind)) return;
+    const { ctx } = this, u = this.markIn(), bx = this.ballAt(this.t)[0];
+    ctx.save();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = this.teamColor(this.mark.win); ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(2, Math.min(3, this.k * 0.2));
+    this.poly([{ x: bx + (-SIDELINE - bx) * u, y: res.yards }, { x: bx + (SIDELINE - bx) * u, y: res.yards }]);
+    ctx.restore();
+  }
+  // The result written in marker beside the ball ("+17", "Sack −7"), beside the defender who picked it off, or beside
+  // a small × where an incomplete pass came down. A big play gets bigger writing. It sits on the spot's line, or just
+  // under it where the words over the deep end of the board would cover it.
+  endMark() {
+    const res = this.play.result, m = this.mark;
+    if (!m) return;
+    const { ctx } = this, F = this.play.frames, r = this.radius(), col = this.teamColor(m.win);
+    let at;
+    if (res.kind === 'int' && res.by >= 0) { const p = this.pos(this.t, res.by); at = [p.x, p.y]; }
+    else if (res.kind === 'incomplete' || res.kind === 'throwaway') {
+      let b = F.length - 1;
+      while (b > 0 && !F[b - 1].air) b--; // the first picture after the ball came down
+      at = F[b].ball;
+    } else at = this.ballAt(this.t);
+    const X = this.sx(at[0]), Y = this.sy(at[1]), alpha = this.markIn();
+    ctx.save();
+    ctx.globalAlpha = alpha; ctx.strokeStyle = ctx.fillStyle = col; ctx.lineCap = 'round';
+    if (res.kind === 'incomplete' || res.kind === 'throwaway') { // a small ×, where it came down (on the board, if it went out)
+      const s = Math.max(3, r * 0.45), x = Math.max(s + 2, Math.min(this.w - s - 2, X));
+      ctx.strokeStyle = this.colors.ball; ctx.lineWidth = Math.max(1.6, r * 0.25);
+      ctx.beginPath(); ctx.moveTo(x - s, Y - s); ctx.lineTo(x + s, Y + s); ctx.moveTo(x + s, Y - s); ctx.lineTo(x - s, Y + s); ctx.stroke();
+    }
+    const fs = Math.max(18, Math.min(24, this.k * 1.4)) * (m.big ? 1.4 : 1); // a 1 in marker needs 18 px to read
+    ctx.font = `400 ${fs}px "Permanent Marker", "Marker Felt", "Comic Sans MS", cursive`;
+    ctx.textBaseline = 'middle';
+    const [x, y] = this.markSpot(X, Y, ctx.measureText(m.text).width, fs);
+    ctx.textAlign = 'left'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 4; ctx.strokeStyle = this.colors.board;
+    ctx.strokeText(m.text, x, y);
+    ctx.fillText(m.text, x, y);
+    ctx.restore();
+  }
+
+  // Where the writing at the whistle goes, its left end and its middle, for a word w wide and fs tall about the point
+  // X, Y: just beside it, sitting on the line through it or just under the line, or else farther along the line,
+  // whichever is nearest to it while clear of every player's mark and label (a run ends in a pile). It keeps off the
+  // words over the deep end of the board (the matchup, and the button down to the explanation) and inside the board.
+  markSpot(X, Y, w, fs) {
+    const r = this.radius(), ls = this.labelSize(), P = this.play.players;
+    const boxes = P.map(p => { const q = this.pos(this.t, p.i), x = this.sx(q.x), y = this.sy(q.y); return { l: x - r - 2, r: x + r + 2, t: y - r - 2, b: y + r + 2 }; });
+    if (this.drawn) P.forEach(p => { const [x, y] = this.drawn[p.i], half = (ls * 0.32 * p.label.length) + 2; boxes.push({ l: x - half, r: x + half, t: y - ls / 2, b: y + ls / 2 }); });
+    const band = this.flip ? [this.h - WORDS, this.h] : [0, WORDS];
+    const clear = (x, y) => x >= 6 && x + w <= this.w - 6 && y - fs / 2 >= 2 && y + fs / 2 <= this.h - 2 && (y + fs / 2 < band[0] || y - fs / 2 > band[1])
+      && !boxes.some(b => x < b.r && x + w > b.l && y - fs * 0.4 < b.b && y + fs * 0.4 > b.t);
+    const gap = r * 1.2 + 4, first = X < this.w * 0.55 ? 1 : -1, tries = [];
+    for (let d = gap; d < this.w; d += 6) for (const sd of [first, -first]) for (const dy of [-0.6, 0.6]) tries.push([sd > 0 ? X + d : X - d - w, Y + dy * fs, d]);
+    const best = tries.find(([x, y]) => clear(x, y));
+    if (best) return best;
+    return [Math.max(6, Math.min(this.w - 6 - w, first > 0 ? X + gap : X - gap - w)), Y - 0.6 * fs];
+  }
+
+  // Where the ball is on the ground at time t: [x, y].
+  ballAt(t) {
+    const { a, b, u } = this.at(t);
+    return [a.ball[0] + (b.ball[0] - a.ball[0]) * u, a.ball[1] + (b.ball[1] - a.ball[1]) * u];
+  }
+
   radius() { return Math.max(5, Math.min(10.5, this.k * 0.62)); }
   // The players' labels: their size, and how far below a player's mark his goes (above it, when it's negative). Offense
   // labels sit on their own side of the ball, defense labels on theirs.
@@ -387,7 +484,7 @@ export class Board {
     const { a, b, u } = this.at(this.t);
     const bx = a.ball[0] + (b.ball[0] - a.ball[0]) * u, by = a.ball[1] + (b.ball[1] - a.ball[1]) * u, bz = a.ball[2] + (b.ball[2] - a.ball[2]) * u;
     const X = this.sx(bx), Y = this.sy(by);
-    const r = this.radius();
+    const r = Math.max(7, this.radius()); // a little bigger than a player's mark would make it on a phone
     const lift = bz * this.k * 0.35;
     if (a.air) { // shadow on the ground
       ctx.globalAlpha = 0.25; ctx.fillStyle = this.colors.line;
