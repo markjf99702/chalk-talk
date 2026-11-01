@@ -7,6 +7,7 @@ import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
+import { DRILLS } from '../js/playbook.js';
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -858,13 +859,14 @@ for (const side of ['O', 'D']) {
   await p.goto(base);
   const where = () => p.evaluate(() => {
     const box = id => document.getElementById(id).getBoundingClientRect(), r = document.getElementById('result');
-    return { first: r.parentElement.firstElementChild.id, after: r.previousElementSibling?.id, shown: !r.hidden, result: box('result').top + scrollY, left: box('result').left, mine: box('mine').top + scrollY, board: document.querySelector('.board-wrap').getBoundingClientRect() };
+    return { first: r.parentElement.firstElementChild.id, after: r.previousElementSibling?.id, shown: !r.hidden, result: box('result').top + scrollY, left: box('result').left, mine: box('mine').top + scrollY, column: box('drills').top + scrollY, board: document.querySelector('.board-wrap').getBoundingClientRect() };
   });
-  const top = (await where()).mine;
+  // (the top of the column is the drills, over your call)
+  const { mine: top, column } = await where();
   await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
   const done = await where();
   assert.ok(done.shown && done.first === 'result', `at 1280 px the result card isn't first in the right-hand column: ${JSON.stringify(done)}`);
-  assert.ok(Math.abs(done.result - top) <= 1 && done.result < done.board.top + 40 && done.left >= done.board.right, `at 1280 px the result card is at ${Math.round(done.left)}, ${Math.round(done.result)} px, not at the top beside the board`);
+  assert.ok(Math.abs(done.result - column) <= 1 && done.result < done.board.top + 40 && done.left >= done.board.right, `at 1280 px the result card is at ${Math.round(done.left)}, ${Math.round(done.result)} px, not at the top beside the board`);
   assert.match(await p.textContent('#why'), /Why →$/, 'the button on the board doesn\'t point across to the result');
   assert.match(await p.textContent('#say'), /beside the board/, 'a screen reader isn\'t told the result is beside the board');
   // picked from the middle of the screen, then from its foot (where the page can't scroll back far enough)
@@ -1969,6 +1971,117 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#snap');
   assert.equal(await p.isVisible('#theirsAsk'), false, 'asked calling the defense');
   assert.match(await p.textContent('#theirsHint'), /^They called: /);
+  await c.close();
+}
+
+// Drills: a button for each above Your call. One takes the other coach's picking over for five snaps: his call is the
+// drill's (his front set to your personnel), hidden until the first snap, with his switch, New look and the question
+// after the snap out of the way. Each snap counts once at the whistle, however often it's watched or scrubbed to the
+// end, and a reload keeps the count. After the fifth the drill says how it went and gives the coach's line, and his
+// picking goes back to how you had it. Run it again starts over; Stop ends it sooner. The run drill is on defense, with
+// a new run from I-Form each snap, and a change of side ends a drill.
+{
+  const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const card = () => p.evaluate(() => ({
+    pressed: [...document.querySelectorAll('#drillChips button')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent),
+    hint: !document.getElementById('drillsHint').hidden,
+    now: document.getElementById('drillNow').hidden ? null : document.getElementById('drillNow').innerText.replace(/\s+/g, ' ').trim(),
+  }));
+  const his = () => p.evaluate(() => ({ auto: window.chalkTalk.state.auto, side: window.chalkTalk.state.side, switch: !document.getElementById('autoSwitch').hidden, newLook: !document.getElementById('theirsLook').hidden, ask: !document.getElementById('askSwitch').hidden }));
+  // A snap played to the whistle, and whether it worked: 4 yards or more for the offense, as the result card counts.
+  const down = () => p.evaluate(() => {
+    const { state, board, snap, finish } = window.chalkTalk;
+    snap(); state.t = board.duration(); finish();
+    const r = state.play.result, n = Math.sign(r.yards) * Math.round(Math.abs(r.yards));
+    return (r.kind === 'run' || r.kind === 'catch') && n >= 4;
+  });
+  assert.deepEqual(await p.$$eval('#drillChips button', b => b.map(x => x.textContent)), DRILLS.map(d => d.name));
+  assert.deepEqual(DRILLS.map(d => d.name), ['Beat Cover 2', 'Beat Cover 3', 'Beat the blitz', 'Stop the run against I-Form']);
+  assert.deepEqual(await card(), { pressed: [], hint: true, now: null });
+  assert.ok(await p.evaluate(() => document.getElementById('drills').compareDocumentPosition(document.getElementById('mine')) & Node.DOCUMENT_POSITION_FOLLOWING), 'the drills are above Your call');
+  await p.click('#drillChips button:text-is("Beat Cover 2")');
+  const D = DRILLS[0];
+  assert.deepEqual(await card(), { pressed: ['Beat Cover 2'], hint: false, now: `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill` });
+  assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false }, 'in a drill');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four' });
+  assert.equal(await p.textContent('#caption'), 'Drill: Beat Cover 2. Call a play, then Snap.');
+  assert.match(await p.textContent('#matchup'), /coverage hidden$/, 'the drill\'s call isn\'t hidden before the first snap');
+  // New personnel: he sets his front to it, and keeps the drill's coverage.
+  await p.getByRole('radio', { name: 'I-Form' }).click();
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'over', coverage: 'c2', pressure: 'four' }, 'against two backs');
+  await p.getByRole('radio', { name: 'Gun Trips' }).click();
+  let ok = 0;
+  for (let k = 1; k <= 2; k++) {
+    if (await down()) ok++;
+    assert.equal(await p.isVisible('#theirsAsk'), false, 'a drill asks what they played');
+    assert.equal((await card()).now, `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. ${k} of 5 snaps: ${ok} gained 4 yards or more. Stop the drill`);
+  }
+  assert.match(await p.textContent('#say'), new RegExp(`Beat Cover 2: ${ok} of 2 snaps so far gained 4 yards or more\\.$`));
+  assert.equal(await p.textContent('#actionsNote'), `Snap again: the next snap of the drill. 2 of 5 snaps so far: ${ok} gained 4 yards or more.`);
+  // Watched again, scrubbed back and to the end again, and reloaded, the same snap counts once.
+  await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = '0'; s.dispatchEvent(new Event('input')); s.value = s.max; s.dispatchEvent(new Event('input')); });
+  await p.evaluate(() => { const { state, board, play, finish } = window.chalkTalk; play(); state.t = board.duration(); finish(); });
+  await p.reload();
+  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. 2 of 5 snaps: ${ok} gained 4 yards or more. Stop the drill`, 'a snap counted twice, or a reload lost the drill');
+  assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false }, 'in a drill after a reload');
+  // A change of play between snaps is part of it: the drill goes on.
+  await p.getByRole('radio', { name: 'Four Verticals' }).click();
+  for (let k = 3; k <= 5; k++) if (await down()) ok++;
+  assert.deepEqual(await card(), { pressed: [], hint: false, now: `Beat Cover 2: ${ok} of 5 gained 4 yards or more. ${D.note} Run it again Done` });
+  assert.deepEqual(await his(), { auto: true, side: 'O', switch: true, newLook: true, ask: true }, 'after the drill, his picking is back');
+  assert.match(await p.textContent('#theirsHint'), /^They called: Nickel, Cover 2, rush four\.$/);
+  assert.equal(await p.textContent('#actionsNote'), `That was the drill's last snap: ${ok} of 5 gained 4 yards or more. The coach's word on it is in Drills. Snap again: the same two calls, played out fresh. New look: the other coach changes his call.`);
+  assert.match(await p.textContent('#say'), new RegExp(`Beat Cover 2: ${ok} of 5 gained 4 yards or more, and the coach has a word on it\\.$`));
+  await down();
+  assert.equal(await p.textContent('#actionsNote'), 'Snap again: the same two calls, played out fresh. New look: the other coach changes his call.', 'a snap after the drill says it was its last');
+  assert.equal((await card()).now?.startsWith(`Beat Cover 2: ${ok} of 5`), true, 'a snap after the drill counted');
+  // Run it again starts over, with the focus on the drill's button; Stop ends it, and Done puts a debrief away.
+  await p.click('#drillNow button:text-is("Run it again")');
+  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill`);
+  assert.equal(await p.evaluate(() => document.activeElement.textContent), 'Beat Cover 2');
+  await p.click('#drillNow button:text-is("Stop the drill")');
+  assert.deepEqual(await card(), { pressed: [], hint: true, now: null });
+  assert.deepEqual(await his(), { auto: true, side: 'O', switch: true, newLook: true, ask: true });
+  // The blitz drill doesn't name its coverage before the first snap.
+  await p.click('#drillChips button:text-is("Beat the blitz")');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def.coverage), 'c0');
+  assert.ok(!(await card()).now.includes('Cover 0'), 'the blitz drill says which coverage');
+  // The run drill: on defense, a run from I-Form each snap, hidden until it's snapped, and another after a change of
+  // your defense.
+  await p.click('#drillChips button:text-is("Stop the run against I-Form")');
+  assert.deepEqual(await his(), { auto: true, side: 'D', switch: false, newLook: false, ask: false });
+  assert.match(await p.textContent('#matchup'), /^I-Form · play hidden/);
+  const runs = new Set(), stops = [];
+  for (let k = 0; k < 5; k++) {
+    const worked = await down();
+    stops.push(!worked);
+    const off = await p.evaluate(() => window.chalkTalk.state.off);
+    assert.equal(off.formation, 'iform');
+    assert.ok(['iz', 'oz', 'power', 'draw'].includes(off.play), `the run drill called ${off.play}`);
+    runs.add(`${off.play} ${off.flip}`);
+    if (k === 1) {
+      assert.match(await p.textContent('#actionsNote'), /^Snap again: the next snap of the drill, a new run\. 2 of 5 snaps so far: [0-2] held under 4 yards\.$/);
+      await p.getByRole('radio', { name: 'Cover 1' }).click();
+      assert.match(await p.textContent('#matchup'), /play hidden/, 'a change of defense in the run drill showed his next run');
+    }
+  }
+  assert.ok(runs.size > 1, `the run drill ran the same run every snap: ${[...runs]}`);
+  assert.equal((await card()).now?.split('.')[0], `Stop the run against I-Form: ${stops.filter(Boolean).length} of 5 held under 4 yards`);
+  // Calling both sides of your own: a drill has him pick while it lasts, and then it's back to both sides. A change of
+  // side ends a drill.
+  await p.click('#drillNow button:text-is("Done")');
+  assert.deepEqual(await card(), { pressed: [], hint: true, now: null });
+  await p.click('#auto');
+  await p.click('#drillChips button:text-is("Beat Cover 3")');
+  assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false });
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), false, 'a drill saved "Let the other coach pick" as on');
+  await p.click('[data-side="D"]');
+  assert.deepEqual(await card(), { pressed: [], hint: true, now: null }, 'a change of side ended the drill');
+  assert.deepEqual(await his(), { auto: false, side: 'D', switch: true, newLook: false, ask: false });
   await c.close();
 }
 

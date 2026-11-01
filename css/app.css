@@ -452,6 +452,18 @@ button:disabled { cursor: default; }
 .ask-verdict:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .ask-streak { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
 .theirs .ask-switch { display: flex; width: fit-content; margin-top: 12px; }
+/* the drills: a button for each, then where the one under way is up to, or how the last one went */
+/* a row of small buttons, so the card under the board on a phone leaves your call close by */
+.drills .chips { margin-top: 8px; }
+.drills .chip { font-size: 14px; padding: 5px 11px; }
+.drill-now { margin-top: 10px; }
+.drill-now p { margin: 0; font-size: 15px; }
+.drill-now p + p { margin-top: 6px; }
+.drill-now b { font-weight: 600; }
+.drill-now .drill-count { color: var(--muted); font-size: 14px; }
+.drill-now .drill-count:has(b) { color: var(--ink); font-size: 15px; }
+.drill-now .actions { margin-top: 10px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
 .result .kicker {
   display: inline-block;

@@ -1,5 +1,5 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS } from './playbook.js';
 import { simulate, prepare, name } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
@@ -85,17 +85,20 @@ function takeQuiz(s) {
 // visit gets a fresh look.
 const PLAY_KEY = 'chalk-talk.v1.play';
 function keepPlay() {
-  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, ask: state.ask, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
+  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, ask: state.ask, drill, drilled, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
 }
 // The kept play, if it's for the calls you have now (after a shared play, say, it isn't).
 function keptPlay() {
   try {
     const k = JSON.parse(sessionStorage.getItem(PLAY_KEY) || 'null'), off = okOff(k?.off), def = okDef(k?.def);
-    if (!off || !def || k.side !== state.side || k.auto !== state.auto || !Number.isInteger(k.seed) || k.seed < 0) return null;
-    if ((!state.auto || state.side === 'O') && !same(off, own.off)) return null;
-    if ((!state.auto || state.side === 'D') && !same(def, own.def)) return null;
+    // A drill under way has the other coach picking, whatever your own switch says (see startDrill()).
+    const drill = okDrill(k?.drill, k?.side), auto = drill ? true : state.auto;
+    if (!off || !def || k.side !== state.side || k.auto !== auto || !Number.isInteger(k.seed) || k.seed < 0) return null;
+    if ((!auto || state.side === 'O') && !same(off, own.off)) return null;
+    if ((!auto || state.side === 'D') && !same(def, own.def)) return null;
     const ask = k.ask && (k.ask.guess === null || COVERAGES.some(c => c.id === k.ask.guess)) ? { guess: k.ask.guess } : null;
-    return { off, def, seed: k.seed, seen: !!k.seen, ask: k.snapped ? ask : null, snapped: !!k.snapped };
+    const done = okDrill(k.drilled), drilled = done?.n === DRILL_SNAPS ? done : null;
+    return { off, def, seed: k.seed, seen: !!k.seen, ask: k.snapped ? ask : null, drill, drilled, snapped: !!k.snapped };
   } catch { return null; }
 }
 
@@ -115,6 +118,7 @@ const RUN_SHARE = { iform: 0.6, single: 0.55, trips: 0.375, doubles: 0.25 };
 function rollTheirs() {
   state.seen = false;
   state.ask = null;
+  if (drill) { drillCall(); return; }
   const R = rng(newSeed());
   const w = list => { let x = R() * list.reduce((a, [, p]) => a + p, 0); for (const [v, p] of list) { if ((x -= p) <= 0) return v; } return list[0][0]; };
   const theirs = () => (state.side === 'O'
@@ -207,7 +211,7 @@ function play() {
   // His call is out now, and stays out until he picks again, unless you're to say what he played first: then it's
   // out once you have (see answer()). For a replay the status line is cleared, so that its end is said again.
   if (snapped && state.auto) {
-    if (!state.seen && state.side === 'O' && state.quiz) state.ask = { guess: null };
+    if (!state.seen && state.side === 'O' && state.quiz && !drill) state.ask = { guess: null };
     else if (state.ask?.guess) state.ask = null; // answered last snap: this one shows his call as usual
     state.seen = true;
     say(asking() ? 'What did they play? Name their coverage, in their call.' : `They called: ${theirSummary()}.`);
@@ -282,6 +286,7 @@ const HOLD = 1300; // ms
 function finish({ hold = false } = {}) {
   state.phase = 'done';
   whistled = state.play;
+  tallyDrill();
   cancelAnimationFrame(raf);
   syncTransport();
   showResult();
@@ -296,7 +301,8 @@ function finish({ hold = false } = {}) {
 function say(text) { $('say').textContent = text; }
 function sayResult() {
   const where = resultBeside() ? 'beside' : 'under';
-  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. ${asking() ? `Name their coverage ${where} the board, and the coach's note says why.` : `Why it worked is ${where} the board.`}`);
+  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. ${asking() ? `Name their coverage ${where} the board, and the coach's note says why.` : `Why it worked is ${where} the board.`}${drillNews ? ` ${drillNews}` : ''}`);
+  drillNews = '';
 }
 const resultBeside = () => $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
 
@@ -351,6 +357,7 @@ function toBoard() { if (!stuckBoard()) $('board').scrollIntoView({ block: 'near
 function snap() {
   if (state.phase !== 'pre') { // Snap again: same calls, a new roll of the dice
     state.seed = newSeed();
+    if (drill && state.side === 'D') rollTheirs(); // in the run drill, a new run each snap
     // Someone reading the result card keeps his place on the page: the last result stays, faded, until this one's is
     // in. (A change of call, New look or a shared link takes it away: those are up at the choosers.)
     lineUp(!$('result').hidden);
@@ -468,7 +475,7 @@ $('scrub').addEventListener('input', e => {
   const F = state.play.frames;
   state.t = F[Math.max(0, Math.min(F.length - 1, Math.round(+e.target.value)))].t;
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
-  if (state.phase === 'done') whistled = state.play;
+  if (state.phase === 'done') { whistled = state.play; tallyDrill(); }
   caption(); draw(); syncTransport();
   if (state.phase === 'done') { showResult(); showWhy(); sayResult(); } else $('why').hidden = true;
 });
@@ -857,6 +864,7 @@ function afterChange() {
   const held = wide.matches && !$('result').hidden ? $('mine').getBoundingClientRect().top : null;
   state.linked = false;
   linkNote = '';
+  if (drill && state.side === 'D' && state.seen) rollTheirs(); // the run drill: a new run, hidden until the snap
   keepOwn();
   save();
   state.seed = newSeed();
@@ -878,10 +886,13 @@ function renderChoosers() {
   if (!state.auto) (state.side === 'O' ? defenseChooser : offenseChooser)(theirs, false);
   for (const b of document.querySelectorAll('[data-side]')) b.setAttribute('aria-checked', String(b.dataset.side === state.side));
   rove(document.querySelector('.side-pick'));
-  $('newLook').hidden = $('theirsLook').hidden = !state.auto;
+  // In a drill the drill picks his call: his switch and New look go until it's over.
+  $('newLook').hidden = $('theirsLook').hidden = !state.auto || !!drill;
+  $('autoSwitch').hidden = !!drill;
   $('quiz').checked = state.quiz;
-  $('askSwitch').hidden = !(state.auto && state.side === 'O');
+  $('askSwitch').hidden = !(state.auto && state.side === 'O') || !!drill;
   syncTheirs();
+  renderDrills();
 }
 
 function theirSummary() {
@@ -923,6 +934,8 @@ function renderMatchup() {
 
 for (const b of document.querySelectorAll('[data-side]')) b.addEventListener('click', () => {
   if (state.side === b.dataset.side) return;
+  if (drill) { drill = null; state.auto = ownAuto; } // a drill is one side's
+  drilled = null;
   state.side = b.dataset.side;
   if (state.auto) { // your own call for this side comes back, and the other coach picks for the other one
     if (state.side === 'O') state.off = { ...own.off }; else state.def = { ...own.def };
@@ -1030,6 +1043,111 @@ function reveal() {
   if (state.phase === 'pre' || !state.auto) return;
   say(`They called: ${theirSummary()}.`);
 }
+
+// ---------------------------------------------------------------- drills
+
+// A drill: five snaps against one call from the other coach (DRILLS in js/playbook.js), counting the ones that work,
+// and then a line from the coach's notes on what beats it. It takes his picking over: his call is the drill's, hidden
+// until the first snap as usual, and your side is the drill's; you can change your own call between snaps. It's over
+// after the fifth whistle, and Stop, the other side, a shared link or another drill ends it sooner; his picking goes
+// back to how you had it, with the drill's call as his. "What did they play?" isn't asked: the drill has said.
+const DRILL_SNAPS = 5;
+let drill = null; // the drill under way: { id, n, ok, last }, snaps seen to the whistle, how many worked, the last one's seed
+let drilled = null; // the drill just finished, for its debrief: { id, n, ok, last }
+const okDrill = (d, side) => {
+  const D = d && DRILLS.find(x => x.id === d.id), whole = v => Number.isInteger(v) && v >= 0;
+  return D && (side === undefined || D.side === side) && whole(d.n) && d.n <= DRILL_SNAPS && whole(d.ok) && d.ok <= d.n
+    && (d.last == null || whole(d.last)) ? { id: d.id, n: d.n, ok: d.ok, last: d.last ?? null } : null;
+};
+// What counts: a gain of 4 yards or more on offense, a run held short of it on defense.
+const drillWorked = (D, res) => (D.side === 'O' ? success(res) : !success(res));
+const drillGoal = D => (D.side === 'O' ? 'gained 4 yards or more' : 'held under 4 yards');
+
+// His call for the drill: its coverage and pressure, from the front he'd set against your personnel; or a run from its
+// formation, to either side.
+function drillCall() {
+  const D = byId(DRILLS, drill.id);
+  if (D.side === 'O') {
+    const pers = byId(FORMATIONS, state.off.formation).personnel;
+    state.def = { front: pers === '10' || pers === '11' ? 'nickel' : 'over', coverage: D.coverage, pressure: D.pressure };
+  } else {
+    const R = rng(newSeed());
+    state.off = { formation: D.formation, play: R.pick(PLAYS.filter(p => p.type === 'run')).id, flip: R() < 0.5 };
+  }
+}
+function startDrill(id) {
+  const D = byId(DRILLS, id), fromCard = $('drillNow').contains(document.activeElement);
+  drilled = null;
+  state.side = D.side;
+  state.auto = true;
+  if (D.side === 'O') state.off = { ...own.off }; else state.def = { ...own.def }; // your own call for that side
+  drill = { id, n: 0, ok: 0, last: null };
+  rollTheirs();
+  afterChange();
+  setCaption(`Drill: ${D.name}. Call ${D.side === 'O' ? 'a play' : 'a defense'}, then Snap.`);
+  if (fromCard) toDrills(); // Run it again goes with the card it was in
+}
+function endDrill() {
+  drill = null;
+  state.auto = ownAuto;
+  renderChoosers();
+  syncBoard();
+  renderMatchup();
+  syncJobs();
+  syncChart();
+  draw();
+  keepPlay();
+}
+// At the whistle (played out or scrubbed to the end), a snap of the drill counts once.
+function tallyDrill() {
+  if (!drill || drill.last === state.seed) return;
+  drill.last = state.seed;
+  drill.n++;
+  const D = byId(DRILLS, drill.id);
+  if (drillWorked(D, state.play.result)) drill.ok++;
+  drillNews = `${D.name}: ${drill.ok} of ${drill.n} ${drill.n < DRILL_SNAPS ? `snaps so far ${drillGoal(D)}` : `${drillGoal(D)}, and the coach has a word on it`}.`;
+  if (drill.n >= DRILL_SNAPS) { drilled = { ...drill }; endDrill(); } else renderDrills();
+  keepPlay();
+}
+// What a screen reader hears of the count, with the end of the play (see sayResult()).
+let drillNews = '';
+
+// The drills card: a button for each drill (pressed while it's under way), and under them where it's up to, or how the
+// last one went and the coach's line on it.
+for (const D of DRILLS) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'chip';
+  b.dataset.drill = D.id;
+  b.textContent = D.name;
+  b.addEventListener('click', () => startDrill(D.id));
+  $('drillChips').append(b);
+}
+function renderDrills() {
+  for (const b of $('drillChips').children) b.setAttribute('aria-pressed', String(drill?.id === b.dataset.drill));
+  const host = $('drillNow'), on = drill || drilled;
+  $('drillsHint').hidden = !!on;
+  host.hidden = !on;
+  host.textContent = '';
+  if (!on) return;
+  const D = byId(DRILLS, on.id);
+  const p = (cls, html) => { const el = document.createElement('p'); el.className = cls; el.innerHTML = html; host.append(el); return el; };
+  const button = (text, act) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost'; b.textContent = text; b.addEventListener('click', act); return b; };
+  const row = document.createElement('div');
+  row.className = 'actions';
+  if (drill) {
+    p('drill-brief', `<b>${esc(D.name)}.</b> ${esc(D.brief)} A ${D.side === 'O' ? 'snap that gains 4 yards or more' : 'run held under 4 yards'} counts.`);
+    p('drill-count', drill.n ? `${drill.n} of ${DRILL_SNAPS} snaps: ${drill.ok} ${drillGoal(D)}.` : `Snap 1 of ${DRILL_SNAPS}.`);
+    row.append(button('Stop the drill', () => { endDrill(); toDrills(); }));
+  } else {
+    p('drill-count', `<b>${esc(D.name)}: ${drilled.ok} of ${drilled.n} ${drillGoal(D)}.</b>`);
+    p('drill-note', esc(D.note));
+    row.append(button('Run it again', () => startDrill(D.id)), button('Done', () => { drilled = null; renderDrills(); keepPlay(); toDrills(); }));
+  }
+  host.append(row);
+}
+// The focus, from a button that goes, to the drill buttons.
+const toDrills = () => ($('drillChips').querySelector('[aria-pressed="true"]') || $('drillChips').firstElementChild)?.focus({ preventScroll: true });
 
 // What their look was before the snap: how many safeties were deep (as the board counts them, past 10 and a half yards)
 // and how far off the nearer corner stood, in the bands the corners' read uses (see coachNote()).
@@ -1208,7 +1326,10 @@ function showResult() {
   for (const id of ['note', 'noteNow', 'reads']) $(id).hidden = asking();
   renderAsk($('noteAsk'), false);
   resetShare();
-  $('actionsNote').textContent = `Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
+  // In a drill, where it's up to; after its last snap, how it went, for a computer, where the drills are down the column.
+  const D = byId(DRILLS, (drill || drilled)?.id);
+  $('actionsNote').textContent = drill ? `Snap again: the next snap of the drill${state.side === 'D' ? ', a new run' : ''}. ${drill.n} of ${DRILL_SNAPS} snaps so far: ${drill.ok} ${drillGoal(D)}.`
+    : `${drilled?.last === state.seed ? `That was the drill's last snap: ${drilled.ok} of ${drilled.n} ${drillGoal(D)}. The coach's word on it is in Drills. ` : ''}Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
   $('result').hidden = false;
   staleResult(false);
   syncTheirs();
@@ -1358,6 +1479,7 @@ function fromLink() {
   const [, side, formation, playId, flip, front, coverage, pressure, seed] = m;
   if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
   Object.assign(state, { side, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
+  drill = drilled = null;
   state.off = { formation, play: playId, flip: flip === '1' };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four' };
   linkNote = '';
@@ -1654,6 +1776,8 @@ const kept = link ? null : keptPlay();
 if (link === 'ok') firstHint = false; // a shared play runs on its own
 if (kept) { // back after a reload: no new look from the other coach
   Object.assign(state, { off: kept.off, def: kept.def, seed: kept.seed, seen: kept.seen, ask: kept.ask });
+  ({ drill, drilled } = kept);
+  if (drill) state.auto = true;
   firstHint = !kept.snapped;
 } else if (link !== 'ok' && state.auto) rollTheirs();
 renderChoosers();

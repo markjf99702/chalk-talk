@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, prepare, name } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE } from '../js/playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -688,6 +688,57 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
   }
   assert.ok(n > 40, `${n} deep catches`);
   assert.ok(yac / n < 10, `${n} catches 15+ yards downfield gain ${(yac / n).toFixed(1)} yards after the catch on average`);
+});
+
+test('the drills\' notes say what the board shows', () => {
+  // Each drill ends with a line in DRILLS (js/playbook.js) on what does best against its call; this holds the board to
+  // it. The offense drills face their coverage from the front the drill sets (nickel against 10 and 11 personnel, the
+  // 4-3 Over otherwise), every play from every formation, 25 snaps each (100 a play); the run drill is I-Form's four
+  // runs, 50 snaps each, against the two calls its note names. From 240 snaps a play and three start seeds (1, 100000,
+  // 7777777): against Cover 2, Four Verticals 23.2-25.5 yards a play and Play-Action Shot 19.7-22.9, the next 13.3;
+  // Slant-Flat 75-80% and the Draw 72-75% succeed, the next 63%. Against Cover 3, Play-Action Shot 11.7-12.5 yards, the
+  // next 10.4; the Draw 72-78% and Slant-Flat 68-73%, the next 65%. Against Cover 0, the RB Screen 66-69%, Smash 59-62%
+  // and Slant-Flat 54-57%, the next 45%, and the Draw 1-3%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz
+  // stops 80-82% for 2.3-3.2 yards a run, and in Cover 0 82-85% for 5.6-6.9. At this test's size four of five start
+  // seeds (11, 222, 3333, 5; not 44444, where the Draw came out third against Cover 2) hold every line.
+  let seed = 11;
+  const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
+  const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
+  const by = (coverage, pressure) => Object.fromEntries(PLAYS.map(pl => {
+    let n = 0, ok = 0, y = 0;
+    for (const fm of FORMATIONS) for (let k = 0; k < 25; k++) {
+      const r = simulate({ formation: fm.id, play: pl.id, flip: k % 2 === 1, front: front(fm), coverage, pressure }, seed++).result;
+      n++; y += r.yards; if (won(r)) ok++;
+    }
+    return [pl.id, { rate: ok / n, avg: y / n }];
+  }));
+  const top = (o, k, n) => Object.entries(o).sort((a, b) => b[1][k] - a[1][k]).slice(0, n).map(([id]) => id).sort();
+  const say = (o, k) => Object.entries(o).map(([id, v]) => `${id} ${k === 'rate' ? `${Math.round(v.rate * 100)}%` : v.avg.toFixed(1)}`).join(', ');
+  const drill = id => DRILLS.find(d => d.id === id);
+  const c2 = by(drill('c2').coverage, drill('c2').pressure);
+  assert.deepEqual(top(c2, 'avg', 2), ['pa', 'verts'], `Cover 2, yards a play: ${say(c2, 'avg')}`);
+  assert.deepEqual(top(c2, 'rate', 2), ['draw', 'slants'], `Cover 2, success: ${say(c2, 'rate')}`);
+  const c3 = by(drill('c3').coverage, drill('c3').pressure);
+  assert.deepEqual(top(c3, 'avg', 1), ['pa'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
+  assert.deepEqual(top(c3, 'rate', 2), ['draw', 'slants'], `Cover 3, success: ${say(c3, 'rate')}`);
+  const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
+  assert.deepEqual(top(c0, 'rate', 3), ['screen', 'slants', 'smash'], `Cover 0, success: ${say(c0, 'rate')}`);
+  assert.equal(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate)[0][0], 'draw', `Cover 0, success: ${say(c0, 'rate')}`);
+  const runs = PLAYS.filter(p => p.type === 'run').map(p => p.id);
+  const stop = (front, coverage, pressure) => {
+    let n = 0, s = 0, y = 0;
+    for (const play of runs) for (let k = 0; k < 50; k++) {
+      const r = simulate({ formation: drill('run').formation, play, flip: k % 2 === 1, front, coverage, pressure }, seed++).result;
+      n++; y += r.yards; if (!won(r)) s++;
+    }
+    return { stop: s / n, avg: y / n };
+  };
+  const one = stop('over', 'c1', 'blitz'), zero = stop('over', 'c0', 'blitz');
+  const both = `Cover 1 and a blitz stops ${Math.round(one.stop * 100)}% for ${one.avg.toFixed(1)} yards a run, Cover 0 ${Math.round(zero.stop * 100)}% for ${zero.avg.toFixed(1)}`;
+  assert.ok(one.stop > 0.72 && one.stop < 0.88, `"about four runs in five": ${both}`);
+  assert.ok(Math.abs(zero.stop - one.stop) < 0.1 && zero.avg > one.avg + 2, `"about as many, but the runs that get through go a long way": ${both}`);
+  const S = prepare({ formation: drill('run').formation, play: 'iz', front: 'over', coverage: 'c1', pressure: 'blitz' }, 5);
+  assert.deepEqual([S.box.box, S.box.blockers], [8, 7], '"eight against seven"');
 });
 
 test('over many snaps the numbers look like football', () => {

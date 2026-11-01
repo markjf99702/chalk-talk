@@ -85,6 +85,13 @@
         <div id="keyBody"></div>
       </section>
 
+      <section class="card drills" id="drills" aria-labelledby="drillsTitle">
+        <h2 id="drillsTitle">Drills</h2>
+        <p class="hint" id="drillsHint">Five snaps against one call. Find what beats it.</p>
+        <div class="chips" id="drillChips" role="group" aria-labelledby="drillsTitle"></div>
+        <div class="drill-now" id="drillNow" hidden></div>
+      </section>
+
       <section class="call card" id="mine">
         <h2 id="mineTitle">Your call</h2>
         <div id="mineBody"></div>
@@ -93,7 +100,7 @@
       <section class="call card theirs" id="theirs">
         <div class="theirs-head">
           <h2 id="theirsTitle">Their call</h2>
-          <label class="switch"><input type="checkbox" id="auto" checked> <span>Let the other coach pick</span></label>
+          <label class="switch" id="autoSwitch"><input type="checkbox" id="auto" checked> <span>Let the other coach pick</span></label>
         </div>
         <p class="hint" id="theirsHint"></p>
         <div class="ask" id="theirsAsk" hidden></div>

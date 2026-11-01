@@ -254,6 +254,34 @@ export const POSITIONS = {
 
 export const PERSONNEL = 'Personnel is two digits: how many running backs, then how many tight ends. The rest of the five eligible receivers are wide receivers. 21 is two backs and one tight end; 10 is one back, no tight end, four receivers.';
 
+// Drills: five snaps against one call from the other coach, and then a line from the coach's notes on what beats it.
+// On offense his defense is the drill's (with his front set to your personnel: nickel against three or four receivers,
+// the 4-3 Over against two backs or two tight ends); on defense he runs from the drill's formation, a different run
+// each snap. A snap that gains 4 yards or more is a success for the offense, as everywhere on the board. Each note says
+// what the board shows over many snaps (test/sim.test.mjs holds them to it).
+export const DRILLS = [
+  {
+    id: 'c2', name: 'Beat Cover 2', side: 'O', coverage: 'c2', pressure: 'four',
+    brief: 'They play Cover 2 and rush four, every snap.',
+    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Slant-Flat and the Draw get there most often.',
+  },
+  {
+    id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
+    brief: 'They play Cover 3 and rush four, every snap.',
+    note: 'Play-Action Shot gains the most yards a play against Cover 3 here: the linebackers step up for the fake, and the deep crosser runs in behind them. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, the Draw and Slant-Flat get there most often.',
+  },
+  {
+    id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
+    brief: 'They blitz, every snap. Count who\'s coming and who\'s left to cover.',
+    note: 'Against an all-out blitz, the RB Screen, Smash and Slant-Flat succeed most often here: the screen lets the rushers run past the back, and the other two get the ball out hot, before the rush arrives. The Draw runs straight into it.',
+  },
+  {
+    id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
+    brief: 'They run from I-Form, every snap: any of the four runs, to either side.',
+    note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about four runs in five here. The 4-3 Over in Cover 0 stops about as many, but with nobody deep, the runs that get through go a long way.',
+  },
+];
+
 // Coach's notes on how a pass concept tends to fare against each coverage. Short and plain.
 export const NOTES = {
   verts: {
