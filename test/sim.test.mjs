@@ -24,6 +24,9 @@ test('every call against every defense runs to a finish', () => {
     assert.equal(r.jobs.filter(Boolean).length, 22, `${what}: everyone has a job to describe`);
     for (let k = 1; k < r.events.length; k++) assert.ok(r.events[k].t >= r.events[k - 1].t, `${what} seed ${seed - 1}: the play-by-play goes back in time at "${r.events[k].text}"`);
     assert.ok(ended(r), `${what} seed ${seed - 1}: the play-by-play never says how the play ended`);
+    // The line that ends the play is the last one: nothing happens after the whistle.
+    assert.ok(ENDINGS.has(r.events.at(-1).kind), `${what} seed ${seed - 1}: the play-by-play goes on after the play is over, with "${r.events.at(-1).text}"`);
+    for (const e of r.events) assert.ok(e.t <= r.result.t + 0.001, `${what} seed ${seed - 1}: "${e.text}" at ${e.t}s, after the play ended at ${r.result.t.toFixed(2)}s`);
     if (r.result.kind === 'sack') assert.ok(!r.events.some(e => e.kind === 'throw' || e.kind === 'away'), `${what} seed ${seed - 1}: a sack after the ball was thrown`);
     if (r.result.carrier >= 0) { // the board's last picture puts the ball carrier where the headline does
       const y = r.frames.at(-1).xy[2 * r.result.carrier + 1];

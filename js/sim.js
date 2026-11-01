@@ -1114,7 +1114,8 @@ function integrate(S) {
     pl.vx += ax; pl.vy += ay;
     pl.x += pl.vx * DT; pl.y += pl.vy * DT;
   }
-  // Nobody runs through anybody. A man defender who runs into somebody else's receiver gets picked off.
+  // Nobody runs through anybody. A man defender who runs into somebody else's receiver gets picked off (said only while
+  // the play is live: the frames after the whistle still move everyone, and their bumps aren't news).
   const P = S.P;
   for (let a = 0; a < P.length; a++) for (let b = a + 1; b < P.length; b++) {
     const A = P[a], B = P[b];
@@ -1132,7 +1133,7 @@ function integrate(S) {
     for (const [X, Y] of [[A, B], [B, A]]) {
       if (X.team === 'D' && X.job.kind === 'man' && Y.team === 'O' && Y !== X.job.r && Y.job.kind === 'route') {
         X.vx *= 0.55; X.vy *= 0.55;
-        if (!S.pickNoted && dist(X, X.job.r) > 1.5 && S.t < 3) { S.pickNoted = true; ev(S, 'pick', `${cap(name(S, X))} runs into traffic chasing ${name(S, X.job.r)}.`, { who: X.i }); }
+        if (!S.pickNoted && !S.dead && dist(X, X.job.r) > 1.5 && S.t < 3) { S.pickNoted = true; ev(S, 'pick', `${cap(name(S, X))} runs into traffic chasing ${name(S, X.job.r)}.`, { who: X.i }); }
       }
     }
   }
