@@ -385,16 +385,18 @@ function pick(x, y) {
 // The buttons on the board (Why, and More about on the player's card). A finger that comes down just off one, on a
 // player, can still be sent to the button: the browser takes a tap near a button as meant for it (Chromium's touch
 // adjustment), and a real fingertip touches more than a point. Where the finger came down outside the button and its
-// hit area, it's a tap on the board there instead.
+// hit area, on a player, it's a tap on him instead; just off it over empty field, it's still the button's.
 function onButton(el, act) {
   let at = null;
   el.addEventListener('pointerdown', e => { at = { x: e.clientX, y: e.clientY, t: e.timeStamp }; });
   el.addEventListener('click', e => {
     const p = at;
     at = null;
-    if (p && e.detail && e.timeStamp - p.t < 1500 && !within(hitArea(el), p.x, p.y)) { el.blur(); pick(p.x, p.y); } else act();
+    if (p && e.detail && e.timeStamp - p.t < 1500 && !within(hitArea(el), p.x, p.y) && onPlayer(p.x, p.y)) { el.blur(); pick(p.x, p.y); } else act();
   });
 }
+// Whether a tap at this point in the window is on a player. Just off a button over empty field, the button was meant.
+const onPlayer = (x, y) => { const r = $('board').getBoundingClientRect(); return board.hit(x - r.left, y - r.top).length > 0; };
 // A button's box with the bigger hit area some are given round them (a ::before, in css/app.css).
 function hitArea(el) {
   const b = el.getBoundingClientRect(), s = getComputedStyle(el, '::before');

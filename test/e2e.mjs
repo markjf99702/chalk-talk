@@ -652,6 +652,25 @@ for (const side of ['O', 'D']) {
     { picked: q.i, scrolled: 0, focus: '' }, `a tap 4 px under the Why button, on the ${q.label}`);
   await p.touchscreen.tap((at.l + at.r) / 2, (at.t + at.b) / 2);
   await until(() => p.evaluate(() => document.activeElement.id === 'resHead' && scrollY > 0), 3000, 'a tap on the Why button did nothing');
+  // Just off the button over empty field, with nobody there to pick, the tap is still the button's. (Back at the top
+  // once the smooth scroll down to the result has finished.)
+  for (let a = -1, b = -2; a !== b;) { a = await p.evaluate(() => scrollY); await new Promise(r => setTimeout(r, 200)); b = await p.evaluate(() => scrollY); }
+  await p.evaluate(() => { scrollTo(0, 0); document.activeElement.blur(); window.chalkTalk.board.selected = -1; document.getElementById('who').hidden = true; });
+  await until(() => p.evaluate(() => scrollY === 0), 3000, 'the page didn\'t go back to the top');
+  const empty = await p.evaluate(() => {
+    const { board, state } = window.chalkTalk, cv = board.cv.getBoundingClientRect(), el = document.getElementById('why'), b = el.getBoundingClientRect();
+    const marks = state.play.players.map(q => { const z = board.pos(board.t, q.i); return [cv.left + board.sx(z.x), cv.top + board.sy(z.y)]; });
+    for (let y = cv.top + 8; y < cv.bottom - b.height - 16; y += 4) for (let x = cv.left + b.width / 2 + 8; x < cv.right - b.width / 2 - 8; x += 4) {
+      if (marks.every(([X, Y]) => Math.hypot(X - x, Y - (y + b.height + 4)) > 40)) {
+        el.style.transform = 'none'; el.style.left = `${x - cv.left - b.width / 2}px`; el.style.top = `${y - cv.top}px`;
+        return { x, y: y + b.height + 4 };
+      }
+    }
+    return null;
+  });
+  assert.ok(empty, 'no empty field to put the Why button over');
+  await p.touchscreen.tap(empty.x, empty.y);
+  await until(() => p.evaluate(() => document.activeElement.id === 'resHead' && scrollY > 0), 3000, 'a tap just off the Why button, over empty field, did nothing');
   await c.close();
 }
 // On a crowded line a fingertip covers two or three players: tapping the same spot again picks the next one there,
