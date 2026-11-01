@@ -426,6 +426,27 @@ test('against a quick drop, a deep corner stops backing up once the quarterback 
   }
 });
 
+test('a Cover 2 safety keeps to the middle of his half until the throw, rather than running with Smash\'s corner route', () => {
+  // Smash against Cover 2, 64 looks: in every frame before the throw with a corner route past 12 yards and 3 or more
+  // yards outside his safety's spot, the safety has moved out 0.14 of a yard for each yard the route has. When he ran
+  // with the route, 0.41.
+  let seed = 1, num = 0, den = 0;
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: 'smash', front: fr.id, coverage: 'c2', pressure, flip };
+    const r = simulate(call, seed), S = prepare(call, seed); seed++;
+    for (const two of [S.keys.S2, S.keys.W2].filter(p => p && p.job.route === 'corner')) {
+      const safety = S.D.find(d => d.job.kind === 'zone' && d.job.z.deep && Math.sign(d.job.z.at[0]) === Math.sign(two.x)), spot = Math.abs(safety.job.z.at[0]);
+      for (const f of r.frames) {
+        if (f.air || f.t >= r.result.t) break;
+        const out = Math.abs(f.xy[2 * two.i]) - spot;
+        if (f.xy[2 * two.i + 1] < 12 || out < 3) continue;
+        num += (Math.abs(f.xy[2 * safety.i]) - spot) * out; den += out * out;
+      }
+    }
+  }
+  assert.ok(den > 0 && num / den < 0.25, `the safety moves out ${(num / den).toFixed(2)} of a yard for each yard the corner route gets outside his spot`);
+});
+
 test('coverages put the right number deep and the right number rushing', () => {
   const count = (cov, pressure) => {
     const S = prepare({ formation: 'doubles', play: 'verts', front: 'over', coverage: cov, pressure }, 9);

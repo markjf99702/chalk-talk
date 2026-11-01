@@ -8,7 +8,7 @@
 // fingerprint of every file in SHELL: change any of them and test/e2e.mjs fails until FILES is changed to match (it
 // says what to), which changes this file, so every copy is made whole again at once.
 const CACHE = 'chalk-talk-v1'; // bump the number when the file list changes
-const FILES = '4f5eccbd'; // test/e2e.mjs checks this
+const FILES = '96d14b49'; // test/e2e.mjs checks this
 const SHELL = [
   './', 'index.html', 'icon.svg', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/sim.js', 'js/board.js', 'js/playbook.js', 'js/rng.js',

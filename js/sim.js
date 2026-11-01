@@ -1047,10 +1047,14 @@ function zone(S, d) {
   const routes = S.O.filter(r => r.job.kind === 'route' && t >= (r.job.delay || 0));
   let tx = z.at[0], ty = z.at[1];
   if (z.deep) {
-    // Stay deeper than the deepest man in the zone, and over the top of him.
+    // Stay deeper than the deepest man in the zone, and over the top of him. A half-field safety (Cover 2) keys the
+    // second receiver on his side: when he comes up the field, the safety keeps to the middle of his half until the
+    // ball is thrown, rather than running with that route and leaving the sideline behind him. Otherwise he widens
+    // over the deepest man, as anyone deep does.
     const mine = routes.filter(r => r.x > zx0 - 2 && r.x < zx1 + 2 && r.y > 4).sort((a, b) => b.y - a.y);
-    const r = mine[0];
-    if (r && r.y > z.at[1] - 7) { tx = clamp(r.x * 0.55 + tx * 0.45, zx0 - 1, zx1 + 1); ty = Math.max(z.at[1], r.y + 3.5); }
+    const two = (d.job.zid === 'deepLH' || d.job.zid === 'deepRH') && S.keys[(Math.sign(z.at[0]) === S.s ? 'S' : 'W') + '2'];
+    const r = mine[0], k = two && two.job.kind === 'route' && two.y > 8 ? 0.2 : 0.55;
+    if (r && r.y > z.at[1] - 7) { tx = clamp(r.x * k + tx * (1 - k), zx0 - 1, zx1 + 1); ty = Math.max(z.at[1], r.y + 3.5); }
     else if (S.look && S.look.x > zx0 && S.look.x < zx1) tx = tx * 0.7 + S.look.x * 0.3;
     // A quick drop is the sign of a quick throw: once the quarterback has set up, a deep defender with nobody coming
     // at him stops backing up and sits, ready to drive on the ball.

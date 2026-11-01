@@ -237,9 +237,9 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
   await p.goto(base);
   for (const [code, head, kicker, win] of [
     ['O.single.iz.0.over.c3.four.1', 'Gain of 3 yards', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
-    ['O.trips.smash.0.nickel.c2.four.48', 'Intercepted', 'A takeaway for the defense', 'D'],
-    ['O.trips.smash.0.nickel.c2.four.15', 'Gain of 19 yards', 'A win for the offense', 'O'],
-    ['O.trips.smash.0.nickel.c2.four.74', 'Gain of 20 yards', 'A big play for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c2.four.59', 'Intercepted', 'A takeaway for the defense', 'D'],
+    ['O.trips.smash.0.nickel.c2.four.5', 'Gain of 19 yards', 'A win for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c2.four.6', 'Gain of 20 yards', 'A big play for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.579', 'Gain of 9 yards', 'A win for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards', 'A big play for the offense', 'O'],
   ]) {
@@ -407,7 +407,7 @@ for (const side of ['O', 'D']) {
 {
   const p = await ctx.newPage();
   p.on('pageerror', e => problems.push(e.message));
-  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.5');
   await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   const ring = await p.evaluate(() => {
     const { state, board, pause, lineUp } = window.chalkTalk, s = document.getElementById('scrub');
@@ -470,7 +470,7 @@ for (const side of ['O', 'D']) {
 {
   const p = await ctx.newPage();
   p.on('pageerror', e => problems.push(e.message));
-  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.5');
   await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
   const spot = label => p.evaluate(label => {
@@ -520,7 +520,7 @@ for (const side of ['O', 'D']) {
 {
   const p = await ctx.newPage();
   p.on('pageerror', e => problems.push(e.message));
-  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.5');
   await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   const tap = async label => {
     const at = await p.evaluate(label => {
@@ -580,7 +580,7 @@ for (const side of ['O', 'D']) {
   };
   for (const side of ['O', 'D']) {
     const team = side === 'O' ? 'offense' : 'defense';
-    await p.goto(base + `#p=${side}.trips.smash.0.nickel.c2.four.15`);
+    await p.goto(base + `#p=${side}.trips.smash.0.nickel.c2.four.5`);
     await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
     await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input')); });
     const why = await box('#why');
@@ -588,7 +588,7 @@ for (const side of ['O', 'D']) {
       const { c } = await tap(label);
       assert.ok(!(c.l < why.r && why.l < c.r && c.t < why.b && why.t < c.b), `calling the ${team}, the ${label}'s card at the end of the play is over the button down to the explanation (card ${Math.round(c.t)}-${Math.round(c.b)}, button ${Math.round(why.t)}-${Math.round(why.b)})`);
     }
-    for (const link of [`#p=${side}.trips.smash.0.nickel.c2.four.15`, `#p=${side}.iform.iz.0.over.c3.four.15`]) {
+    for (const link of [`#p=${side}.trips.smash.0.nickel.c2.four.5`, `#p=${side}.iform.iz.0.over.c3.four.15`]) {
       await p.evaluate(link => { location.hash = link; }, link);
       await p.waitForFunction(() => window.chalkTalk.state.phase === 'playing');
       await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
@@ -611,7 +611,7 @@ for (const side of ['O', 'D']) {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   const p = await c.newPage();
   p.on('pageerror', e => problems.push(e.message));
-  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.5');
   await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   await p.evaluate(() => { const { pause, lineUp } = window.chalkTalk; pause(); lineUp(); });
   const players = () => p.evaluate(() => {
@@ -722,7 +722,7 @@ for (const side of ['O', 'D']) {
   assert.equal(await p.isVisible('#whoAbout'), true);
   // The quarterback's card goes at the deep end of the board, away from him, where the caption and the button down to
   // the explanation are: on a bigger board it stands clear of both, so they can still be read and tapped.
-  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.15');
+  await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.5');
   await p.waitForFunction(() => window.chalkTalk?.state.phase === 'playing');
   const qb = await p.evaluate(() => {
     const { state, board, pause } = window.chalkTalk, s = document.getElementById('scrub');
@@ -1369,7 +1369,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   // A shared link opened in the same tab is somebody else's play: no word about you changing the call.
   await ready();
   await p.getByRole('radio', { name: 'Mesh' }).click();
-  await p.evaluate(() => { location.hash = '#p=O.trips.smash.0.nickel.c2.four.15'; });
+  await p.evaluate(() => { location.hash = '#p=O.trips.smash.0.nickel.c2.four.5'; });
   await p.waitForFunction(() => window.chalkTalk.state.linked);
   assert.doesNotMatch(await p.textContent('#chartHint'), /Run it again/, 'a shared link kept the word about the chart');
   await p.context().close();
