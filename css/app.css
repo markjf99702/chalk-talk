@@ -51,7 +51,8 @@
     --line-strong: rgba(236, 233, 223, .3);
     --accent: #f2d36b;
     --accent-ink: #1b1a12;
-    --win-o: #9fcbee;
+    /* the result and the chart in each team's chalk, as on the board: the offense white, the defense yellow */
+    --win-o: #f4f2ea;
     --win-d: #f2d36b;
     --board: #2b3b33;
     --frame: #5a4430;
@@ -66,7 +67,7 @@
     --ball: #e6a868;
     --hot: #f59a8c;
     --chalk-grain: 1;
-    --bar: #f2d36b;
+    --bar: #f4f2ea;
   }
 }
 

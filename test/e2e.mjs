@@ -1499,6 +1499,25 @@ for (const colorScheme of ['light', 'dark']) {
     return { colors: { ...board.colors }, board: norm(board.colors.board), wrap: norm(getComputedStyle(board.cv.parentElement).backgroundColor) };
   });
   assert.equal(schemes[colorScheme].board, schemes[colorScheme].wrap, `${colorScheme}: the labels' knock-outs aren't the board's colour`);
+  // On the chalkboard the result and the chart are in each team's chalk, as the board draws the teams: a win for the
+  // offense, and the chart's bars (how often the offense succeeds), in its white; a win for the defense in its yellow.
+  if (colorScheme === 'dark') {
+    const team = await p.evaluate(() => {
+      const { board } = window.chalkTalk, x = document.createElement('canvas').getContext('2d');
+      const norm = c => { x.fillStyle = '#000'; x.fillStyle = c; return x.fillStyle; };
+      const kicker = document.getElementById('resKicker'), bar = document.createElement('span');
+      bar.className = 'bar';
+      document.getElementById('bars').append(bar);
+      const win = w => { kicker.dataset.win = w; return norm(getComputedStyle(kicker).color); };
+      const seen = { o: win('O'), d: win('D'), bar: norm(getComputedStyle(bar).backgroundColor), off: norm(board.colors.off), def: norm(board.colors.def) };
+      bar.remove();
+      delete kicker.dataset.win;
+      return seen;
+    });
+    assert.equal(team.o, team.off, 'dark: "A win for the offense" isn\'t in the offense\'s chalk');
+    assert.equal(team.d, team.def, 'dark: "A win for the defense" isn\'t in the defense\'s chalk');
+    assert.equal(team.bar, team.off, 'dark: the chart\'s bars aren\'t in the offense\'s chalk');
+  }
   await c.close();
 }
 for (const k of ['board', 'line', 'off', 'def', 'los', 'hot']) assert.notEqual(schemes.light.colors[k], schemes.dark.colors[k], `the board's ${k} colour is the same in both looks`);
