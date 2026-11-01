@@ -34,6 +34,11 @@
     </div>
   </header>
 
+  <div class="unloaded" id="unloaded" role="alert" hidden>
+    <p>Chalk Talk didn't finish loading.</p>
+    <button type="button" class="snap" id="reload">Reload</button>
+  </div>
+
   <main class="grid">
     <section class="stage" aria-label="The board">
       <div class="board-wrap">
@@ -122,5 +127,17 @@
     <span aria-hidden="true">·</span>
     <a href="https://junkdrawer.works/privacy.html">Privacy</a>
   </footer>
+  <script>
+    // A page caught half-loaded (the signal went partway through loading a new version) says so, with a way to try
+    // again: by the time the page has loaded, the app hasn't started, or its stylesheet didn't come.
+    addEventListener('load', () => {
+      const css = document.querySelector('link[rel="stylesheet"]');
+      let styled = !css; // the one-file copy has its styles in the page
+      try { styled = styled || css.sheet.cssRules.length > 0; } catch { /* one that didn't come can't be read */ }
+      if (window.chalkTalk && styled) return;
+      document.getElementById('unloaded').hidden = false;
+      document.getElementById('reload').onclick = () => location.reload();
+    });
+  </script>
 </body>
 </html>

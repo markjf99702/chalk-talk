@@ -15,8 +15,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 // The server answers the way GitHub Pages does: a browser may keep each file for ten minutes, and asks again by its
 // ETag. `net` is the connection: 'up', 'down' (the server drops every connection) or 'stalled' (a train, a captive
-// wifi: it takes each request and holds on to it). With `release` set it serves the next release (see the end).
-let net = 'up', release = false;
+// wifi: it takes each request and holds on to it). With `release` set it serves the next release (see the end). With
+// `cut` set to a file, the connection goes down right after it's served.
+let net = 'up', release = false, cut = null;
 const held = [];
 const server = createServer((req, res) => {
   if (net === 'down') { req.socket.destroy(); return; }
@@ -30,11 +31,11 @@ async function serve(req, res) {
   try { body = await readFile(join(root, path)); } catch { res.writeHead(404); res.end(); return; }
   if (release && path === '/sw.js') body = Buffer.from(String(body).replace(/const FILES = '[0-9a-f]*'/, "const FILES = 'next'"));
   if (release && path === '/index.html') body = Buffer.concat([body, Buffer.from('<!-- the next release -->\n')]);
+  if (release && path === '/js/sim.js') body = Buffer.concat([body, Buffer.from('// the next release\n')]);
   const etag = `"${createHash('sha1').update(body).digest('hex').slice(0, 16)}"`;
   const head = { etag, 'cache-control': 'max-age=600', 'content-type': TYPES[extname(path)] || 'text/html' };
-  if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); return; }
-  res.writeHead(200, head);
-  res.end(body);
+  if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); } else { res.writeHead(200, head); res.end(body); }
+  if (cut === path) net = 'down';
 }
 const base = `http://localhost:${server.address().port}/`;
 // Waits for ok() to come true, for up to ms, or fails saying what didn't happen.
@@ -1762,9 +1763,8 @@ assert.deepEqual(problems, [], 'problems while using it');
   await cdp.detach();
 }
 
-// The offline copy has every file a page asked for. One left out of SHELL is kept anyway once a page under the
-// worker loads it, so a phone that has used it a while has the file, but the copy made on a first visit doesn't, and
-// offline that phone opens without it. sw.js is the worker itself. The PNG icons the manifest and the page's
+// The offline copy has every file a page asked for. One left out of SHELL is never kept (the copy is only ever what
+// SHELL lists), and offline the page opens without it. sw.js is the worker itself. The PNG icons the manifest and the page's
 // apple-touch-icon name are fetched by the browser when the app is installed, online, never by the page, so they stay
 // out of the copy (and if a browser's install fetch shows up here, it doesn't count).
 const sw = await readFile(join(root, 'sw.js'), 'utf8');
@@ -1821,6 +1821,62 @@ for (const path of asked) {
   await opened('on a stalled connection');
   net = 'up';
   for (const [req, res] of held.splice(0)) serve(req, res);
+  await c.close();
+}
+
+// A signal that drops partway through loading the page. On the release the copy has, the page gets the rest from the
+// copy and works. When it's a new release, the page doesn't take the old copy's files to go with the new ones it has:
+// it says it didn't finish loading, with a Reload button, and the copy stays one whole release, never half old and half
+// new. With no signal, Reload opens that copy, and it works. Once the signal is back, the new release goes into the
+// copy whole, every file at once.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  const errors = [];
+  p.on('pageerror', e => errors.push(e.message));
+  await p.goto(base);
+  await p.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
+  // Each copy this site keeps: how many files, and whether its page (at both its addresses) and its simulator are the
+  // next release's.
+  const copies = () => p.evaluate(async () => Promise.all((await caches.keys()).filter(k => k.startsWith('chalk-talk')).map(async k => {
+    const cache = await caches.open(k), next = async f => !!(await (await cache.match(f))?.text())?.includes('the next release');
+    return { k, n: (await cache.keys()).length, page: await next('./'), index: await next('index.html'), sim: await next('js/sim.js') };
+  })));
+  const whole = list => list.every(x => x.n === 0 || (x.n === shell.length && x.page === x.index && x.page === x.sim)) && list.filter(x => x.n).length === 1;
+  const works = async how => {
+    await p.waitForFunction(() => window.chalkTalk && document.getElementById('matchup').textContent.trim(), null, { timeout: 10000 }).catch(() => {});
+    const seen = await p.evaluate(() => ({ app: !!window.chalkTalk, unloaded: !document.getElementById('unloaded').hidden }));
+    assert.deepEqual(seen, { app: true, unloaded: false }, `the app didn't start ${how}`);
+  };
+  // the same release, the signal going right after the app's first file
+  cut = '/js/app.js';
+  await p.reload().catch(() => {});
+  await works('when the signal went partway through loading the release the copy has');
+  assert.deepEqual(errors, [], 'errors on the page that loaded from the copy partway');
+  cut = null; net = 'up';
+  // a new release, the same
+  release = true; cut = '/js/app.js';
+  await p.reload().catch(() => {});
+  await p.waitForFunction(() => !document.getElementById('unloaded').hidden, null, { timeout: 10000 }).catch(() => {});
+  const half = await p.evaluate(() => ({ app: !!window.chalkTalk, says: document.getElementById('unloaded').textContent.replace(/\s+/g, ' ').trim(), button: !!document.getElementById('reload').offsetHeight }));
+  assert.deepEqual(half, { app: false, says: 'Chalk Talk didn\'t finish loading. Reload', button: true }, 'a page caught half-loaded by a new release');
+  const after = await copies();
+  assert.ok(whole(after), `the offline copy isn't one whole release after the signal dropped: ${JSON.stringify(after)}`);
+  errors.length = 0; // a page that didn't load can say so in the console too
+  await c.setOffline(true);
+  await p.click('#reload');
+  await works('from the copy with no signal, after Reload');
+  // the signal back: the new release goes into the copy whole, and the page opens it
+  await c.setOffline(false);
+  cut = null; net = 'up';
+  await p.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+  let now;
+  for (const end = Date.now() + 10000; !(whole(now = await copies()) && now.some(x => x.n && x.page)) && Date.now() < end;) await new Promise(r => setTimeout(r, 100));
+  assert.ok(whole(now) && now.some(x => x.n && x.page), `the new release didn't go into the copy whole: ${JSON.stringify(now)}`);
+  await p.reload();
+  await works('on the new release');
+  assert.deepEqual(errors, [], 'errors on a page that did load');
+  release = false;
   await c.close();
 }
 
