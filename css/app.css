@@ -356,7 +356,11 @@ button:disabled { cursor: default; }
 .tool:disabled { opacity: .4; }
 .tool.toggle { width: auto; border-radius: 999px; padding: 0 10px; font-family: var(--cond); font-weight: 700; letter-spacing: .04em; color: var(--muted); }
 .tool.toggle[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
-#scrub { flex: 1; min-width: 40px; accent-color: var(--accent); }
+/* the scrubber, with the clock at its left in the type of the play-by-play's times (a screen reader hears the time
+   from the scrubber itself) */
+.scrubber { flex: 1; min-width: 40px; display: flex; align-items: center; gap: 6px; }
+.clock { flex: none; min-width: 2.6em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; line-height: 1; }
+#scrub { flex: 1; min-width: 40px; margin: 0; accent-color: var(--accent); }
 #scrub:disabled { opacity: .4; }
 
 /* ---------------------------------------------------------------- panel */
@@ -514,10 +518,12 @@ button:disabled { cursor: default; }
   .side-pick { width: 100%; }
   .side-pick button { flex: 1; padding: 8px 10px; }
   .snap { padding: 8px 14px; font-size: 17px; }
-  /* the scrubber on a row of its own under the buttons: room for "Snap again", and a longer scrubber to drag */
+  /* the scrubber and its clock on a row of their own under the buttons: room for "Snap again", and a longer scrubber
+     to drag */
   .transport { flex-wrap: wrap; gap: 6px; }
   .transport .seg { margin-left: auto; }
-  #scrub { order: 1; flex: 1 0 100%; margin: 0; height: 22px; }
+  .scrubber { order: 1; flex: 1 0 100%; }
+  #scrub { height: 22px; }
 }
 
 /* Fingers: tap targets 44 px (Apple's guideline, and WCAG 2.2's enhanced target size), mostly drawn the same size. */
@@ -564,7 +570,8 @@ button:disabled { cursor: default; }
   #board { width: calc(var(--bh) * 1.42); height: var(--bh); }
   .transport { flex-wrap: wrap; gap: 6px; }
   .transport .seg { margin-left: auto; }
-  #scrub { order: 1; flex: 1 0 100%; margin: 0; height: 22px; }
+  .scrubber { order: 1; flex: 1 0 100%; }
+  #scrub { height: 22px; }
   .snap { padding: 8px 14px; font-size: 17px; }
   .brand h1 { font-size: 30px; }
   .side-pick { width: 100%; }

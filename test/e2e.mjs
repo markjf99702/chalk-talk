@@ -78,6 +78,14 @@ assert.match(await page.textContent('#theirsHint'), /change your play and they k
 // The first thing to do, before the first snap: until a player is tapped or the play is snapped.
 const HINT = 'Tap any player to see his job, then Snap.';
 assert.equal(await page.textContent('#caption'), HINT, 'the board says what to do first');
+// The clock beside the scrubber has nothing to count before the snap. On a phone it starts the scrubber's own row,
+// under Snap.
+assert.equal(await page.textContent('#clock'), '–', 'the clock before the snap');
+{
+  const at = await page.evaluate(() => Object.fromEntries(['clock', 'scrub', 'snap'].map(id => { const b = document.getElementById(id).getBoundingClientRect(); return [id, { l: b.left, r: b.right, t: b.top, b: b.bottom }]; })));
+  assert.ok(at.clock.r <= at.scrub.l && Math.abs((at.clock.t + at.clock.b) / 2 - (at.scrub.t + at.scrub.b) / 2) < 3, `the clock isn't just left of the scrubber: ${JSON.stringify(at)}`);
+  assert.ok(at.clock.t >= at.snap.b && at.clock.l < 30, `the clock and the scrubber aren't on a row of their own: ${JSON.stringify(at)}`);
+}
 await page.getByRole('radio', { name: 'Four Verticals' }).click();
 assert.equal(await page.textContent('#caption'), HINT, 'the first hint stays when the call changes');
 await page.getByRole('radio', { name: 'Smash' }).click();
@@ -153,13 +161,17 @@ const scrub = to => page.evaluate(to => {
   const s = document.getElementById('scrub'), { state, board } = window.chalkTalk;
   s.value = String(to === 'max' ? s.max : Math.round(to * s.max));
   s.dispatchEvent(new Event('input'));
-  return { t: state.t, duration: board.duration(), phase: state.phase, result: !document.getElementById('result').hidden, why: !document.getElementById('why').hidden };
+  return { t: state.t, duration: board.duration(), phase: state.phase, result: !document.getElementById('result').hidden, why: !document.getElementById('why').hidden, clock: document.getElementById('clock').textContent };
 }, to);
 const half = await scrub(0.5);
 assert.ok(Math.abs(half.t - half.duration / 2) < 0.1, `halfway along the scrubber shows ${half.t.toFixed(2)} s of a ${half.duration.toFixed(2)} s play`);
+// The clock says where you are, the way the play-by-play says its times.
+assert.equal(half.clock, `${half.t.toFixed(1)}s`, 'the clock halfway through the play');
+assert.ok(await page.$$eval('#story .t', t => t.every(x => /^\d+\.\ds$/.test(x.textContent))), 'the play-by-play\'s times are written another way');
 assert.equal(half.why, false, 'the button to the explanation goes away when you scrub back into the play');
 const end = await scrub('max');
 assert.equal(end.t, end.duration, 'the far end of the scrubber is the end of the play');
+assert.equal(end.clock, `${end.duration.toFixed(1)}s`, 'the clock at the end of the play');
 assert.equal(end.phase, 'done', 'the far end of the scrubber finishes the play');
 assert.ok(end.result, 'the result shows at the far end of the scrubber');
 assert.ok(end.why, 'the button to the explanation comes back at the far end of the scrubber');

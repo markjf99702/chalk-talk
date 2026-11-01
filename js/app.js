@@ -354,10 +354,12 @@ function syncTransport() {
 
 // The scrubber counts the play's frames, twenty to the second, so an arrow key steps one frame and the far end is the
 // last. What a screen reader hears is the time and what's going on: "1.9 of 4.1 seconds: The quarterback throws to the H
-// on a corner route", and at the end the headline.
+// on a corner route", and at the end the headline. The clock beside it shows the time the way the play-by-play does,
+// so you can scrub to the moment a line names: "1.9s", and a dash before the snap.
 function syncScrub() {
   const s = $('scrub'), F = state.play?.frames;
   if (!F) return;
+  $('clock').textContent = state.phase === 'pre' ? '–' : `${state.t.toFixed(1)}s`;
   const dt = F.length > 1 ? F[1].t - F[0].t : 0.05;
   s.max = String(F.length - 1);
   s.value = String(Math.min(F.length - 1, Math.round(state.t / dt)));
