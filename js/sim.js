@@ -1187,11 +1187,12 @@ function integrate(S) {
   for (let a = 0; a < P.length; a++) for (let b = a + 1; b < P.length; b++) {
     const A = P[a], B = P[b];
     if (A.eng === B.i || B.eng === A.i) continue;
-    if (A.team !== B.team) { // a rusher only bumps the blocker who's after him, until the ball is thrown
+    if (A.team !== B.team) { // a pass rusher only bumps the blocker who's after him, until the ball is thrown
       const [o, d] = A.team === 'O' ? [A, B] : [B, A];
       // Before the throw the quarterback is the ball carrier, and bumps anyone. After it he doesn't have the ball, and
-      // nobody walks through him or anyone else. (On a run there's no throw: rushers go by blockers as before.)
-      if (d.job.kind === 'rush' && o !== S.carrier && !(S.throwT <= S.t) && (d.beat > S.t || (o.want !== d && o.job.target !== d))) continue;
+      // nobody walks through him or anyone else. On a run a rusher running free bumps anyone he runs into, his blocker
+      // or not; one held in somebody else's block moves with that block.
+      if (S.play.type === 'run' ? d.job.kind === 'rush' && d.eng >= 0 : d.job.kind === 'rush' && o !== S.carrier && !(S.throwT <= S.t) && (d.beat > S.t || (o.want !== d && o.job.target !== d))) continue;
     }
     if (S.dead && (A === S.carrier || B === S.carrier)) continue;
     const dx = A.x - B.x, dy = A.y - B.y, d = hyp(dx, dy);

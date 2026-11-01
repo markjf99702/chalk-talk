@@ -318,6 +318,25 @@ test('run blocking: the men on the line first, linebackers next, and never a saf
   assert.ok(y / 60 > 3 && nose < 15, `Singleback inside zone against the Over in Cover 1: ${(y / 60).toFixed(1)} yards a carry, the nose made ${nose} of 60 tackles`);
 });
 
+test('on a run a rusher doesn\'t walk through anybody: a lineman bumps any rusher who runs into him', () => {
+  let seed = 2024;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const what = `${JSON.stringify(call)} seed ${seed - 1}`;
+    const on = new Map(); // frames running that a rusher, in nobody's block, has been inside half a yard of an offensive player
+    for (const f of r.frames) {
+      if (f.t > r.result.t + 1e-9) break;
+      for (const d of S.D.filter(d => d.job.kind === 'rush')) for (const o of S.O) {
+        const k = d.i * 32 + o.i, x = f.xy;
+        const n = f.eng[d.i] < 0 && Math.hypot(x[2 * d.i] - x[2 * o.i], x[2 * d.i + 1] - x[2 * o.i + 1]) < 0.5 ? (on.get(k) || 0) + 1 : 0;
+        on.set(k, n);
+        assert.ok(n < 10, `${what}: the ${d.label} walks through the ${o.label}, at ${f.t.toFixed(2)}s`);
+      }
+    }
+  }
+});
+
 test('the box count sees a safety rolled down, and counts every man who blocks on a run', () => {
   const box = (formation, front, coverage) => prepare({ formation, play: 'iz', front, coverage, pressure: 'four' }, 3).box;
   for (const fm of ['iform', 'single']) for (const fr of ['over', 'under', '34']) {
