@@ -19,7 +19,7 @@
 - **Snap it.** Every player has a job and does it: receivers run their routes, linemen block whoever they're assigned, rushers try to beat their blockers, man defenders chase their receivers a moment late, zone defenders guard their areas, and the quarterback goes through his reads and throws where nobody can get there first. The same call can come out differently each time.
 - **Watch it back.** Scrub through the play, slow it to half speed, and see the drawn-up play faintly under the trails of where everyone actually went.
 - **Find out why.** A play-by-play, a coach's note on how the call does against what the other side called, and the pre-snap read: the safeties, the corners, the box count, and how many rushers came against how many blockers.
-- **Run it a hundred times.** "Run it 20 times each" plays your call against every coverage (or your defense against every play) and charts the average yards and success rate.
+- **Run it a hundred times.** "Run it 100 times each" plays your call against every coverage (or your defense against every play) and charts the average yards and success rate. The first numbers are up after 20 snaps a row; then it keeps adding snaps, and the bars settle, until each row has 100.
 - **Learn the words.** Tap any player for his position and his job on the play. The playbook below the board covers positions, personnel, formations, technique numbers and gaps, coverages, plays and routes, and the other words coaches use: the strong side, the box, the zones.
 - **Share a play.** "Copy link to this play" makes a link that replays exactly the same snap for whoever opens it.
 - No account and no server. Your last calls stay in your browser. It works offline and installs to a phone's home screen.

@@ -88,7 +88,7 @@ assert.deepEqual(await page.$$eval('#bars .bar-row.idle', r => r.map(x => [x.get
   ['Cover 0', 'Cover 1', 'Cover 2', 'Cover 3', 'Cover 4'].map(c => ['listitem', `${c}: not run yet`, '–']), 'the chart before it runs');
 await page.click('#runChart');
 assert.match(await page.textContent('#runChart'), /^Running… [1-5] of 5$/, 'the chart says how far along it is');
-await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 30000 });
+await page.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 60000 });
 assert.equal(await page.locator('#bars .bar-row.mine').count(), 0, 'the chart gives away their coverage before the snap');
 assert.equal(await page.locator('#bars .bar-row.idle').count(), 0, 'rows still waiting to run once it has run');
 assert.equal(await page.textContent('#runChart'), 'Run it again', 'once it has run, the button says it runs again');
@@ -196,7 +196,7 @@ assert.equal(await page.getByRole('radio', { name: 'Blitz' }).isDisabled(), true
 
 // The chart runs every play against this defense: eleven rows, waiting until it does.
 assert.equal(await page.locator('#bars .bar-row.idle').count(), 11, 'the defense\'s chart before it runs');
-assert.equal(await page.textContent('#runChart'), 'Run it 20 times each', 'a chart for the other side is a new one');
+assert.equal(await page.textContent('#runChart'), 'Run it 100 times each', 'a chart for the other side is a new one');
 await page.click('#runChart');
 await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 11, null, { timeout: 30000 });
 
@@ -1345,20 +1345,39 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   await p.context().close();
 }
 
-// A change of call while the chart is running starts it again for the new call, and one that clears a finished chart
-// says so until it's run again.
+// The chart puts up every row's first numbers after 20 snaps, then keeps adding snaps until each row has 100. A change
+// of call while it's on its first time round starts it again for the new call; once the first numbers are up, it stops
+// and the chart goes, as a finished one does, saying so until it's run again.
 {
   const p = await phone();
   const rows = () => p.$$eval('#bars .bar-row:not(.waiting):not(.idle)', r => r.length);
-  const ready = () => p.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 30000 });
+  const snaps = () => p.$$eval('#bars .bar-row:not(.waiting):not(.idle)', r => r.map(x => +x.title.match(/over (\d+) snaps$/)[1]));
+  const ready = () => p.waitForFunction(() => document.getElementById('runChart').getAttribute('aria-disabled') !== 'true' && document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 60000 });
+  const settling = () => p.waitForFunction(() => /^Running… [4-8]0 of 100 each$/.test(document.getElementById('runChart').textContent), null, { timeout: 30000 });
   await p.click('#runChart');
   await p.getByRole('radio', { name: 'Mesh' }).click();
   assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), 'true', 'changing the call stopped the chart');
+  await p.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 5, null, { timeout: 30000 });
+  assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), 'true', 'the chart stopped at its first numbers');
+  await settling();
+  assert.ok((await snaps()).every(n => n >= 20 && n <= 100 && n % 20 === 0), 'rows add snaps 20 at a time');
+  await ready();
+  assert.deepEqual(await snaps(), [100, 100, 100, 100, 100], 'every row has 100 snaps once it\'s done');
+  assert.equal(await p.textContent('#runChart'), 'Run it again');
+  await p.click('#runChart');
+  await settling();
+  await p.getByRole('radio', { name: 'Smash' }).click();
+  assert.equal(await p.getAttribute('#runChart', 'aria-disabled'), null, 'a change of call once the first numbers are up stops the chart');
+  assert.equal(await p.locator('#bars .bar-row.idle').count(), 5, 'and the chart goes');
+  assert.match(await p.textContent('#chartHint'), / You changed the call\. Run it again for Smash\.$/);
+  await p.waitForTimeout(400);
+  assert.equal(await p.locator('#bars .bar-row.idle').count(), 5, 'the stopped chart carried on');
+  await p.click('#runChart');
   await ready();
   await p.getByRole('radio', { name: 'Flood' }).click();
   assert.equal(await rows(), 0);
   assert.equal(await p.locator('#bars .bar-row.idle').count(), 5, 'a finished chart cleared by a change of call shows its rows waiting to run');
-  assert.equal(await p.textContent('#runChart'), 'Run it 20 times each');
+  assert.equal(await p.textContent('#runChart'), 'Run it 100 times each');
   assert.match(await p.textContent('#chartHint'), / You changed the call\. Run it again for Flood\.$/);
   await p.click('#theirsLook');
   assert.match(await p.textContent('#chartHint'), / They changed their call\. Run it again for Flood\.$/);

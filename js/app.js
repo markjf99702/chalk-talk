@@ -668,8 +668,9 @@ function defenseChooser(host, readonly) {
 
 function afterChange() {
   const focused = document.activeElement?.dataset.key; // a chip picked from the keyboard keeps the focus once it's drawn again
-  // The chart is for the last call. One still running starts again for the new call; a finished one goes, with a word
-  // saying why until it's run again. (Calling the other side is another chart altogether.)
+  // The chart is for the last call. One still on its first time round starts again for the new call; one that has
+  // every row's first numbers up counts as finished, even while it's adding snaps: it stops and goes, with a word saying
+  // why until it's run again. (Calling the other side is another chart altogether.)
   const k = state.side === 'O' ? 'off' : 'def', yours = !state.auto || !same(state[k], own[k]);
   const finished = chart && chart.rows.every(r => r.avg !== undefined);
   const rerun = chart && !finished && chart.side === state.side;
@@ -934,10 +935,13 @@ addEventListener('hashchange', () => {
 // ---------------------------------------------------------------- the chart: this call against everything
 
 let chartJob = 0;
-let chart = null; // the rows of the last run: { rows: [{ id, name, call, avg, rate }], pressure, side }
+let chart = null; // the rows of the last run: { rows: [{ id, name, call, n, yds, ok, avg, rate }], pressure, side }
 let redo = null; // a finished chart went with a change of call: { side, yours } until it's run again
 // Run once, the button says it can be run again: each run is a new set of snaps, and the numbers move a little.
-const RUN_LABEL = $('runChart').textContent, AGAIN_LABEL = 'Run it again', SNAPS = 20;
+// Twenty snaps a row is enough for a first look but not to rank the rows (one row can swing from 1 to 14 yards a play
+// between runs), so the chart shows each row's first numbers after FIRST snaps and then goes round them again, FIRST
+// more at a time, until each has SNAPS, with the bars settling as it goes.
+const RUN_LABEL = $('runChart').textContent, AGAIN_LABEL = 'Run it again', FIRST = 20, SNAPS = 100;
 
 function clearChart() {
   chartJob++;
@@ -996,36 +1000,42 @@ async function runChart() {
   button.setAttribute('aria-disabled', 'true');
   const base = call();
   if (state.side === 'O' && hidden()) base.pressure = 'four';
-  const rows = state.side === 'O'
+  const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
-    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }));
+    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0 }));
   chart = { rows, pressure: base.pressure, side: state.side };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();
-  for (const [n, r] of rows.entries()) {
-    button.textContent = `Running… ${n + 1} of ${rows.length}`;
-    let yds = 0, ok = 0;
-    for (let k = 0; k < SNAPS; k++) {
-      if (performance.now() - slice > 10 || state.phase === 'playing') {
-        await breather();
-        while (state.phase === 'playing' && job === chartJob) await wait(100);
-        if (job !== chartJob) return;
-        slice = performance.now();
+  // The first time round, a row at a time ("Running… 2 of 5"); then every row again, FIRST more each time ("Running…
+  // 40 of 100 each"), so they all settle together. A change of call once every row has its first numbers ends the run
+  // (see afterChange), and the chart goes, as a finished one does.
+  for (let round = 1; round * FIRST <= SNAPS; round++) {
+    for (const [i, r] of rows.entries()) {
+      button.textContent = round === 1 ? `Running… ${i + 1} of ${rows.length}` : `Running… ${round * FIRST} of ${SNAPS} each`;
+      for (let k = 0; k < FIRST; k++) {
+        if (performance.now() - slice > 10 || state.phase === 'playing') {
+          await breather();
+          while (state.phase === 'playing' && job === chartJob) await wait(100);
+          if (job !== chartJob) return;
+          slice = performance.now();
+        }
+        const res = simulate({ ...r.call, flip: r.n % 2 === 1 }, newSeed()).result;
+        r.n++; r.yds += res.yards; if (success(res)) r.ok++;
       }
-      const res = simulate({ ...r.call, flip: k % 2 === 1 }, newSeed()).result;
-      yds += res.yards; if (success(res)) ok++;
+      r.avg = r.yds / r.n; r.rate = r.ok / r.n;
+      drawBars();
     }
-    r.avg = yds / SNAPS; r.rate = ok / SNAPS;
-    drawBars();
   }
   button.textContent = AGAIN_LABEL;
   button.removeAttribute('aria-disabled');
 }
 
-// The row for the other side's call is marked only once that call is out.
+// The row for the other side's call is marked only once that call is out. A bar that was already up glides to its new
+// length as the snaps come in, rather than jumping.
 function drawBars() {
   const host = $('bars');
+  const was = new Map([...host.querySelectorAll('.bar[data-id]')].map(b => [b.dataset.id, [b.style.left, b.style.width]]));
   host.textContent = '';
   const done = chart.rows.filter(r => r.avg !== undefined);
   const max = Math.max(8, ...done.map(r => Math.abs(r.avg)));
@@ -1048,9 +1058,13 @@ function drawBars() {
     const w = Math.abs(r.avg) / max * (neg ? 50 : 100);
     const left = neg ? (r.avg < 0 ? 50 - w : 50) : 0;
     row.innerHTML = `${name}
-      <span class="bar-track${neg ? ' split' : ''}"><span class="bar ${r.avg < 0 ? 'neg' : ''}" style="left:${left}%;width:${Math.max(0.6, w)}%"></span></span>
+      <span class="bar-track${neg ? ' split' : ''}"><span class="bar ${r.avg < 0 ? 'neg' : ''}" data-id="${esc(r.id)}"></span></span>
       <span class="bar-val">${r.avg >= 0 ? '' : '−'}${Math.abs(r.avg).toFixed(1)} <small>${Math.round(r.rate * 100)}%</small></span>`;
-    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${r.avg.toFixed(1)} yards a play, ${Math.round(r.rate * 100)}% successful`;
+    const bar = row.querySelector('.bar'), from = was.get(r.id);
+    if (from) { [bar.style.left, bar.style.width] = from; bar.getBoundingClientRect(); } // from where it was, then on
+    bar.style.left = `${left}%`;
+    bar.style.width = `${Math.max(0.6, w)}%`;
+    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${r.avg.toFixed(1)} yards a play, ${Math.round(r.rate * 100)}% successful, over ${r.n} snaps`;
   }
 }
 $('runChart').addEventListener('click', runChart);
