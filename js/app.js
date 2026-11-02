@@ -1987,6 +1987,7 @@ function playbook() {
     ['Three-step and five-step drop', 'How far the quarterback drops back before he throws, counted in steps. From the shotgun he\'s already back, so a three-step drop does what five steps do under center; a quick drop gets the ball out for short routes.'],
     ['Check-down', 'The short, safe throw when everything downfield is covered, usually to the back a few yards past the line.'],
     ['Hot throw', 'A quick throw when a blitzer is coming with nobody left to block him: the quarterback gets it out before he arrives, usually to the receiver in the area the blitzer left.'],
+    ['Hot route', 'A receiver\'s route changed at the line, just before the snap: he and the quarterback see how the defense lines up and switch to a route that beats it, often a quick one against a blitz. Here, tap a receiver or a back on your own pass play and pick Change his route; the play then reads "Smash, H on a slant".'],
     ['Flat', 'The short area out by the sideline, up to about 10 yards past the line.'],
     ['Curl-flat', 'From about the slot out to the sideline, up to about 12 yards deep. The defender there sinks under a curl route first, then widens to the flat.'],
     ['Hook-curl', 'Inside, from about the end of the line out to the slot, 2 to 13 yards deep: where curls and sit routes settle.'],

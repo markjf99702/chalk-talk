@@ -994,7 +994,7 @@ for (const width of [320, 360, 375]) {
   assert.match(said['Gun Trips'].strong ?? '', /^The strong side is the tight end's side, or the side with more receivers\./, 'the strong side is explained');
   assert.match(said['Gun Doubles'].strong ?? '', /^Gun Doubles is balanced, two receivers on each side, so the strong side is whichever side you call\./);
   assert.match(said.Singleback.strong ?? '', /^Singleback is balanced, a tight end and a receiver on each side, so/);
-  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Three-step and five-step drop', 'Check-down', 'Deep thirds, halves and quarters', 'Success', 'Big play', 'Takeaway']) {
+  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Three-step and five-step drop', 'Check-down', 'Hot route', 'Deep thirds, halves and quarters', 'Success', 'Big play', 'Takeaway']) {
     assert.ok(said.words.includes(w), `the playbook's words don't explain "${w}"`);
   }
   for (const z of said.zones) assert.ok(said.words.some(w => w.toLowerCase().startsWith(z.replace(/ \(.*/, ''))), `the playbook's words don't explain the ${z}`);
