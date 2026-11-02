@@ -279,6 +279,20 @@ function buildDefense(S) {
     else if (j.kind === 'rush' && d.extra && d.y > 4.5) { d.x = j.gap; d.y = 4.5; }
     else if (j.kind === 'rush' && d.blitzer && !d.edge) { d.y = Math.max(3.4, d.y - 1.2); }
   }
+  // The bump: in man coverage a cornerback who runs across with the man in motion leaves nobody outside on the side he
+  // left to keep a run inside, so the strong safety slides over and takes that job there. In Cover 1, with the free
+  // safety deep behind him, he takes the cornerback's place, 5 yards outside the tight end (where a cornerback in a zone
+  // stands with no receiver outside him) and 6 deep, and on a run holds the edge the way the cornerback would have (see
+  // holdEdge()); he plays the short middle from there on a pass, or his man on a blitz. In Cover 0, with nobody deep, he
+  // stays on his man, 2 yards outside the tight end and 5 1/2 deep, and comes up to a run as soon as he sees it, from
+  // outside. (Not when he's the one blitzing: he comes off that edge anyway.)
+  if (S.from && cov.man && ss.job.kind !== 'rush') {
+    const mover = S.O.find(p => p.label === S.fm.motion.who), sd = Math.sign(S.from.P[mover.i].x);
+    if (S.CB.some(cb => cb.job.kind === 'man' && cb.job.r === mover)) {
+      const te = S.te(sd), [out, deep] = cov.id === 'c0' ? [2, 5.5] : [5, 6];
+      ss.x = (te ? te.x : 3 * sd) + out * sd; ss.y = deep; ss.bump = sd; ss.holds = cov.id === 'c1';
+    }
+  }
   // A disguise: Cover 1 or Cover 3 lined up as two deep, the way Cover 4 lines up, with both safeties 12.5 yards deep
   // over a half of the field each and the corners 7 yards off. At the snap the safeties rotate (see rotate()): the free
   // safety to the deep middle, the strong safety down to where he'd have lined up, and in Cover 1 the corners play
@@ -378,9 +392,12 @@ function presnap(S, kind) {
   const at = t => { // where everyone is t seconds from the snap (t <= 0)
     const xy = new Float32Array(n * 2);
     for (const p of S.O) { const q = p === mover ? moverAt(t) : p; xy[2 * p.i] = q.x; xy[2 * p.i + 1] = q.y; }
-    const u = smooth((t - go - MO.react) / (done - go - MO.react));
+    // (The strong safety in a bump goes as the cornerback does, and gets to his spot by the snap, even ahead of a jet:
+    // see buildDefense().)
+    const u = smooth((t - go - MO.react) / (done - go - MO.react)), uB = smooth((t - go) / (Math.min(done, 0) - go));
     S.D.forEach((d, k) => {
-      let x = A[k].x + (B[k].x - A[k].x) * u, y = A[k].y + (B[k].y - A[k].y) * u;
+      const v = d.bump ? uB : u;
+      let x = A[k].x + (B[k].x - A[k].x) * v, y = A[k].y + (B[k].y - A[k].y) * v;
       if (d === man) {
         // a step behind him, as far to the side of him and as deep as he lines up on him: from how he lined up on
         // him before the motion to how he will at the snap, as the man in motion gets there
@@ -415,6 +432,8 @@ function presnap(S, kind) {
   line(go, jet ? `The ${mover.label} goes in jet motion, across at full speed.` : `The ${mover.label} goes in motion, across the formation.`, mover);
   if (man) line(go + (jet ? 0.5 : 0.8), `${cap(defName(S, man))} runs with him: man coverage.`, man);
   else line(go + (jet ? 0.5 : 0.8), S.cov.man ? 'Nobody follows him.' : 'Nobody follows him: zone.', mover);
+  // (In a disguise he stays deep, as if it were two deep, and comes down to that side at the snap.)
+  if (S.SS.bump && !S.disguise) line(go + (jet ? 0.8 : 1.3), 'The strong safety slides over to the side the cornerback left, to keep a run inside there: the bump.', S.SS);
   if (!jet) {
     const a = count(s1), b = count(-s1);
     line(setAt, `He sets on the other side: ${a === b ? `${r(a)} receivers each side now` : `${r(a)} receivers on his side now, ${r(b)} on the other`}.`, mover);
@@ -700,7 +719,7 @@ export function simulate(call, seed = 1) {
     unblocked: (S.unblocked || []).map(d => d.i), free: (S.freeRushers || []).map(d => d.i), cameFree, protection: S.protection.map(p => p.i),
     players: S.P.map(pl => ({ i: pl.i, team: pl.team, label: pl.label, cls: pl.cls, info: pl.info, x: S.pre[pl.i].x, y: S.pre[pl.i].y })),
     jobs: S.jobText, overlay: S.overlay, drawn: S.drawn || {}, drawnReads: S.drawnReads || [],
-    motion: S.motion ? { kind: S.motion.kind, who: S.motion.who.i, man: S.motion.man ? S.motion.man.i : -1, t0: S.motion.t0, set: S.motion.setAt } : null,
+    motion: S.motion ? { kind: S.motion.kind, who: S.motion.who.i, man: S.motion.man ? S.motion.man.i : -1, t0: S.motion.t0, set: S.motion.setAt, bump: S.SS.bump && !S.disguise ? S.SS.i : -1 } : null, // (bump: the safety seen sliding over)
   };
 }
 
@@ -1265,12 +1284,13 @@ function defense(S, d) {
   // After a catch or a handoff seen: everyone runs to the ball.
   if (c && c.team === 'O' && (S.caught || (c !== S.QB && runLook(S, t - d.lag)) || (c !== S.QB && c.y > -0.5))) {
     if (j.kind === 'man' && !S.caught && c !== j.r && c.y < 0 && t < 2 && d.cls === 'cb') { cover(S, d); return; }
+    if (d.holds && !S.caught && S.play.scheme !== 'draw' && c.y < 0 && t < 2) return holdEdge(S, d, c);
     return pursue(S, d, c);
   }
   if (ballOut) return breakOnBall(S, d);
   if (j.kind === 'rush') return rush(S, d);
   if (rotate(S, d)) return;
-  if (runLook(S, t - d.lag) && d.cls !== 'cb') return bite(S, d);
+  if (runLook(S, t - d.lag) && d.cls !== 'cb') return d.holds && S.play.type === 'run' && S.play.scheme !== 'draw' ? holdEdge(S, d, S.RB) : bite(S, d);
   if (t < 0.12) { d.tx = d.x; d.ty = d.y; d.ts = 0; return; }
   if (j.kind === 'man') return cover(S, d);
   if (j.kind === 'zone') return zone(S, d);
@@ -1290,6 +1310,16 @@ function pursue(S, d, c) {
   if (d.y > c.y + 4 && dd > 6) d.ty = Math.max(d.ty, c.y + 2);
   d.ts = d.top;
   d.want = c;
+}
+
+// The bump in Cover 1 (see buildDefense()): on a run to the outside or off tackle (not a draw, up the middle after he's
+// dropped) the strong safety holds the edge on the side the cornerback left until the ball carrier gets to the line, at
+// his depth and two steps outside the back, so the run can't get round him. The cornerback there would have been
+// covering his man until then (see defense()). Once it turns up the field, or two seconds in, he comes up to the ball
+// like anyone else.
+function holdEdge(S, d, c) {
+  const sd = d.bump, at = d.home || { x: d.x0, y: d.y0 }; // (after a disguise, the spot he rotates down to)
+  d.tx = sd * Math.max(Math.abs(at.x), c.x * sd + 2); d.ty = at.y; d.ts = d.top * (d.home && dist(d, d.home) > 2 ? 1 : 0.6); d.want = c;
 }
 
 // On a run the man covering the back keys him from the snap. He reads him for a moment, shuffling with him, then runs
@@ -1785,6 +1815,7 @@ function rotateLine(S) {
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
   const text = jobWords(S, pl), m = S.motion;
+  if (m && pl.bump) return `The cornerback goes across with the ${m.who.label}, so he takes his place on the ${Math.sign(pl.bump) === S.s ? 'strong' : 'weak'} side, keeping a run inside there: the bump. ${text}`;
   if (!m || (pl !== m.who && pl !== m.man)) return text;
   const side = Math.sign(m.end.x) === S.s ? 'strong' : 'weak';
   if (pl === m.man) return `${text} When the ${m.who.label} goes in motion, he runs with him.`;
@@ -1828,6 +1859,7 @@ function jobWords(S, pl) {
   const onRun = !run ? '' : draw ? ' On this draw he plays it as a pass until he sees the handoff, then comes up to the ball.'
     : j.kind === 'man' && j.r === S.RB ? ' On this run his man has the ball: he runs with him to the line, a step outside him, and meets him there.'
     : j.kind === 'man' && pl.cls === 'cb' ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
+    : pl.holds ? ' On this run he holds the edge, outside the ball carrier, until the ball carrier gets to the line, then comes up.'
     : ' On this run he reads it and comes downhill to the ball.';
   // A disguise: how he lines up, and what he does about it at the snap (see the end of buildDefense()).
   const look = !S.disguise ? '' : pl === S.FS ? ' He lines up deep over half the field, as if it were two deep, and rotates to the middle at the snap: the disguise.'
