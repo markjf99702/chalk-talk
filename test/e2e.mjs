@@ -2766,6 +2766,48 @@ for (const colorScheme of ['light', 'dark']) {
   await p.context().close();
 }
 
+// The down moves the other coach's call the way NFL teams' calls moved from 1st & 10 in 2023: on 3rd & 8 more nickel,
+// more blitzes and more Cover 1 calling the offense, and nearly all passes calling the defense; on 4th & 1 more runs and
+// more Cover 0. On 1st & 10 his call is what it was before there were downs. The Situation card says he leans.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  assert.match(await p.textContent('#sitBlurb'), / The other coach's calls lean the same way\.$/);
+  const roll = (side, sit) => p.evaluate(([side, sit]) => {
+    const { state, rollTheirs } = window.chalkTalk, n = 3000, runs = ['iz', 'oz', 'power', 'draw'], out = { nickel: 0, blitz: 0, c0: 0, c1: 0, pass: 0 };
+    Object.assign(state, { side, sit });
+    state.off = { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} };
+    for (let k = 0; k < n; k++) {
+      rollTheirs();
+      if (side === 'O') {
+        out.nickel += state.def.front === 'nickel';
+        out.c0 += state.def.coverage === 'c0';
+        out.c1 += state.def.coverage === 'c1';
+        out.blitz += state.def.coverage !== 'c0' && state.def.pressure === 'blitz';
+      } else out.pass += !runs.includes(state.off.play);
+    }
+    for (const k in out) out[k] /= n;
+    out.blitz /= 1 - out.c0; // of his calls that aren't Cover 0, which always blitzes
+    return out;
+  }, [side, sit]);
+  const first = await roll('O', '1and10'), long = await roll('O', '3and8'), fourth = await roll('O', '4and1');
+  const within = (v, lo, hi, what) => assert.ok(v >= lo && v <= hi, `${what}: ${(v * 100).toFixed(1)}%, not ${lo * 100}-${hi * 100}%`);
+  within(first.nickel, 0.5, 0.6, 'nickel against Gun Trips on 1st & 10');
+  within(long.nickel, 0.93, 0.99, 'nickel against Gun Trips on 3rd & 8');
+  within(first.blitz, 0.21, 0.29, 'a blitz on 1st & 10');
+  within(long.blitz, 0.34, 0.44, 'a blitz on 3rd & 8');
+  within(first.c1, 0.19, 0.25, 'Cover 1 on 1st & 10');
+  within(long.c1, 0.34, 0.42, 'Cover 1 on 3rd & 8');
+  within(fourth.c0, 0.21, 0.3, 'Cover 0 on 4th & 1');
+  const passFirst = (await roll('D', '1and10')).pass, passLong = (await roll('D', '3and8')).pass, passFourth = (await roll('D', '4and1')).pass;
+  within(passFirst, 0.5, 0.61, 'passes on 1st & 10');
+  within(passLong, 0.94, 0.99, 'passes on 3rd & 8');
+  within(passFourth, 0.27, 0.4, 'passes on 4th & 1');
+  await c.close();
+}
+
 // Snap again while reading the result card: the reader keeps his place. The last result stays where it was, faded and
 // out of reach, until the new one comes in at the end of the play, rather than going and taking the page under the
 // board with it. New look from the result card goes on to their card, just under the board. Where the board doesn't

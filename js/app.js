@@ -156,9 +156,24 @@ const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.a
 // The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on. It's
 // never the call they had (New look always changes something), short of ten unlucky rolls in a row.
 // Calling the defense, his play leans on his personnel, so reading it before the snap tells you something: about this
-// share of his plays are runs from each formation, the rest passes, and every play stays possible. (A design choice
-// in the direction real offenses lean, more backs and tight ends running more; not a published statistic.)
+// share of his plays are runs from each formation on 1st & 10, the rest passes, and every play stays possible. (A
+// design choice in the direction real offenses lean, more backs and tight ends running more; not a published
+// statistic.) The down moves it (see lean()).
 const RUN_SHARE = { iform: 0.6, single: 0.55, trips: 0.375, doubles: 0.25 };
+// The down and distance moves his call the way NFL teams' calls moved from 1st & 10 to that situation in 2023 (nfl in
+// SITUATIONS, js/playbook.js), from his 1st & 10 call as it always was. A yes-or-no share moves by the same odds as the
+// NFL's did, so it stays between none and all: his nickel front by the NFL's five or more defensive backs, his blitz by
+// its five or more rushers, and his run share by its runs (on 3rd & 8 the NFL blitzed on 39% of dropbacks against 25%
+// on 1st & 10, and so does he; I-Form's 60% of runs on 1st & 10 becomes 6%). Each coverage moves by as many points as
+// its share of the NFL's five did, rather than by odds, as this board's Cover 0 already comes up far more often on
+// 1st & 10 than the NFL's 1%: on 3rd & 8 his Cover 1 goes from 22% to 38%.
+function lean(sit) {
+  const a = SITUATIONS[0].nfl, b = sit.nfl;
+  const odds = (from, to) => p => { if (from === to) return p; const o = (p / (1 - p)) * (to / (100 - to)) / (from / (100 - from)); return o / (1 + o); };
+  const share = n => { const all = Object.values(n.cover).reduce((x, y) => x + y, 0); return c => n.cover[c] / all; };
+  const was = share(a), now = share(b);
+  return { nickel: odds(a.nickel, b.nickel), blitz: odds(a.blitz, b.blitz), run: odds(100 - a.pass, 100 - b.pass), cover: (c, p) => Math.max(0.01, p + now(c) - was(c)) };
+}
 // Calling the defense, his offense puts a man in motion about one snap in three, across or jet alike. (A design
 // choice, so motion comes up as you watch your own defense; not a published statistic.)
 const MOTION_SHARE = 1 / 3;
@@ -174,18 +189,21 @@ function rollTheirs() {
   const theirs = () => (state.side === 'O'
     ? [state.def.front, state.def.coverage, state.def.coverage === 'c0' ? 'blitz' : state.def.pressure] // Cover 0 always blitzes; a disguise alone isn't a new call
     : [state.off.formation, state.off.play, state.off.flip]).join();
-  const had = theirs();
+  const had = theirs(), L = lean(situation());
   for (let tries = 0; tries < 10 && theirs() === had; tries++) {
     if (state.side === 'O') {
       const pers = byId(FORMATIONS, state.off.formation).personnel;
       const spread = pers === '10' || pers === '11';
-      state.def.front = w(spread ? [['nickel', 0.55], ['over', 0.15], ['under', 0.12], ['34', 0.18]] : [['over', 0.3], ['under', 0.25], ['34', 0.3], ['nickel', 0.15]]);
-      state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]]);
-      state.def.pressure = R() < 0.25 ? 'blitz' : 'four';
+      // his fronts on 1st & 10, then nickel moved for the down and the others sharing what's left as they did
+      const fronts = spread ? [['nickel', 0.55], ['over', 0.15], ['under', 0.12], ['34', 0.18]] : [['over', 0.3], ['under', 0.25], ['34', 0.3], ['nickel', 0.15]];
+      const nickel = fronts.find(([f]) => f === 'nickel')[1], more = L.nickel(nickel);
+      state.def.front = w(fronts.map(([f, p]) => [f, f === 'nickel' ? more : p * (1 - more) / (1 - nickel)]));
+      state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]].map(([c, p]) => [c, L.cover(c, p)]));
+      state.def.pressure = R() < L.blitz(0.25) ? 'blitz' : 'four';
       state.def.disguise = DISGUISES.includes(state.def.coverage) && R() < DISGUISE_SHARE;
     } else {
       state.off.formation = R.pick(FORMATIONS).id;
-      const run = RUN_SHARE[state.off.formation] ?? 0.42, runs = PLAYS.filter(p => p.type === 'run').length;
+      const run = L.run(RUN_SHARE[state.off.formation] ?? 0.42), runs = PLAYS.filter(p => p.type === 'run').length;
       state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (PLAYS.length - runs)]));
       state.off.flip = R() < 0.5;
       const m = R();
@@ -1106,7 +1124,7 @@ function renderSituation() {
     host.append(b);
   }
   rove(host);
-  $('sitBlurb').textContent = sit.blurb;
+  $('sitBlurb').textContent = sit.blurb + (state.auto && !drill ? ' The other coach\'s calls lean the same way.' : ''); // (a drill's are the drill's)
 }
 // A new down and distance. The other coach makes a new call for it, hidden until the snap as usual (see rollTheirs()),
 // unless it's a drill's: a drill is five snaps in one situation, so a new one starts it over. The chart was for the
