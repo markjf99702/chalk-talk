@@ -1494,8 +1494,9 @@ function syncJobs() {
     + (hidden() ? ` Their jobs stay hidden until ${asking() ? 'you name their coverage' : 'the snap'}, as on the board.` : '');
 }
 
-// The board in words, as the teams line up: the formation, where the receivers and the backs are, and then what the
-// defense shows: the safeties deep, the box count and the corners. Left and right are the board's, as it's shown.
+// The board in words, as the teams line up: the down and the line to gain, the formation, where the receivers and the
+// backs are, and then what the defense shows: the safeties deep, the box count and the corners. Left and right are the
+// board's, as it's shown.
 function boardWords(P) {
   const fm = byId(FORMATIONS, P.call.formation);
   const lr = sd => ((sd > 0) !== board.flip ? 'right' : 'left'); // sd: the offense's right (+1) or left (-1)
@@ -1518,7 +1519,9 @@ function boardWords(P) {
   // (across to the side he didn't line up on: at the snap a jet man is still short of the middle, on his first side)
   const mover = P.motion && P.players[P.motion.who];
   const m = P.motion && (state.side === 'O' || !state.auto) ? ` Before the snap the ${mover.label} goes in ${P.motion.kind === 'jet' ? 'jet motion' : 'motion'} across to the ${lr(-Math.sign(lined(mover)) || 1)}.` : '';
-  return `${fm.name}, strong ${lr(strong)}: ${sides}; ${backfield}.${m} The defense${P.motion ? ' at the snap' : ''}: ${deep}, ${P.box.box} in the box against ${P.box.blockers} blockers, ${corners}.`;
+  // (the down first, with the yellow line's distance, as the board draws it)
+  const line = `${P.sit.name}, the line to gain ${P.sit.togo} yard${P.sit.togo === 1 ? '' : 's'} up the field.`;
+  return `${line} ${fm.name}, strong ${lr(strong)}: ${sides}; ${backfield}.${m} The defense${P.motion ? ' at the snap' : ''}: ${deep}, ${P.box.box} in the box against ${P.box.blockers} blockers, ${corners}.`;
 }
 
 // ---------------------------------------------------------------- the result

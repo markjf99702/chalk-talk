@@ -1139,7 +1139,9 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   assert.deepEqual(j.def.map(t => t.split(' · ')[0]), j.drawnDef, 'the defense isn\'t left to right as the board shows it');
   assert.equal(j.off[0], 'X · Split end (X)');
   assert.ok(j.off.includes('LT · Left tackle') && j.def.includes('FS · Free safety'), `the buttons: ${j.off.join(', ')} / ${j.def.join(', ')}`);
-  assert.match(j.words, /^Gun Trips, strong right: a tight end and two receivers right, a receiver left; the quarterback in the shotgun, a back beside him\. The defense: two safeties deep, \d in the box against \d blockers, both corners about 5 yards off\.$/, `the board in words: ${j.words}`);
+  assert.match(j.words, /^1st & 10, the line to gain 10 yards up the field\. Gun Trips, strong right: a tight end and two receivers right, a receiver left; the quarterback in the shotgun, a back beside him\. The defense: two safeties deep, \d in the box against \d blockers, both corners about 5 yards off\.$/, `the board in words: ${j.words}`);
+  assert.match(await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; state.sit = '4and1'; lineUp(); const w = document.getElementById('boardWords').textContent; state.sit = '1and10'; lineUp(); return w; }),
+    /^4th & 1, the line to gain 1 yard up the field\. Gun Trips, strong right: /);
   // what a screen reader hears for the board: its name, and the same words as its description
   const cdp = await p.context().newCDPSession(p);
   const { root } = await cdp.send('DOM.getDocument');
@@ -1176,7 +1178,7 @@ const frames = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() =
   j = await jobs();
   assert.deepEqual(j.off.map(t => t.split(' · ')[0]), j.drawnOff, 'calling the defense, the offense isn\'t left to right as the board shows it');
   assert.equal(j.off[0], 'Z · Flanker (Z)', 'calling the defense, the offense\'s right isn\'t on the board\'s left');
-  assert.match(j.words, /^Gun Trips, strong left: a tight end and two receivers left, a receiver right;/, `calling the defense, the board in words: ${j.words}`);
+  assert.match(j.words, /^1st & 10, the line to gain 10 yards up the field\. Gun Trips, strong left: a tight end and two receivers left, a receiver right;/, `calling the defense, the board in words: ${j.words}`);
   await p.context().close();
 }
 
