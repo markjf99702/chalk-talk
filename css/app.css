@@ -462,6 +462,9 @@ button:disabled { cursor: default; }
 /* a row of small buttons, so the card under the board on a phone leaves your call close by */
 .drills .chips { margin-top: 8px; }
 .drills .chip { font-size: 14px; padding: 5px 11px; }
+/* the down and distance: a row of small buttons too, with what it means under them */
+.situation .chips { margin-top: 8px; }
+.situation .chip { font-size: 14px; padding: 5px 11px; }
 .drill-now { margin-top: 10px; }
 .drill-now p { margin: 0; font-size: 15px; }
 .drill-now p + p { margin-top: 6px; }

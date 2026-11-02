@@ -265,6 +265,46 @@ export const POSITIONS = {
 
 export const PERSONNEL = 'Personnel is two digits: how many running backs, then how many tight ends. The rest of the five eligible receivers are wide receivers. 21 is two backs and one tight end; 10 is one back, no tight end, four receivers.';
 
+// Down and distance: the situations the board can be set to, in the Situation row above your call. The yellow line on
+// the board is the line to gain, togo yards up the field. A play is a success when it gains 40% of the yards to go on
+// first down, 60% on second, and all of them on third and fourth: Pro-Football-Reference's definition (Sports Reference
+// blog, "Success Rate Comes to Pro Football Reference!", Jonah Gardner, 1 September 2023). On 1st & 10 that's the
+// 4 yards the board counted before it had downs. On fourth down, a play short of the line hands the ball to the other
+// team: a turnover on downs.
+// nfl: what NFL teams did in that situation in the 2023 regular season, in percent, counted from nflverse's 2023
+// play-by-play and participation files (kneel-downs, spikes and two-point tries left out): how often the offense
+// dropped back to pass (a scramble counts as a pass); how often the defense had five or more defensive backs on the
+// field (nickel, or six of them); and against a dropback, how often it rushed five or more, and how often it played each
+// of the five coverages on this board (the rest were others: Cover 6, two-man and the like). The other coach's calls
+// lean the way these move from 1st & 10 (see rollTheirs() in js/app.js); the blurbs say what they show.
+export const SITUATIONS = [
+  {
+    id: '1and10', down: 1, togo: 10, name: '1st & 10',
+    nfl: { pass: 52, nickel: 71, blitz: 25, cover: { c0: 1, c1: 29, c2: 16, c3: 24, c4: 12 } },
+    blurb: 'Ten yards to go for a first down, and four downs to get there. A gain of 4 yards, 40% of the 10, is a success: it leaves a manageable second down. NFL offenses passed on about half of these snaps in 2023.',
+  },
+  {
+    id: '2and6', down: 2, togo: 6, name: '2nd & 6',
+    nfl: { pass: 58, nickel: 77, blitz: 27, cover: { c0: 3, c1: 33, c2: 14, c3: 22, c4: 10 } },
+    blurb: 'Six to go. On second down a success is 60% of it, and in whole yards that\'s 4 again: it leaves a short third down. NFL offenses passed on about three snaps in five here.',
+  },
+  {
+    id: '3and2', down: 3, togo: 2, name: '3rd & 2',
+    nfl: { pass: 62, nickel: 85, blitz: 25, cover: { c0: 6, c1: 49, c2: 14, c3: 15, c4: 6 } },
+    blurb: 'Third down: only the first down is a success, here 2 yards. NFL offenses still passed on about three snaps in five, and defenses played more man coverage: Cover 1 on about half the throws.',
+  },
+  {
+    id: '3and8', down: 3, togo: 8, name: '3rd & 8',
+    nfl: { pass: 96, nickel: 98, blitz: 39, cover: { c0: 4, c1: 41, c2: 13, c3: 12, c4: 10 } },
+    blurb: 'Third and long: only the first down, all 8 yards, is a success, and a 6-yard gain is a failure. NFL offenses passed on 96 snaps in 100, so defenses had five or six defensive backs out, blitzed more and played more Cover 1.',
+  },
+  {
+    id: '4and1', down: 4, togo: 1, name: '4th & 1',
+    nfl: { pass: 31, nickel: 60, blitz: 59, cover: { c0: 18, c1: 48, c2: 11, c3: 8, c4: 3 } },
+    blurb: 'Fourth down: a yard for a first down, or the other team gets the ball where the play ends, a turnover on downs. NFL offenses ran on about two snaps in three; defenses played man coverage and blitzed on most throws.',
+  },
+];
+
 // Drills: five snaps against one call from the other coach, and then a line from the coach's notes on what beats it.
 // On offense his defense is the drill's (with his front set to your personnel: nickel against three or four receivers,
 // the 4-3 Over against two backs or two tight ends); on defense he runs from the drill's formation, a different run

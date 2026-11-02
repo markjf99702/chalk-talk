@@ -1,5 +1,5 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS } from './playbook.js';
 import { simulate, prepare, name, hotRoutes } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
@@ -22,6 +22,7 @@ const state = {
   side: 'O',
   off: { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} },
   def: { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false },
+  sit: '1and10', // the down and distance, for both sides (SITUATIONS in js/playbook.js)
   auto: true,
   labels: true,
   speed: 1,
@@ -77,6 +78,10 @@ const DISGUISES = ['c1', 'c3'];
 const disguised = d => d.disguise && DISGUISES.includes(d.coverage);
 // The coverage as a sentence says it: "Cover 3", or "disguised Cover 3".
 const covWords = d => `${disguised(d) ? 'disguised ' : ''}${byId(COVERAGES, d.coverage).name}`;
+// The down and distance, the same for both sides: one of SITUATIONS (js/playbook.js) by its id, as it's kept and as a
+// shared link has it ("3and8"). A play has the one it was snapped in (state.play.sit, see lineUp()).
+const okSit = id => (SITUATIONS.some(s => s.id === id) ? id : null);
+const situation = () => byId(SITUATIONS, state.sit);
 
 function load() {
   try {
@@ -85,6 +90,7 @@ function load() {
       if (s.side === 'O' || s.side === 'D') state.side = s.side;
       state.off = okOff(s.off) || state.off;
       state.def = okDef(s.def) || state.def;
+      state.sit = okSit(s.sit) || state.sit;
       if (typeof s.auto === 'boolean') state.auto = s.auto;
       if (typeof s.labels === 'boolean') state.labels = s.labels;
       if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
@@ -105,7 +111,7 @@ function keepOwn() {
   if (!state.auto || state.side === 'D') own.def = { ...state.def };
 }
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best })); } catch { /* fine */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, sit: state.sit, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best })); } catch { /* fine */ }
 }
 // The question's switch and the streak, from a save (this tab's, or another tab's as it saves).
 const tally = n => (Number.isInteger(n) && n >= 0 ? n : null);
@@ -120,15 +126,16 @@ function takeQuiz(s) {
 // visit gets a fresh look.
 const PLAY_KEY = 'chalk-talk.v1.play';
 function keepPlay() {
-  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, book: state.book, ask: state.ask, drill, drilled, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
+  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, sit: state.sit, seed: state.seed, seen: state.seen, book: state.book, ask: state.ask, drill, drilled, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
 }
-// The kept play, if it's for the calls you have now (after a shared play, say, it isn't).
+// The kept play, if it's for the calls and the situation you have now (after a shared play, say, it isn't). One kept
+// before there were downs was on 1st & 10.
 function keptPlay() {
   try {
     const k = JSON.parse(sessionStorage.getItem(PLAY_KEY) || 'null'), off = okOff(k?.off), def = okDef(k?.def);
     // A drill under way has the other coach picking, whatever your own switch says (see startDrill()).
     const drill = okDrill(k?.drill, k?.side), auto = drill ? true : state.auto;
-    if (!off || !def || k.side !== state.side || k.auto !== auto || !Number.isInteger(k.seed) || k.seed < 0) return null;
+    if (!off || !def || k.side !== state.side || k.auto !== auto || (k.sit ?? '1and10') !== state.sit || !Number.isInteger(k.seed) || k.seed < 0) return null;
     if ((!auto || state.side === 'O') && !same(off, own.off)) return null;
     if ((!auto || state.side === 'D') && !same(def, own.def)) return null;
     const ask = k.ask && (k.ask.guess === null || COVERAGES.some(c => c.id === k.ask.guess)) ? { guess: k.ask.guess } : null;
@@ -198,6 +205,7 @@ function lineUp(keep = false) {
   clearTimeout(whyTimer);
   moment = null;
   state.play = simulate(call(), state.seed);
+  state.play.sit = situation();
   state.phase = 'pre';
   board.setPlay(state.play);
   board.mark = endMark(state.play.result);
@@ -1032,7 +1040,8 @@ function defenseChooser(host, readonly) {
   });
 }
 
-function afterChange() {
+// why: 'sit' when it's the situation that changed, for the chart's word on it.
+function afterChange(why = '') {
   const focused = document.activeElement?.dataset.key; // a chip picked from the keyboard keeps the focus once it's drawn again
   // The chart is for the last call. One still on its first time round starts again for the new call; one that has
   // every row's first numbers up counts as finished, even while it's adding snaps: it stops and goes, with a word saying
@@ -1041,7 +1050,7 @@ function afterChange() {
   const finished = chart && chart.rows.every(r => r.avg !== undefined);
   const rerun = chart && !finished && chart.side === state.side;
   const stale = chart ? finished && chart.side === state.side : redo?.side === state.side; // a finished one, or one gone already
-  redo = stale ? { side: state.side, yours } : null;
+  redo = stale ? { side: state.side, yours, sit: why === 'sit' } : null;
   // On a computer the result card at the top of the column goes, and the calls under it would jump up the screen, out
   // of sight if the page was scrolled down to them: they stay where they were instead, or as near as the page scrolls,
   // which brings them back to the top of the column.
@@ -1077,6 +1086,37 @@ function renderChoosers() {
   $('askSwitch').hidden = !(state.auto && state.side === 'O') || !!drill;
   syncTheirs();
   renderDrills();
+  renderSituation();
+}
+
+// The situation: a button for each down and distance, and what it means, for whichever side you call.
+function renderSituation() {
+  const host = $('sitChips'), sit = situation();
+  host.textContent = '';
+  for (const s of SITUATIONS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(s.id === sit.id));
+    b.dataset.key = `Situation:${s.id}`;
+    b.textContent = s.name;
+    b.addEventListener('click', () => setSit(s.id));
+    host.append(b);
+  }
+  rove(host);
+  $('sitBlurb').textContent = sit.blurb;
+}
+// A new down and distance. The other coach makes a new call for it, hidden until the snap as usual (see rollTheirs()),
+// unless it's a drill's. The chart was for the last one.
+function setSit(id) {
+  if (!okSit(id) || id === state.sit) return;
+  state.sit = id;
+  const repick = state.auto && !drill;
+  if (repick) rollTheirs();
+  afterChange('sit');
+  const s = situation();
+  setCaption(`${s.name}: ${repick ? 'they\'ve changed their call.' : `${s.togo} yard${s.togo === 1 ? '' : 's'} to go.`}`);
 }
 
 function theirSummary() {
@@ -1114,7 +1154,7 @@ function renderMatchup() {
   const mo = moving(state.off) ? ` · ${fm.motion.who} ${state.off.motion === 'jet' ? 'jet' : 'across'}` : '';
   const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : `${esc(mo)} · ${esc(playShort(state.off))}`);
   const def = esc(fr.name) + (state.side === 'O' && hidden() ? dim('coverage') : ` · ${esc(cv.name)}${disguised(state.def) ? ' (disguised)' : ''}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ' · Blitz' : ''}`);
-  $('matchup').innerHTML = `${off}  vs  ${def}`;
+  $('matchup').innerHTML = `${esc(situation().name)} · ${off}  vs  ${def}`;
 }
 
 for (const b of document.querySelectorAll('[data-side]')) b.addEventListener('click', () => {
@@ -1691,7 +1731,7 @@ function resetShare() {
 }
 $('share').addEventListener('click', async () => {
   const c = call();
-  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off)].filter(x => x !== '').join('.');
+  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off), state.sit].filter(x => x !== '').join('.');
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
   resetShare();
@@ -1710,24 +1750,26 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot): 'ok' once
-// it's set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front, coverage or hot route this
-// version doesn't have (the address is cleared either way), '' when there's none. A link from before there were
-// disguises ends at the seed, one from before motion at the disguise, and one with no hot routes at the motion: they
-// open without them. The hot routes are each man's label and his route, run together ("HslantRBblock").
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot.situation):
+// 'ok' once it's set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front, coverage, hot route
+// or situation this version doesn't have (the address is cleared either way), '' when there's none. A link from before
+// there were disguises ends at the seed, one from before motion at the disguise, one from before downs at the hot
+// routes, and one with no hot routes goes from the motion to the situation: they open without them, and one from before
+// downs is on 1st & 10, as the board was then. The hot routes are each man's label and his route, run together
+// ("HslantRBblock"); the situation is the down, "and", and the yards to go ("3and8").
 let linkNote = '';
 function fromLink() {
   const hash = location.hash;
   if (!hash.startsWith('#p=')) return '';
   history.replaceState(null, '', location.pathname + location.search);
-  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01])(?:\.(\w+)(?:\.([A-Za-z]+))?)?)?/);
+  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01])(?:\.(\w+)(?:\.([A-Za-z]+))?(?:\.(\d+and\d+))?)?)?/);
   if (!m) return 'bad';
-  const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion, code = ''] = m;
-  if (motion && !MOTIONS.includes(motion)) return 'unknown';
+  const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion, code = '', sit = '1and10'] = m;
+  if ((motion && !MOTIONS.includes(motion)) || !okSit(sit)) return 'unknown';
   if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
   const given = [...code.matchAll(/([A-Z]+)([a-z]+)/g)], hot = okHot(Object.fromEntries(given.map(([, who, r]) => [who, r])), formation, playId);
   if (given.map(g => g[0]).join('') !== code || Object.keys(hot).length !== given.length) return 'unknown';
-  Object.assign(state, { side, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
+  Object.assign(state, { side, sit, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
   drill = drilled = null;
   state.off = { formation, play: playId, flip: flip === '1', motion: motion || 'none', hot };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four', disguise: disguise === '1' };
@@ -1810,6 +1852,7 @@ function again() {
   const cv = byId(COVERAGES, state.def.coverage);
   const mine = state.side === 'O' ? byId(PLAYS, state.off.play).name
     : `${byId(FRONTS, state.def.front).name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ', blitz' : ', rush four'}`;
+  if (redo.sit) return ` The situation changed. Run it again for ${mine} on ${situation().name}.`;
   return ` ${redo.yours ? 'You changed the call' : 'They changed their call'}. Run it again for ${mine}.`;
 }
 function syncChart() { $('chartHint').textContent = chartHint(); if (chart) drawBars(); }

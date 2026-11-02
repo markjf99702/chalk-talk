@@ -1224,7 +1224,7 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
 {
   const p = await phone();
   await p.click('[data-side="D"]');
-  assert.match(await p.textContent('#matchup'), /^[^·]+ · play hidden  vs  /, 'calling the defense, the board gives the play away');
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · [^·]+ · play hidden  vs  /, 'calling the defense, the board gives the play away');
   const wr = await p.evaluate(() => {
     const { board, state } = window.chalkTalk, q = state.play.players.find(o => o.cls === 'wr'), r = board.cv.getBoundingClientRect(), z = board.pos(0, q.i);
     return { i: q.i, x: r.left + board.sx(z.x), y: r.top + board.sy(z.y) };
@@ -2053,11 +2053,11 @@ for (const colorScheme of ['light', 'dark']) {
   await c.grantPermissions(['clipboard-read', 'clipboard-write']);
   await p.click('#share');
   const link = await p.evaluate(() => navigator.clipboard.readText());
-  assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.four\.\d+\.1\.\w+$/, `the link is ${link}`);
+  assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.four\.\d+\.1\.\w+\.1and10$/, `the link is ${link}`);
   await p.goto(base + link.slice(link.indexOf('#')));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: true });
-  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.1\.\w+$/, ''));
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.1\.\w+\.1and10$/, ''));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.def.disguise), false, 'a link from before disguises opens without one');
   // The other coach's disguise, asked about.
@@ -2105,7 +2105,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal(await p.evaluate(() => window.chalkTalk.board.start()), 0, 'no motion, no time before the snap');
   await p.getByRole('radio', { name: 'Across' }).click();
   assert.match((await row()).blurb, /^Before the snap the H runs across the formation, behind the line, and sets on the weak side: two receivers each side\. If a defender runs with him, it's man coverage/);
-  assert.match(await p.textContent('#matchup'), /^Gun Trips · H across · Smash/);
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · Gun Trips · H across · Smash/);
   await p.click('#auto');
   await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'four', disguise: false }); lineUp(); });
   const t0 = await p.evaluate(() => window.chalkTalk.board.start());
@@ -2154,14 +2154,14 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
   await p.click('#share');
   const link = await p.evaluate(() => navigator.clipboard.readText());
-  assert.match(link, /#p=O\.trips\.smash\.0\.nickel\.c3\.four\.\d+\.0\.jet$/, `the link is ${link}`);
+  assert.match(link, /#p=O\.trips\.smash\.0\.nickel\.c3\.four\.\d+\.0\.jet\.1and10$/, `the link is ${link}`);
   await p.goto(base + link.slice(link.indexOf('#')));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.off.motion), 'jet');
-  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet$/, ''));
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10$/, ''));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.off.motion), 'none', 'a link from before motion opens without it');
-  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet$/, '.zoom'));
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10$/, '.zoom.1and10'));
   await p.waitForFunction(() => location.hash === '');
   assert.equal(await p.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
   // Calling the defense, the other coach sends a man in motion about one snap in three.
@@ -2274,7 +2274,7 @@ for (const colorScheme of ['light', 'dark']) {
   // your defense.
   await p.click('#drillChips button:text-is("Stop the run against I-Form")');
   assert.deepEqual(await his(), { auto: true, side: 'D', switch: false, newLook: false, ask: false });
-  assert.match(await p.textContent('#matchup'), /^I-Form · play hidden/);
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · I-Form · play hidden/);
   const runs = new Set(), stops = [];
   for (let k = 0; k < 5; k++) {
     const worked = await down();
@@ -2486,7 +2486,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.deepEqual([r.open, r.on, r.focus], [true, 'slant', 'slant'], 'the row after a route is picked');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), { H: 'slant' });
   assert.equal(await p.textContent('#caption'), 'Hot route: the H on a slant.');
-  assert.match(await p.textContent('#matchup'), /^Gun Trips · Smash \(H slant\)  vs  /);
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · Gun Trips · Smash \(H slant\)  vs  /);
   assert.equal(await reads(), '1. H (slant), 2. Z (hitch), 3. X (dig), 4. RB (check-down).', 'he keeps his place in the reads');
   // The tight end sits on Smash and isn't read: given a curl, he's read last.
   await tap('Y');
@@ -2532,7 +2532,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#share');
   await p.waitForFunction(() => document.getElementById('share').textContent === 'Link copied' || !document.getElementById('shareUrl').hidden);
   const link = await p.evaluate(async () => { const box = document.getElementById('shareUrl'); return box.hidden ? navigator.clipboard.readText() : box.value; });
-  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.YcurlHslant$/);
+  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.YcurlHslant\.1and10$/);
   const q = await c.newPage();
   await q.goto(base + link.slice(link.indexOf('#')));
   await q.waitForSelector('#result:not([hidden])', { timeout: 15000 });
@@ -2551,7 +2551,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), { Y: 'curl', H: 'slant' }, 'a reload lost the hot routes');
   await p.getByRole('radio', { name: 'Flood' }).click();
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), {}, 'a new play kept the old one\'s hot routes');
-  assert.match(await p.textContent('#matchup'), /^Gun Trips · Flood  vs  /);
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · Gun Trips · Flood  vs  /);
   // A run play has none, and neither has the other coach's offense when you call the defense.
   await p.getByRole('radio', { name: 'Inside Zone' }).click();
   await tap('H');
@@ -2569,6 +2569,77 @@ for (const colorScheme of ['light', 'dark']) {
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.chart().rows.filter(r => Object.keys(r.call.hot || {}).length).map(r => [r.id, r.call.hot])), [['smash', { H: 'slant' }]], 'the chart ran every play with the H on a slant');
   assert.match(await p.textContent('#chartHint'), /^How often each play from Gun Trips succeeds against your defense, gaining 4 yards or more: Smash as you changed it \(the H on a slant\), the rest as drawn\. /);
   await c.close();
+}
+
+// Down and distance: a Situation row above your call, on 1st & 10 to start with, says what the down means. A pick is
+// kept, comes back after a reload, rides in a shared link (one from before there were downs opens on 1st & 10, and one
+// with a situation this version doesn't have says so), and the board's matchup line names it. With the other coach
+// picking, a new situation gets a new call from him, hidden until the snap; calling both sides, both calls stay.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  await c.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const p = await c.newPage();
+  const errors = [];
+  p.on('pageerror', e => errors.push(e.message));
+  await p.goto(base);
+  const chips = (q = p) => q.$$eval('#sitChips [role="radio"]', bs => bs.map(b => b.textContent + (b.getAttribute('aria-checked') === 'true' ? '*' : '')));
+  assert.deepEqual(await chips(), ['1st & 10*', '2nd & 6', '3rd & 2', '3rd & 8', '4th & 1']);
+  assert.ok(await p.evaluate(() => !!(document.getElementById('situation').compareDocumentPosition(document.getElementById('mine')) & Node.DOCUMENT_POSITION_FOLLOWING)), 'the situation comes before your call');
+  assert.match(await p.textContent('#sitBlurb'), /^Ten yards to go for a first down, and four downs to get there\. A gain of 4 yards, 40% of the 10, is a success/);
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · Gun Trips/);
+  const was = await p.evaluate(() => JSON.stringify(window.chalkTalk.state.def));
+  await p.getByRole('radio', { name: '3rd & 8' }).click();
+  assert.deepEqual(await chips(), ['1st & 10', '2nd & 6', '3rd & 2', '3rd & 8*', '4th & 1']);
+  assert.match(await p.textContent('#sitBlurb'), /^Third and long: only the first down, all 8 yards, is a success, and a 6-yard gain is a failure\./);
+  assert.equal(await p.textContent('#caption'), '3rd & 8: they\'ve changed their call.');
+  assert.match(await p.textContent('#matchup'), /^3rd & 8 · Gun Trips .*coverage hidden/);
+  assert.notEqual(await p.evaluate(() => JSON.stringify(window.chalkTalk.state.def)), was, 'a new situation, and the other coach kept his call');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.play.sit.id), '3and8', 'the play lined up is for the new situation');
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).sit), '3and8', 'the situation is kept');
+  await p.reload();
+  assert.deepEqual(await chips(), ['1st & 10', '2nd & 6', '3rd & 2', '3rd & 8*', '4th & 1'], 'a reload lost the situation');
+  // A shared link has it as its last field, after the hot routes, if any.
+  await p.click('#snap');
+  await p.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
+  await p.click('#share');
+  const link = await p.evaluate(() => navigator.clipboard.readText());
+  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.3and8$/, `the link is ${link}`);
+  const q = await c.newPage();
+  q.on('pageerror', e => errors.push(e.message));
+  await q.goto(base + link.slice(link.indexOf('#')));
+  await q.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+  assert.equal(await q.evaluate(() => window.chalkTalk.state.play.sit.id), '3and8', 'the shared link lost its situation');
+  assert.equal(await q.textContent('#resHead'), await p.textContent('#resHead'), 'the shared link plays another snap');
+  // One from before there were downs is on 1st & 10, as the board was then; one with hot routes has it after them.
+  const open = async (hash, ok) => {
+    await q.evaluate(hash => { location.hash = hash; }, hash);
+    await q.waitForFunction(ok, null, { timeout: 5000 }).catch(() => assert.fail(`${hash} didn't open`));
+  };
+  await open('#p=O.trips.smash.0.nickel.c2.four.262', () => window.chalkTalk.state.seed === 262 && window.chalkTalk.state.phase !== 'pre');
+  assert.equal(await q.evaluate(() => window.chalkTalk.state.sit), '1and10', 'a link from before downs is on another down');
+  assert.deepEqual(await chips(q), ['1st & 10*', '2nd & 6', '3rd & 2', '3rd & 8', '4th & 1']);
+  await open('#p=O.trips.smash.0.nickel.c2.four.263.0.none.Hslant.4and1', () => window.chalkTalk.state.seed === 263);
+  assert.deepEqual(await q.evaluate(() => [window.chalkTalk.state.sit, window.chalkTalk.state.off.hot]), ['4and1', { H: 'slant' }]);
+  assert.match(await q.textContent('#matchup'), /^4th & 1 · /);
+  await q.evaluate(() => { location.hash = '#p=O.trips.smash.0.nickel.c2.four.264.0.none.2and9'; });
+  await q.waitForFunction(() => location.hash === '', null, { timeout: 5000 });
+  assert.equal(await q.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.', 'a link with a situation this version doesn\'t have');
+  assert.equal(await q.evaluate(() => window.chalkTalk.state.seed), 263, 'a link with a situation this version doesn\'t have changed the play');
+  // Calling both sides (as a shared link has it), a new situation keeps both calls.
+  const calls = () => q.evaluate(() => JSON.stringify([window.chalkTalk.state.off, window.chalkTalk.state.def]));
+  const both = await calls();
+  await q.getByRole('radio', { name: '2nd & 6' }).click();
+  assert.equal(await calls(), both, 'calling both sides, a new situation changed a call');
+  assert.equal(await q.textContent('#caption'), '2nd & 6: 6 yards to go.');
+  await c.close();
+  // A save from before there were downs opens on 1st & 10.
+  const old = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await old.addInitScript(() => { if (!sessionStorage.getItem('once')) { sessionStorage.setItem('once', '1'); localStorage.setItem('chalk-talk.v1', JSON.stringify({ side: 'D', auto: true, labels: false, quiz: false })); } });
+  const o = await old.newPage();
+  await o.goto(base);
+  assert.deepEqual(await o.evaluate(() => [window.chalkTalk.state.side, window.chalkTalk.state.sit, window.chalkTalk.state.labels]), ['D', '1and10', false], 'a save from before downs');
+  await old.close();
+  assert.deepEqual(errors, []);
 }
 
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback
