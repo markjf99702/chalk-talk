@@ -114,21 +114,24 @@ test('the same seed replays the same play', () => {
 // simulator the site has now: a link made with another version says its snap may not play out as it did for whoever
 // sent it. So any change to how snaps play out needs a new version. PRINTS keeps a fingerprint of how each version
 // played a fixed set of snaps: every formation, play and coverage, both ways round, with the front, the pressure and
-// blitzer, a disguise, motion and a hot route picked from a fixed seed. It's where every man and the ball was, a
-// twentieth of a second at a time, who was blocking whom, and what happened (the play-by-play and the result, but not
-// their words, which can change without the play changing). Keep the old ones: they say when the board changed.
-const PRINTS = { 1: '13c581f50f50' };
+// blitzer, a disguise, motion and a hot route (a back's too) picked from a fixed seed. It's where every man and the ball
+// was, a twentieth of a second at a time, who was blocking whom, and what happened (the play-by-play and the result, but
+// not their words, which can change without the play changing). Keep the old ones: they say when the board changed.
+// (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
+// print, and leave SIM_VERSION as it is.)
+const PRINTS = { 1: '88d4e55c882d' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const cv of COVERAGES) for (const flip of [false, true]) {
     if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
-    const R = rng(++seed), men = fm.players.filter(([, , , cls]) => cls === 'wr' || cls === 'te').map(([label]) => label);
+    // Anyone the board lets you give a new route, the backs too: a back's wheel is only ever a hot route.
+    const R = rng(++seed), men = fm.players.map(([label, , , cls]) => [label, hotRoutes(pl, { cls })]).filter(([, routes]) => routes.length);
+    const hot = men.length && R.chance(0.3) ? (([who, routes]) => ({ [who]: R.pick(routes) }))(R.pick(men)) : {};
     const r = simulate({
       formation: fm.id, play: pl.id, front: R.pick(FRONTS).id, coverage: cv.id, flip,
       pressure: R.chance(0.4) ? 'blitz' : 'four', blitzer: R.pick(BLITZERS).id, disguise: R.chance(0.3),
-      motion: fm.motion ? R.pick(['none', 'across', 'jet']) : 'none',
-      hot: pl.type === 'pass' && R.chance(0.3) ? { [R.pick(men)]: R.pick(HOT.receiver) } : {},
+      motion: fm.motion ? R.pick(['none', 'across', 'jet']) : 'none', hot,
     }, seed);
     const one = createHash('sha256');
     one.update(JSON.stringify([r.result, r.events.map(({ text, ...e }) => e)]));
