@@ -119,7 +119,7 @@ test('the same seed replays the same play', () => {
 // not their words, which can change without the play changing). Keep the old ones: they say when the board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: '0193209e4476' };
+const PRINTS = { 1: 'eecb1df0fce4' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -953,20 +953,28 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
   // From I-Form and Singleback the Z goes in motion from the tight end's side, and in man coverage the cornerback on
   // him goes too. The strong safety slides over to the side they left, outside the tight end, at the snap (ahead of a
   // jet as well), and the play-by-play says so. In a zone the corner stays, and from the formations whose H goes in
-  // motion it's never a cornerback who has him: no bump.
-  let seed = 400;
-  for (const fm of FORMATIONS.filter(f => f.motion)) for (const coverage of ['c0', 'c1', 'c3']) for (const motion of ['across', 'jet']) for (const flip of [false, true]) {
-    const call = { formation: fm.id, play: seed % 2 ? 'oz' : 'smash', front: FRONTS[seed % 4].id, coverage, pressure: seed % 3 ? 'four' : 'blitz', flip, motion }, what = JSON.stringify(call);
+  // motion it's never a cornerback who has him: no bump. Nor when the strong safety's own man is someone else, the
+  // back or the other tight end: he stays where he can cover him. (Against the Nickel front with a blitz he can have
+  // the back, or with the Will blitzing the far tight end.)
+  let seed = 400, bumps = 0, stays = 0;
+  for (const fm of FORMATIONS.filter(f => f.motion)) for (const coverage of ['c0', 'c1', 'c3']) for (const motion of ['across', 'jet']) for (const flip of [false, true]) for (const fr of FRONTS) {
+    const call = { formation: fm.id, play: seed % 2 ? 'oz' : 'smash', front: fr.id, coverage, pressure: seed % 3 ? 'four' : 'blitz', blitzer: seed % 5 < 2 ? 'W' : 'M', flip, motion }, what = JSON.stringify(call);
     const S = prepare(call, seed), r = simulate(call, seed++), was = prepare({ ...call, motion: 'none' }, seed - 1);
     const mover = was.O.find(p => p.label === fm.motion.who), sd = Math.sign(mover.x), te = S.te(sd);
-    const snap = r.frames.find(f => f.t === 0), x = snap.xy[2 * S.SS.i];
+    const snap = r.frames.find(f => f.t === 0), x = snap.xy[2 * S.SS.i], j = S.SS.job;
     const line = r.events.find(e => e.kind === 'motion' && /the bump\.$/.test(e.text));
-    if (fm.motion.who === 'Z' && coverage !== 'c3') {
+    if (fm.motion.who === 'Z' && coverage !== 'c3' && j.kind !== 'rush' && (j.kind !== 'man' || j.r === te)) {
+      bumps++;
       assert.ok(Math.sign(x) === sd && Math.abs(x) >= Math.abs(te.x) + 1.5, `${what}: the strong safety is at ${x.toFixed(1)} at the snap, the tight end at ${te.x.toFixed(1)}`);
       assert.equal(line?.who, S.SS.i, `${what}: the play-by-play says the strong safety slides over`);
       assert.match(S.jobText[S.SS.i], /the bump/, what);
-    } else assert.ok(!line && !S.SS.bump, `${what}: a bump with no cornerback gone`);
+    } else {
+      assert.ok(!line && !S.SS.bump, `${what}: a bump with no cornerback gone, or by a safety whose man is elsewhere`);
+      // One whose man is the back or the far tight end lines up within reach of him, not out wide on the other side.
+      if (fm.motion.who === 'Z' && j.kind === 'man') { stays++; assert.ok(Math.abs(x - j.r.x) < 6, `${what}: the strong safety has the ${j.r.label} but is at ${x.toFixed(1)} at the snap, ${Math.abs(x - j.r.x).toFixed(1)} yards from him`); }
+    }
   }
+  assert.ok(bumps >= 16 && stays >= 4, `${bumps} bumps and ${stays} safeties staying with a man elsewhere: the test should see both`);
   // Outside Zone, every front and pressure: from I-Form and Singleback against Cover 1 and Cover 0, the Z going across
   // first now gains within 4 yards a carry of what it gains without him going. (Before the bump it was 11 to 14 yards
   // more, and 5 more from Singleback against Cover 0: with the corner gone, nobody was left out there and about one run

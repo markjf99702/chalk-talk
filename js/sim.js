@@ -285,11 +285,12 @@ function buildDefense(S) {
   // stands with no receiver outside him) and 6 deep, and on a run holds the edge the way the cornerback would have (see
   // holdEdge()); he plays the short middle from there on a pass, or his man on a blitz. In Cover 0, with nobody deep, he
   // stays on his man, 2 yards outside the tight end and 5 1/2 deep, and comes up to a run as soon as he sees it, from
-  // outside. (Not when he's the one blitzing: he comes off that edge anyway.)
+  // outside. (Not when he's the one blitzing: he comes off that edge anyway. Nor when his man is someone other than
+  // the tight end on that side, the back or the tight end on the other side: out there he'd leave him open.)
   if (S.from && cov.man && ss.job.kind !== 'rush') {
-    const mover = S.O.find(p => p.label === S.fm.motion.who), sd = Math.sign(S.from.P[mover.i].x);
-    if (S.CB.some(cb => cb.job.kind === 'man' && cb.job.r === mover)) {
-      const te = S.te(sd), [out, deep] = cov.id === 'c0' ? [2, 5.5] : [5, 6];
+    const mover = S.O.find(p => p.label === S.fm.motion.who), sd = Math.sign(S.from.P[mover.i].x), te = S.te(sd);
+    if (S.CB.some(cb => cb.job.kind === 'man' && cb.job.r === mover) && (ss.job.kind !== 'man' || ss.job.r === te)) {
+      const [out, deep] = cov.id === 'c0' ? [2, 5.5] : [5, 6];
       ss.x = (te ? te.x : 3 * sd) + out * sd; ss.y = deep; ss.bump = sd; ss.holds = cov.id === 'c1';
     }
   }
@@ -1815,7 +1816,7 @@ function rotateLine(S) {
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
   const text = jobWords(S, pl), m = S.motion;
-  if (m && pl.bump) return `When the cornerback goes across with the ${m.who.label}, he slides over to take the cornerback's place on the ${Math.sign(pl.bump) === S.s ? 'strong' : 'weak'} side, keeping a run inside there: the bump. ${text}`;
+  if (m && pl.bump) return `When the cornerback goes across with the ${m.who.label}, he ${S.disguise ? 'comes down at the snap' : 'slides over'} to take the cornerback's place on the ${Math.sign(pl.bump) === S.s ? 'strong' : 'weak'} side, keeping a run inside there: the bump. ${text}`;
   if (!m || (pl !== m.who && pl !== m.man)) return text;
   const side = Math.sign(m.end.x) === S.s ? 'strong' : 'weak';
   if (pl === m.man) return `${text} When the ${m.who.label} goes in motion, he runs with him.`;
