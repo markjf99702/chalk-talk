@@ -5,6 +5,12 @@
 import { rng } from './rng.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLITZERS } from './playbook.js';
 
+// The simulator's version, which every share link carries. A link replays its calls and its roll of the dice through
+// whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
+// sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
+// differently, and says what to set this to.
+export const SIM_VERSION = 1;
+
 export const DT = 0.05;
 const MAX_T = 9;
 const EDGE = SIDELINE - 0.4;

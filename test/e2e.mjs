@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { DRILLS } from '../js/playbook.js';
+import { SIM_VERSION } from '../js/sim.js';
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -421,6 +422,58 @@ await page2.close();
   await q.waitForFunction(() => document.getElementById('share').textContent === 'Link copied', null, { timeout: 5000 });
   assert.equal(await q.evaluate(() => window.shared), undefined, 'a computer opened the share sheet');
   await q.context().close();
+}
+
+// A link ends with the simulator's version (SIM_VERSION in js/sim.js), and one made with another version says, in the
+// result card, that its snap may not play out as it did for whoever sent it: the same calls and the same roll of the
+// dice through another simulator. One from before there were versions counts as version 1. The line goes with the
+// snap: Snap again, or another call, and it's gone. (For a link from an earlier version, the page is served with the
+// next version's simulator: the same one, with SIM_VERSION one higher.)
+{
+  const earlier = 'Made with an earlier version of Chalk Talk: the same calls and the same roll of the dice, but the simulator has changed, so this snap may not play out as it did for whoever sent it.';
+  const newer = 'Made with a newer version of Chalk Talk: the same calls and the same roll of the dice, but this copy has an older simulator, so this snap may not play out as it did for whoever sent it.';
+  assert.ok(link.endsWith(`.v${SIM_VERSION}`), `the link ${link} doesn't end with the simulator's version`);
+  const opens = async (p, hash, seed) => {
+    await p.evaluate(hash => { location.hash = hash; }, hash);
+    await p.waitForFunction(seed => window.chalkTalk.state.seed === seed && window.chalkTalk.state.phase === 'done' && !document.getElementById('result').hidden, seed, { timeout: 15000 })
+      .catch(() => assert.fail(`${hash} didn't play`));
+    return p.evaluate(() => { const v = document.getElementById('resVer'); return v.hidden ? null : v.textContent; });
+  };
+  const here = await ctx.newPage();
+  here.on('pageerror', e => problems.push(e.message));
+  await here.goto(base);
+  assert.equal(await opens(here, link.slice(link.indexOf('#')), +link.slice(link.indexOf('#p=') + 3).split('.')[7]), null, 'a link from this version says it isn\'t');
+  assert.equal(await opens(here, `#p=O.trips.smash.0.nickel.c2.four.262.0.none.1and10.v${SIM_VERSION + 1}`, 262), newer);
+  assert.equal(await opens(here, `#p=O.trips.smash.0.nickel.c2.four.263.0.none.1and10.v${SIM_VERSION}`, 263), null, 'the line stayed for the next link');
+  await here.close();
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  await c.route('**/js/sim.js', async route => {
+    const r = await route.fetch();
+    route.fulfill({ response: r, body: (await r.text()).replace(/export const SIM_VERSION = (\d+);/, (_, v) => `export const SIM_VERSION = ${+v + 1};`) });
+  });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  const next = SIM_VERSION + 1;
+  for (const [hash, seed, says] of [
+    [`#p=O.trips.smash.0.nickel.c2.four.262.0.none.1and10.v${SIM_VERSION}`, 262, earlier],
+    [`#p=O.trips.smash.0.nickel.c2.four.263.0.none.1and10.v${next}`, 263, null],
+    ['#p=O.trips.smash.0.nickel.c2.four.264', 264, SIM_VERSION === 1 ? earlier : null], // from before there were versions: version 1
+    [`#p=O.trips.smash.0.nickel.c2.four.265.0.none.YcurlHslant.3and8.v${SIM_VERSION}`, 265, earlier],
+  ]) assert.equal(await opens(p, hash, seed), says, hash);
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.sit), '3and8', 'the version field took the situation\'s place');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), { Y: 'curl', H: 'slant' }, 'the version field took the hot routes\' place');
+  // Snap again: a new roll of the dice, made here. The line goes.
+  await p.click('#again');
+  await p.waitForFunction(() => window.chalkTalk.state.seed !== 265 && window.chalkTalk.state.phase === 'done' && !document.getElementById('result').classList.contains('stale'), null, { timeout: 15000 });
+  assert.equal(await p.evaluate(() => document.getElementById('resVer').hidden), true, 'the line stayed after Snap again');
+  // Another call: the line goes too.
+  assert.equal(await opens(p, `#p=O.trips.smash.0.nickel.c2.four.266.0.none.1and10.v${SIM_VERSION}`, 266), earlier);
+  await p.getByRole('radio', { name: 'Cover 3' }).click();
+  await p.click('#snap');
+  await p.waitForFunction(() => window.chalkTalk.state.phase === 'done' && !document.getElementById('result').hidden, null, { timeout: 15000 });
+  assert.equal(await p.evaluate(() => document.getElementById('resVer').hidden), true, 'the line stayed with another call');
+  await c.close();
 }
 
 // The words on the board sit over the deep field, where nobody is for most of the play, not on the backfield: at the top
@@ -2181,11 +2234,11 @@ for (const colorScheme of ['light', 'dark']) {
   await c.grantPermissions(['clipboard-read', 'clipboard-write']);
   await p.click('#share');
   const link = await p.evaluate(() => navigator.clipboard.readText());
-  assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.four\.\d+\.1\.\w+\.1and10$/, `the link is ${link}`);
+  assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.four\.\d+\.1\.\w+\.1and10\.v\d+$/, `the link is ${link}`);
   await p.goto(base + link.slice(link.indexOf('#')));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c3', pressure: 'four', blitzer: 'M', disguise: true });
-  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.1\.\w+\.1and10$/, ''));
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.1\.\w+\.1and10\.v\d+$/, ''));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.def.disguise), false, 'a link from before disguises opens without one');
   // The other coach's disguise, asked about.
@@ -2282,14 +2335,14 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
   await p.click('#share');
   const link = await p.evaluate(() => navigator.clipboard.readText());
-  assert.match(link, /#p=O\.trips\.smash\.0\.nickel\.c3\.four\.\d+\.0\.jet\.1and10$/, `the link is ${link}`);
+  assert.match(link, /#p=O\.trips\.smash\.0\.nickel\.c3\.four\.\d+\.0\.jet\.1and10\.v\d+$/, `the link is ${link}`);
   await p.goto(base + link.slice(link.indexOf('#')));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.off.motion), 'jet');
-  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10$/, ''));
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10\.v\d+$/, ''));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.off.motion), 'none', 'a link from before motion opens without it');
-  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10$/, '.zoom.1and10'));
+  await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10\.v\d+$/, '.zoom.1and10'));
   await p.waitForFunction(() => location.hash === '');
   assert.equal(await p.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
   // Calling the defense, the other coach sends a man in motion about one snap in three, counting Gun Ace and Empty, which
@@ -2798,7 +2851,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#share');
   await p.waitForFunction(() => document.getElementById('share').textContent === 'Link copied' || !document.getElementById('shareUrl').hidden);
   const link = await p.evaluate(async () => { const box = document.getElementById('shareUrl'); return box.hidden ? navigator.clipboard.readText() : box.value; });
-  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.YcurlHslant\.1and10$/);
+  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.YcurlHslant\.1and10\.v\d+$/);
   const q = await c.newPage();
   await q.goto(base + link.slice(link.indexOf('#')));
   await q.waitForSelector('#result:not([hidden])', { timeout: 15000 });
@@ -2864,12 +2917,12 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).sit), '3and8', 'the situation is kept');
   await p.reload();
   assert.deepEqual(await chips(), ['1st & 10', '2nd & 6', '3rd & 2', '3rd & 8*', '4th & 1'], 'a reload lost the situation');
-  // A shared link has it as its last field, after the hot routes, if any.
+  // A shared link has it after the hot routes, if any, and before the simulator's version, which is always last.
   await p.click('#snap');
   await p.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
   await p.click('#share');
   const link = await p.evaluate(() => navigator.clipboard.readText());
-  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.3and8$/, `the link is ${link}`);
+  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.3and8\.v\d+$/, `the link is ${link}`);
   const q = await c.newPage();
   q.on('pageerror', e => errors.push(e.message));
   await q.goto(base + link.slice(link.indexOf('#')));

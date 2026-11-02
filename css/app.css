@@ -490,6 +490,8 @@ button:disabled { cursor: default; }
 .result .kicker[data-win="D"] { color: var(--win-d); }
 .result .headline { font-size: 30px; line-height: 1.05; }
 .vs { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+/* a shared link made with another version of the simulator says so */
+.ver { margin: 6px 0 0; font-size: 14px; }
 .story { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 5px; }
 .story li { display: grid; grid-template-columns: 2.9em 1fr; gap: 6px; font-size: 15px; }
 /* each time is a button that watches that moment again on the board, with a hit area out to the lines either side */

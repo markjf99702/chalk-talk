@@ -1,6 +1,6 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, BLITZERS, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS, needed } from './playbook.js';
-import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor } from './sim.js';
+import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
 
@@ -1644,6 +1644,8 @@ function showResult() {
   const bw = cv.id === 'c0' ? 'blitz' : blitzWord(state.def);
   $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ` with a ${bw}` : ''}.`
     : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ` with a ${bw}` : ''}.${typicalNote()}`;
+  $('resVer').textContent = versionNote();
+  $('resVer').hidden = !$('resVer').textContent;
   // Each line's time is a button that watches that moment again on the board (see replay()).
   const story = $('story');
   story.textContent = '';
@@ -1832,7 +1834,7 @@ function resetShare() {
 }
 $('share').addEventListener('click', async () => {
   const c = call();
-  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure === 'blitz' && blitzer(c) !== 'M' ? `blitz${blitzer(c)}` : c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off), state.sit].filter(x => x !== '').join('.');
+  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure === 'blitz' && blitzer(c) !== 'M' ? `blitz${blitzer(c)}` : c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off), state.sit, `v${SIM_VERSION}`].filter(x => x !== '').join('.');
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
   resetShare();
@@ -1859,19 +1861,26 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot.situation;
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot.situation.version;
 // the pressure is "four", "blitz" for the Mike's, or "blitz" and who for another's: "blitzW", "blitzNB", "blitzSS"):
 // 'ok' once it's set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front, coverage, hot route
 // or situation this version doesn't have (the address is cleared either way), '' when there's none. A link from before
 // there were disguises ends at the seed, one from before motion at the disguise, one from before downs at the hot
 // routes, and one with no hot routes goes from the motion to the situation: they open without them, and one from before
 // downs is on 1st & 10, as the board was then. The hot routes are each man's label and his route, run together
-// ("HslantRBblock"); the situation is the down, "and", and the yards to go ("3and8").
+// ("HslantRBblock"); the situation is the down, "and", and the yards to go ("3and8"). The version is the simulator's
+// (SIM_VERSION in js/sim.js), "v" and the number ("v1"), always last; a link from before there were versions has none,
+// and counts as version 1.
 let linkNote = '';
+// A link made with another version of the simulator: its version, and the snap it's for (its seed and the calls), for
+// the result card to say so while that snap is the one shown (see versionNote()).
+let linkFrom = null;
 function fromLink() {
-  const hash = location.hash;
+  let hash = location.hash;
   if (!hash.startsWith('#p=')) return '';
   history.replaceState(null, '', location.pathname + location.search);
+  const v = hash.match(/\.v(\d+)\b/), ver = v ? +v[1] : 1;
+  if (v) hash = hash.slice(0, v.index);
   const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01])(?:\.(\w+)(?:\.([A-Za-z]+))?(?:\.(\d+and\d+))?)?)?/);
   if (!m) return 'bad';
   const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion, code = '', sit = '1and10'] = m;
@@ -1886,7 +1895,16 @@ function fromLink() {
   const who = pressure.match(/^blitz(W|NB|SS)?$/);
   state.def = { front, coverage, pressure: who ? 'blitz' : 'four', blitzer: who?.[1] || 'M', disguise: disguise === '1' };
   linkNote = '';
+  linkFrom = ver === SIM_VERSION ? null : { ver, seed: state.seed, call: JSON.stringify(call()) };
   return 'ok';
+}
+// What the result card says of a link made with another version, while its snap is the one on the board: the same
+// calls and the same roll of the dice can come out differently through another simulator.
+function versionNote() {
+  if (!linkFrom || linkFrom.seed !== state.seed || linkFrom.call !== JSON.stringify(call())) return '';
+  return linkFrom.ver < SIM_VERSION
+    ? 'Made with an earlier version of Chalk Talk: the same calls and the same roll of the dice, but the simulator has changed, so this snap may not play out as it did for whoever sent it.'
+    : 'Made with a newer version of Chalk Talk: the same calls and the same roll of the dice, but this copy has an older simulator, so this snap may not play out as it did for whoever sent it.';
 }
 function badLink(link) {
   linkNote = link === 'bad' ? 'That link is cut off or garbled, so there\'s no play to show. Ask for it again.'

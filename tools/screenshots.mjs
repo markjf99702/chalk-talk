@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SIM_VERSION } from '../js/sim.js';
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -21,7 +22,8 @@ const server = createServer(async (req, res) => {
   res.end(body);
 }).listen(0);
 const base = `http://localhost:${server.address().port}/`;
-const PLAY = '#p=O.trips.smash.0.nickel.c2.four.262';
+// A link made with this version of the simulator, so the result card doesn't say it was made with another.
+const PLAY = `#p=O.trips.smash.0.nickel.c2.four.262.v${SIM_VERSION}`;
 const browser = await pw.chromium.launch();
 await mkdir(join(root, 'docs'), { recursive: true });
 

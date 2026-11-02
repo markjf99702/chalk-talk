@@ -1,8 +1,10 @@
 // Unit tests for the simulator:  node --test test/sim.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT } from '../js/playbook.js';
+import { createHash } from 'node:crypto';
+import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS } from '../js/playbook.js';
+import { rng } from '../js/rng.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -106,6 +108,46 @@ test('the same seed replays the same play', () => {
   assert.deepEqual(a.result, b.result);
   assert.deepEqual(a.events, b.events);
   assert.deepEqual([...a.frames.at(-1).xy], [...b.frames.at(-1).xy]);
+});
+
+// Every share link carries SIM_VERSION (js/sim.js), and replays its calls and its roll of the dice through whatever
+// simulator the site has now: a link made with another version says its snap may not play out as it did for whoever
+// sent it. So any change to how snaps play out needs a new version. PRINTS keeps a fingerprint of how each version
+// played a fixed set of snaps: every formation, play and coverage, both ways round, with the front, the pressure and
+// blitzer, a disguise, motion and a hot route picked from a fixed seed. It's where every man and the ball was, a
+// twentieth of a second at a time, who was blocking whom, and what happened (the play-by-play and the result, but not
+// their words, which can change without the play changing). Keep the old ones: they say when the board changed.
+const PRINTS = { 1: '13c581f50f50' };
+function howItPlays() {
+  const all = createHash('sha256');
+  let seed = 0;
+  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
+    const R = rng(++seed), men = fm.players.filter(([, , , cls]) => cls === 'wr' || cls === 'te').map(([label]) => label);
+    const r = simulate({
+      formation: fm.id, play: pl.id, front: R.pick(FRONTS).id, coverage: cv.id, flip,
+      pressure: R.chance(0.4) ? 'blitz' : 'four', blitzer: R.pick(BLITZERS).id, disguise: R.chance(0.3),
+      motion: fm.motion ? R.pick(['none', 'across', 'jet']) : 'none',
+      hot: pl.type === 'pass' && R.chance(0.3) ? { [R.pick(men)]: R.pick(HOT.receiver) } : {},
+    }, seed);
+    const one = createHash('sha256');
+    one.update(JSON.stringify([r.result, r.events.map(({ text, ...e }) => e)]));
+    for (const f of r.frames) {
+      one.update(JSON.stringify([f.t, f.ball, f.c, f.air]));
+      one.update(new Uint8Array(f.xy.buffer, f.xy.byteOffset, f.xy.byteLength));
+      one.update(new Uint8Array(f.eng.buffer, f.eng.byteOffset, f.eng.byteLength));
+    }
+    all.update(one.digest());
+  }
+  return all.digest('hex').slice(0, 12);
+}
+
+test('snaps play out the way this version of the simulator played them: a change to that is a new version', () => {
+  const print = howItPlays(), last = Math.max(...Object.keys(PRINTS).map(Number));
+  assert.ok(Number.isInteger(SIM_VERSION) && SIM_VERSION >= last, `SIM_VERSION is ${SIM_VERSION}, and PRINTS goes up to ${last}: versions only go up`);
+  if (!(SIM_VERSION in PRINTS)) assert.fail(`Add ${SIM_VERSION}: '${print}' to PRINTS in test/sim.test.mjs: it's how version ${SIM_VERSION} plays.`);
+  const next = SIM_VERSION + 1;
+  assert.equal(print, PRINTS[SIM_VERSION], `Snaps play out differently from version ${SIM_VERSION} of the simulator, so a link made with it would show something else now. Set SIM_VERSION in js/sim.js to ${next}, and add ${next}: '${print}' to PRINTS in test/sim.test.mjs. (If version ${SIM_VERSION} hasn't reached main, the live site, no link has it: change its print to '${print}' instead.)`);
 });
 
 test('formations are legal: seven on the line, eleven a side, nobody offside', () => {
