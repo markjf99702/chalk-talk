@@ -2478,11 +2478,13 @@ for (const colorScheme of ['light', 'dark']) {
   await p.getByRole('radio', { name: 'Blitz', exact: true }).click();
   now = await row();
   assert.deepEqual([now.on, now.off], ['Mike', ['Cover 2 needs both safeties deep.']], 'the Mike, and no safety in Cover 2');
+  assert.match(now.blurb, /^The Mike linebacker, from the middle\. .* Cover 2 needs both safeties deep\.$/, 'the row says why the safety is greyed out (a phone shows no title)');
   await p.getByRole('radio', { name: /^Nickel back/ }).click();
   assert.match((await row()).blurb, /^The nickel back, off the edge from over the slot\./);
   await p.getByRole('radio', { name: '4-3 Over' }).click();
   now = await row();
   assert.deepEqual([now.on, now.off], ['Mike', ['Only the Nickel front has a nickel back.', 'Cover 2 needs both safeties deep.']], 'no nickel back in the 4-3, so the Mike');
+  assert.match(now.blurb, / Only the Nickel front has a nickel back\. Cover 2 needs both safeties deep\.$/, 'and why the nickel back is');
   await p.getByRole('radio', { name: 'Nickel', exact: true }).click();
   assert.equal((await row()).on, 'Nickel back', 'and the pick comes back with the Nickel front');
   await p.getByRole('radio', { name: 'Cover 3' }).click();

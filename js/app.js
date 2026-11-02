@@ -1080,13 +1080,16 @@ function defenseChooser(host, readonly) {
   chips(host, 'Pressure', PRESSURES, zero ? 'blitz' : pr.id, id => set({ pressure: id }), {
     disabled: readonly || zero, blurb: zero ? 'Cover 0 sends everyone who isn\'t covering a receiver.' : pr.blurb,
   });
-  // Who blitzes: on a blitz, any of the four who can (see blitzerFor() in js/sim.js); the others are greyed out, saying why.
+  // Who blitzes: on a blitz, any of the four who can (see blitzerFor() in js/sim.js); the others are greyed out, and the
+  // words under the row say why (a chip's title says it too, but a phone shows no title).
   const who = blitzer(state.def), b = byId(BLITZERS, who), waits = zero || pr.id !== 'blitz';
-  chips(host, 'Blitzer', BLITZERS.map(x => ({ id: x.id, name: x.name, off: blitzerFor(fr.id, cv.id, x.id, state.def.disguise) })), who, id => set({ blitzer: id }), {
+  const items = BLITZERS.map(x => ({ id: x.id, name: x.name, off: blitzerFor(fr.id, cv.id, x.id, state.def.disguise) }));
+  const why = items.map(x => x.off).filter(Boolean).join(' ');
+  chips(host, 'Blitzer', items, who, id => set({ blitzer: id }), {
     disabled: readonly || waits,
     blurb: zero ? 'In Cover 0 every man not covering a receiver comes: the Mike and whoever is left over.'
       : waits ? 'Pick Blitz above, then who comes: the Mike, the Will, the nickel back or the strong safety.'
-        : `${b.words.charAt(0).toUpperCase()}${b.words.slice(1)}. ${who === 'NB' ? 'The slot receiver he leaves is covered by someone else, or by nobody: a quick throw there beats it.' : who === 'SS' ? 'One deep safety is left, and a linebacker or the nickel back covers the man the safety would have.' : 'The man he would have covered is someone else\'s, or a zone has one fewer defender.'}`,
+        : `${b.words.charAt(0).toUpperCase()}${b.words.slice(1)}. ${who === 'NB' ? 'The slot receiver he leaves is covered by someone else, or by nobody: a quick throw there beats it.' : who === 'SS' ? 'One deep safety is left, and a linebacker or the nickel back covers the man the safety would have.' : 'The man he would have covered is someone else\'s, or a zone has one fewer defender.'}${why ? ` ${why}` : ''}`,
   });
   // A disguise: Cover 1 or Cover 3 lined up as two deep, rotating at the snap. Off unless it's picked.
   const can = DISGUISES.includes(cv.id), on = can && state.def.disguise;
