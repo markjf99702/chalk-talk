@@ -2386,6 +2386,67 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Each row of the chart, once it has its numbers, is a button that plays a typical snap of it: the other side's call
+// becomes the row's, "Let the other coach pick" goes off, and the board plays the middle snap by yards gained of that
+// row's snaps with the strong side it has. The chart stays up with that row marked as this call, and the result card
+// says which snap it was. Calling the defense, the rows are his plays.
+{
+  const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  assert.equal(await p.locator('#bars button').count(), 0, 'rows to tap before the chart has run');
+  assert.doesNotMatch(await p.textContent('#chartHint'), /Tap a row/);
+  // The middle snap of a row, by yards gained, of those with the board's strong side.
+  const typical = id => p.evaluate(id => {
+    const { state, chart } = window.chalkTalk, r = chart().rows.find(x => x.id === id);
+    const mine = r.snaps.filter(x => x.flip === state.off.flip).sort((a, b) => a.yards - b.yards);
+    return { ...mine[(mine.length - 1) >> 1], n: mine.length, of: r.snaps.length };
+  }, id);
+  // (all the way: rows go on adding snaps after their first numbers are up, which moves their middle one)
+  const first = n => p.waitForFunction(n => document.querySelectorAll('#bars button.bar-row').length === n && document.getElementById('runChart').getAttribute('aria-disabled') !== 'true', n, { timeout: 90000 });
+  await p.click('[data-side="O"]');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; state.off.flip = true; Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', disguise: true }); lineUp(); });
+  await p.click('#runChart');
+  await first(5);
+  assert.match(await p.textContent('#chartHint'), / Tap a row to watch a typical snap of it\.$/);
+  const names = await p.$$eval('#bars button.bar-row', b => b.map(x => [x.closest('[role="listitem"]') !== null, x.getAttribute('aria-label')]));
+  for (const [inList, name] of names) {
+    assert.ok(inList, 'a row\'s button isn\'t in the chart\'s list');
+    assert.match(name, /^Cover \d: \d+% successful, −?\d+\.\d yards a play, over \d+ snaps\. Watch a typical snap against Cover \d\.$/);
+  }
+  const want = await typical('c3');
+  assert.deepEqual([want.n, want.of], [50, 100], 'the row\'s snaps with this strong side');
+  await p.click('#bars button[data-row="c3"]');
+  const s = await p.evaluate(() => {
+    const { state } = window.chalkTalk;
+    return { auto: state.auto, switch: document.getElementById('auto').checked, off: state.off, def: state.def, seed: state.seed, phase: state.phase, focus: document.activeElement.id };
+  });
+  assert.deepEqual(s, { auto: false, switch: false, off: { formation: 'trips', play: 'smash', flip: true, motion: 'none' }, def: { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: false }, seed: want.seed, phase: 'playing', focus: 'snap' },
+    'a typical snap against Cover 3 from the chart (before the snap the chart rushes four with no disguise)');
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), false, 'the switch went off, but wasn\'t saved');
+  const done = await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); return state.play.result.yards; });
+  assert.equal(done, want.yards, 'the snap played isn\'t the row\'s middle one');
+  assert.match(await p.textContent('#resVs'), new RegExp(` A typical snap from the chart: of its ${want.n} snaps against Cover 3 with the strength on this side, the middle one by yards gained\\.$`));
+  assert.ok(await p.evaluate(() => window.chalkTalk.chart() !== null && document.querySelectorAll('#bars button.bar-row').length === 5), 'the chart went');
+  assert.deepEqual(await p.$$eval('#bars .bar-row.mine', b => b.map(x => x.querySelector('.bar-name').textContent)), ['Cover 3this call'], 'the row isn\'t marked');
+  // Snap again is a fresh snap, not the typical one.
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.doesNotMatch(await p.textContent('#resVs'), /typical/);
+  // Calling the defense: a row is one of his plays, from his formation and the board's strong side.
+  await p.click('[data-side="D"]');
+  await p.click('#auto');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false, motion: 'none' }); state.seen = true; lineUp(); });
+  await p.click('#runChart');
+  await first(11);
+  const run = await typical('power');
+  await p.click('#bars button[data-row="power"]');
+  assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.side, state.auto, state.off.formation, state.off.play, state.off.flip, state.seed]; }), ['D', false, 'iform', 'power', false, run.seed]);
+  assert.match(await p.getAttribute('#bars button[data-row="power"]', 'aria-label'), /\. Watch a typical snap of Power\.$/);
+  await c.close();
+}
+
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback
 // 55%, Gun Trips 35 to 40% and Gun Doubles about 25%, and every play stays possible from every formation. The card says
 // what to read before the snap, and so does the playbook. Calling the offense, the card doesn't.

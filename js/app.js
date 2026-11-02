@@ -1407,7 +1407,7 @@ function showResult() {
   const blitz = state.def.pressure === 'blitz' || cv.id === 'c0';
   const from = `${pl.name} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
   $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
-    : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.`;
+    : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.${typicalNote()}`;
   // Each line's time is a button that watches that moment again on the board (see replay()).
   const story = $('story');
   story.textContent = '';
@@ -1641,10 +1641,11 @@ addEventListener('hashchange', () => {
 // ---------------------------------------------------------------- the chart: this call against everything
 
 let chartJob = 0;
-// Each row counts its snaps as they're run (n, yds, ok). Its bar shows avg and rate as they stood when it last finished
-// a time round, `of` snaps in, so a row drawn again part way (at the snap, to mark their call) says what its numbers
-// come from.
-let chart = null; // the rows of the last run: { rows: [{ id, name, call, n, yds, ok, avg, rate, of }], pressure, side }
+// Each row counts its snaps as they're run (n, yds, ok), and keeps each one's seed, strong side and gain (snaps), so it
+// can play a typical one again (see watchTypical()). Its bar shows avg and rate as they stood when it last finished a
+// time round, `of` snaps in, so a row drawn again part way (at the snap, to mark their call) says what its numbers come
+// from.
+let chart = null; // the rows of the last run: { rows: [{ id, name, call, n, yds, ok, snaps, avg, rate, of }], pressure, side }
 let redo = null; // a finished chart went with a change of call: { side, yours } until it's run again
 // Run once, the button says it can be run again: each run is a new set of snaps, and the numbers move a little.
 // Twenty snaps a row is enough for a first look but not to rank the rows (one row can swing from 1 to 14 yards a play
@@ -1684,11 +1685,13 @@ function chartHint() {
   // the formation, and the motion when it's yours, or his and out (before then his chart's plays have none)
   const off = { ...state.off, motion: chart ? chart.motion : state.side === 'O' || !hidden() ? state.off.motion : 'none' };
   const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
-  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${again()}`;
+  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
   return `How often your play succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
-    + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${again()}`;
+    + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
 }
+// Once a row has its numbers, it can be tapped.
+const tapRow = () => (chart?.rows.some(r => r.avg !== undefined) ? ' Tap a row to watch a typical snap of it.' : '');
 function again() {
   if (!redo) return '';
   const cv = byId(COVERAGES, state.def.coverage);
@@ -1717,7 +1720,7 @@ async function runChart() {
   if (state.side === 'D' && hidden()) base.motion = 'none'; // his motion is part of his hidden play
   const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
-    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0 }));
+    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] }));
   chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side };
   $('chartHint').textContent = chartHint();
   drawBars();
@@ -1736,11 +1739,12 @@ async function runChart() {
           if (job !== chartJob) return;
           slice = performance.now();
         }
-        const res = simulate({ ...r.call, flip: r.n % 2 === 1 }, newSeed()).result;
+        const flip = r.n % 2 === 1, seed = newSeed(), res = simulate({ ...r.call, flip }, seed).result;
         r.n++; r.yds += res.yards; if (success(res)) r.ok++;
+        r.snaps.push({ seed, flip, yards: res.yards });
       }
       r.avg = r.yds / r.n; r.rate = r.ok / r.n; r.of = r.n;
-      drawBars();
+      syncChart(); // (its hint says a row can be tapped once one has numbers)
     }
   }
   button.textContent = AGAIN_LABEL;
@@ -1752,6 +1756,7 @@ async function runChart() {
 function drawBars() {
   const host = $('bars');
   const was = new Map([...host.querySelectorAll('.bar[data-id]')].map(b => [b.dataset.id, b.style.width]));
+  const focused = host.contains(document.activeElement) ? document.activeElement.dataset.row : null;
   host.textContent = '';
   const mineId = hidden() ? null : state.side === 'O' ? state.def.coverage : state.off.play;
   const tag = state.auto ? 'their call' : 'this call';
@@ -1767,18 +1772,61 @@ function drawBars() {
       row.innerHTML = `${name}<span class="bar-track"></span><span class="bar-val">…</span>`;
       continue;
     }
-    row.className = 'bar-row' + (mine ? ' mine' : '');
+    // A row with its numbers up is a button that plays a typical snap of it (see watchTypical()).
+    row.className = 'bar-item';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'bar-row' + (mine ? ' mine' : '');
+    b.dataset.row = r.id;
     const pct = Math.round(r.rate * 100), tenths = Math.round(r.avg * 10) / 10, avg = `${tenths < 0 ? '−' : ''}${Math.abs(tenths).toFixed(1)}`;
-    row.innerHTML = `${name}
+    b.innerHTML = `${name}
       <span class="bar-track"><span class="bar" data-id="${esc(r.id)}"></span></span>
       <span class="bar-val">${pct}% <small>${avg}</small></span>`;
-    const bar = row.querySelector('.bar'), from = was.get(r.id);
+    const bar = b.querySelector('.bar'), from = was.get(r.id);
+    b.title = `${r.name}${mine ? ` (${tag})` : ''}: ${pct}% successful, ${avg} yards a play, over ${r.of} snaps`;
+    b.setAttribute('aria-label', `${b.title}. ${typicalWords(r)}`);
+    b.addEventListener('click', () => watchTypical(r));
+    row.append(b);
     if (from) { bar.style.width = from; bar.getBoundingClientRect(); } // from where it was, then on
     bar.style.width = `${Math.max(0.6, r.rate * 100)}%`;
-    row.title = `${r.name}${mine ? ` (${tag})` : ''}: ${pct}% successful, ${avg} yards a play, over ${r.of} snaps`;
   }
+  if (focused) host.querySelector(`[data-row="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true }); // drawn again as snaps come in
 }
 $('runChart').addEventListener('click', runChart);
+
+// A row of the chart, tapped: a typical snap of it on the board. The other side's call becomes that row's, "Let the
+// other coach pick" goes off (both calls are yours now, so a drill under way ends), and the snap the board plays is the
+// middle one by yards gained of the row's snaps with the strong side the board has: the one its numbers mean. The chart
+// stays up, with that row marked as this call; the result card says which snap it was.
+const typicalWords = r => (chart.side === 'O' ? `Watch a typical snap against ${r.name}.` : `Watch a typical snap of ${r.name}.`);
+let typical = null; // the snap last played that way: { seed, call, n, name }, for the result card
+function watchTypical(r) {
+  const flip = state.off.flip, mine = r.snaps.filter(x => x.flip === flip);
+  if (!mine.length) return;
+  const mid = mine.slice().sort((a, b) => a.yards - b.yards)[(mine.length - 1) >> 1];
+  if (drill) drill = null;
+  state.auto = ownAuto = false;
+  Object.assign(state, { linked: false, ask: null, seed: mid.seed });
+  linkNote = '';
+  state.off = { ...okOff(r.call), flip };
+  state.def = okDef(r.call);
+  keepOwn();
+  save();
+  renderChoosers();
+  lineUp();
+  typical = { seed: mid.seed, call: JSON.stringify(call()), n: mine.length, name: r.name };
+  syncChart();
+  toSnap();
+  const b = $('board').getBoundingClientRect();
+  if (b.top < 0 || b.bottom > innerHeight) $('board').scrollIntoView({ block: 'nearest', behavior: smooth() });
+  play();
+  say(`${typicalWords(r).replace(/^Watch a/, 'A')} Both calls are yours now.`);
+}
+// What the result card says of a typical snap from the chart.
+function typicalNote() {
+  if (!typical || typical.seed !== state.seed || typical.call !== JSON.stringify(call())) return '';
+  return ` A typical snap from the chart: of its ${typical.n} snaps ${state.side === 'O' ? `against ${typical.name}` : `of ${typical.name}`} with the strength on this side, the middle one by yards gained.`;
+}
 
 // ---------------------------------------------------------------- the playbook
 
@@ -2099,4 +2147,4 @@ if ('serviceWorker' in navigator && !document.documentElement.hasAttribute('data
 }
 
 // For the screenshot and test scripts.
-window.chalkTalk = { state, board, lineUp, play, pause, snap, finish, simulate, rollTheirs };
+window.chalkTalk = { state, board, lineUp, play, pause, snap, finish, simulate, rollTheirs, chart: () => chart };

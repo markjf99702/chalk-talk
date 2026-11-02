@@ -530,6 +530,11 @@ button:disabled { cursor: default; }
 .bars { display: grid; gap: 7px; margin-top: 12px; }
 .bars:empty { display: none; }
 .bar-row { display: grid; grid-template-columns: minmax(6.5em, 9.5em) 1fr 4.6em; align-items: center; gap: 8px; font-size: 14px; }
+/* a row with its numbers up is a button: tapped, it plays a typical snap of it (see watchTypical() in js/app.js) */
+button.bar-row { width: 100%; margin: -3px 0; padding: 3px 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; text-align: left; position: relative; }
+@media (hover: hover) { button.bar-row:hover { background: var(--line); } }
+@media (pointer: coarse) { button.bar-row { min-height: 36px; margin: 0; } }
+.bar-item { margin: 0 -6px; }
 .bar-head, .bar-name em { font-style: normal; font-size: 11px; font-family: var(--cond); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .bar-head { text-align: right; line-height: 1; margin-bottom: -2px; }
 .bar-name { white-space: nowrap; min-width: 0; }
