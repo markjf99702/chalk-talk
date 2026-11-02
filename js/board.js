@@ -229,10 +229,13 @@ export class Board {
     ctx.setLineDash([]);
     // the line to gain, the yards to go past it: the yellow line TV draws, a broad band rather than a chalk line, so it
     // isn't taken for the spot's line at the whistle; under the players and the play
-    ctx.globalAlpha = 1; ctx.strokeStyle = C.first; ctx.lineWidth = Math.max(5, Math.min(10, k * 0.7)); ctx.lineCap = 'butt';
+    ctx.globalAlpha = 1; ctx.strokeStyle = C.first; ctx.lineWidth = this.firstWidth(); ctx.lineCap = 'butt';
     ctx.beginPath(); ctx.moveTo(this.sx(-SIDELINE), this.sy(this.togo)); ctx.lineTo(this.sx(SIDELINE), this.sy(this.togo)); ctx.stroke();
     ctx.globalAlpha = 1; ctx.lineCap = 'round';
   }
+
+  // How broad the yellow line is drawn, in CSS pixels.
+  firstWidth() { return Math.max(5, Math.min(10, this.k * 0.7)); }
 
   teamColor(team) { return team === 'O' ? this.colors.off : this.colors.def; }
 
@@ -554,6 +557,20 @@ export class Board {
   labelSize() { return Math.max(8.5, Math.min(12, this.radius() * 1.15)); }
   labelDy(p) { return ((p.team === 'O') !== this.flip ? 1 : -1) * (this.radius() + this.labelSize() * 0.62); }
 
+  // A player's mark as a path: an O (the center a square), or an X for the defense.
+  markPath(p, X, Y, r) {
+    const { ctx } = this;
+    ctx.beginPath();
+    if (p.team === 'O') {
+      if (p.label === 'C') ctx.rect(X - r * 0.9, Y - r * 0.9, r * 1.8, r * 1.8);
+      else ctx.arc(X, Y, r, 0, Math.PI * 2);
+    } else {
+      const s = r * 0.8;
+      ctx.moveTo(X - s, Y - s); ctx.lineTo(X + s, Y + s);
+      ctx.moveTo(X + s, Y - s); ctx.lineTo(X - s, Y + s);
+    }
+  }
+
   // Every mark first, then every label over them, so no line or mark is drawn across a label. Before the snap a label
   // that would be on another player's mark goes beside him (see labelSpots()); once the play runs they stay in their
   // usual spots, rather than hopping about as blockers and rushers meet.
@@ -565,25 +582,27 @@ export class Board {
     const lw = Math.max(1.8, Math.min(2.8, r * 0.3));
     ctx.lineWidth = lw; ctx.lineCap = 'round';
     const at = play.players.map(p => { const { x, y } = this.pos(this.t, p.i); return [this.sx(x), this.sy(y)]; });
+    // A mark on the yellow line is knocked out of it, the way a label is out of what's under it: a stroke in the board's
+    // colour round it, kept to the band. On the chalkboard the defense is yellow chalk too, and on 4th & 1 the defensive
+    // line stands right on the line to gain.
+    const band = this.firstWidth(), fy = this.sy(this.togo);
+    const onBand = play.players.filter(p => Math.abs(at[p.i][1] - fy) < band / 2 + r + lw);
+    if (onBand.length) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, fy - band / 2, this.w, band); ctx.clip();
+      ctx.globalAlpha = 1; ctx.strokeStyle = this.colors.board; ctx.lineWidth = lw + 3;
+      for (const p of onBand) { this.markPath(p, ...at[p.i], r); ctx.stroke(); }
+      ctx.restore();
+    }
     for (const p of play.players) {
       const [X, Y] = at[p.i];
       const col = this.teamColor(p.team);
       const dim = this.selected >= 0 && this.selected !== p.i;
       ctx.globalAlpha = dim ? 0.55 : 1;
       ctx.strokeStyle = col; ctx.fillStyle = col;
-      if (p.team === 'O') {
-        ctx.beginPath();
-        if (p.label === 'C') ctx.rect(X - r * 0.9, Y - r * 0.9, r * 1.8, r * 1.8);
-        else ctx.arc(X, Y, r, 0, Math.PI * 2);
-        if (carrier === p.i) ctx.fill();
-        ctx.stroke();
-      } else {
-        const s = r * 0.8;
-        ctx.beginPath();
-        ctx.moveTo(X - s, Y - s); ctx.lineTo(X + s, Y + s);
-        ctx.moveTo(X + s, Y - s); ctx.lineTo(X - s, Y + s);
-        ctx.stroke();
-      }
+      this.markPath(p, X, Y, r);
+      if (p.team === 'O' && carrier === p.i) ctx.fill();
+      ctx.stroke();
       if (this.selected === p.i) {
         ctx.globalAlpha = 0.9; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(X, Y, r * 1.9, 0, Math.PI * 2); ctx.stroke();

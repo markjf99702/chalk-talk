@@ -1554,6 +1554,22 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
     await p.evaluate(() => { const { snap, pause, board, state } = window.chalkTalk; snap(); pause(); state.t = board.t = 1; board.render(); });
     const playing = await look();
     assert.ok(playing.on < 40, `${colorScheme}: the yellow line went as the play ran: ${JSON.stringify(playing)}`);
+    // On 4th & 1 the defensive line stands on the yellow line, and on the chalkboard its Xs are yellow too: each mark on
+    // the band is knocked out of it, with the board's colour round it inside the band.
+    await p.getByRole('radio', { name: '4th & 1' }).click();
+    const knocked = await p.evaluate(() => {
+      const { board, state } = window.chalkTalk, ctx = board.cv.getContext('2d'), dpr = board.dpr;
+      const rgb = v => { const s = document.createElement('span'); s.style.color = v; document.body.append(s); const m = getComputedStyle(s).color.match(/\d+/g).map(Number); s.remove(); return m; };
+      const bg = rgb(board.colors.board), r = board.radius(), half = board.firstWidth() / 2, fy = board.sy(board.togo);
+      return state.play.players.filter(p => p.team === 'D').map(p => ({ p, at: board.pos(board.t, p.i) })).filter(({ at }) => Math.abs(board.sy(at.y) - fy) < half).map(({ p, at }) => {
+        const X = board.sx(at.x), d = ctx.getImageData(Math.round((X - r * 1.3) * dpr), Math.round((fy - half + 1) * dpr), Math.round(r * 2.6 * dpr), Math.round((2 * half - 2) * dpr)).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200 && Math.hypot(d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]) < 40) n++;
+        return [p.label, n];
+      });
+    });
+    assert.ok(knocked.length >= 3, `${colorScheme}: on 4th & 1, only ${knocked.length} defenders on the yellow line`);
+    assert.ok(knocked.every(([, n]) => n > 5), `${colorScheme}: a defender's X isn't knocked out of the yellow line: ${JSON.stringify(knocked)}`);
     await c.close();
   }
 }
