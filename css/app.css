@@ -32,6 +32,8 @@
   --los: #2d8250;
   --ball: #8a4b1f;
   --hot: #b85c00;
+  /* the first-down line: TV's yellow, as a dark gold marker that reads on the whiteboard (3:1) */
+  --first: #b58900;
   --chalk-grain: 0;
   --bar: #1f4a9a;
   --ui: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -66,6 +68,7 @@
     --los: #8fc3e8;
     --ball: #e6a868;
     --hot: #f59a8c;
+    --first: #ffc400;
     --chalk-grain: 1;
     --bar: #f4f2ea;
   }
@@ -579,6 +582,7 @@ button.bar-row { width: 100%; margin: -3px 0; padding: 3px 6px; border: 0; borde
 .key-art .l { stroke: var(--los); }
 .key-art .b { stroke: var(--ball); }
 .key-art .h { stroke: var(--hot); }
+.key-art .y { stroke: var(--first); }
 .key-art .fo { fill: var(--off); stroke: none; }
 .key-art .fd { fill: var(--def); stroke: none; }
 .key-art .fb { fill: var(--ball); stroke: none; }

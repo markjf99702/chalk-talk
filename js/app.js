@@ -208,6 +208,7 @@ function lineUp(keep = false) {
   state.play.sit = situation();
   state.phase = 'pre';
   board.setPlay(state.play);
+  board.togo = state.play.sit.togo; // the yellow line
   board.mark = endMark(state.play.result);
   state.t = board.t = board.start(); // the snap, or before it with a man in motion
   board.waitSnap = atSnap = false;
@@ -2154,6 +2155,7 @@ $('pbGrid').addEventListener('click', e => {
 const BOARD_KEY = [
   ['O and X', 'The offense is drawn as circles (the center as a square) and the defense as Xs, the way coaches draw them. Once the play runs, an offensive player with the ball is filled in.', 'marks'],
   ['The line of scrimmage', 'The dashed line across the field, where the ball is snapped. The yard numbers count from it.', 'los'],
+  ['The yellow line', 'The line to gain: get the ball to it for a first down. It\'s as far up the field as the yards to go in the Situation above your call, the way TV draws it.', 'first'],
   ['The ball', 'At the center\'s feet before the snap. Thrown, it rises off the field, with its shadow under it.', 'ball'],
   ['Lines with arrows', 'Routes for receivers and the path for a ball carrier. The quarterback\'s drop is the short broken line behind him.', 'route'],
   ['A dashed line with an arrow', 'A route that starts late: the back blocks first, then goes out.', 'late'],
@@ -2191,6 +2193,7 @@ function keyArt(kind) {
   const art = {
     marks: O(11, 22) + C(28, 22) + O(45, 22, ' style="fill: var(--off)"') + X(61, 22),
     los: line([[5, 24], [67, 24]], 'l', ' stroke-dasharray="6 5" opacity=".85"') + X(36, 12) + C(36, 34),
+    first: line([[5, 34], [67, 34]], 'l', ' stroke-dasharray="6 5" opacity=".85"') + line([[5, 13], [67, 13]], 'y', ' stroke-width="3.5" opacity=".9"') + ball(36, 34),
     ball: ball(22, 26) + '<ellipse cx="50" cy="30" rx="4.4" ry="2.4" style="fill: var(--field-line)" opacity=".25"/>' + ball(50, 14),
     route: arrow([[12, 36], [12, 11], [54, 11]], 'o') + O(12, 36),
     late: arrow([[14, 34], [56, 14]], 'o', ' stroke-dasharray="6 4"') + O(14, 34),

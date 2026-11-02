@@ -31,6 +31,7 @@ export class Board {
     this.spotAll = null; // or the men, where it names more than one (the blitzers)
     this.drawn = null; // where each player's label went in the last frame, by player: [x, y] (see labelSpots())
     this.mark = null; // what's written at the spot when the whistle blows: { text, big, win } (set by js/app.js)
+    this.togo = 10; // the yards to go for a first down: the yellow line (set by js/app.js from the situation)
     this.zoomU = 0; // how far zoomed to the line, 0 to 1 (js/app.js eases it in and out: see frame())
     this.still = matchMedia('(prefers-reduced-motion: reduce)');
     this.colors = {};
@@ -41,7 +42,7 @@ export class Board {
   readColors() {
     const cs = getComputedStyle(this.cv);
     const v = n => cs.getPropertyValue(n).trim();
-    this.colors = { board: v('--board'), line: v('--field-line'), num: v('--field-num'), side: v('--field-side'), ten: v('--field-ten'), off: v('--off'), def: v('--def'), los: v('--los'), ball: v('--ball'), hot: v('--hot'), chalk: v('--chalk-grain') === '1' };
+    this.colors = { board: v('--board'), line: v('--field-line'), num: v('--field-num'), side: v('--field-side'), ten: v('--field-ten'), first: v('--first'), off: v('--off'), def: v('--def'), los: v('--los'), ball: v('--ball'), hot: v('--hot'), chalk: v('--chalk-grain') === '1' };
     this.makeGrain();
   }
 
@@ -226,7 +227,11 @@ export class Board {
     ctx.setLineDash([6, 5]);
     ctx.beginPath(); ctx.moveTo(this.sx(-SIDELINE), this.sy(0)); ctx.lineTo(this.sx(SIDELINE), this.sy(0)); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
+    // the line to gain, the yards to go past it: the yellow line TV draws, a broad band rather than a chalk line, so it
+    // isn't taken for the spot's line at the whistle; under the players and the play
+    ctx.globalAlpha = 1; ctx.strokeStyle = C.first; ctx.lineWidth = Math.max(5, Math.min(10, k * 0.7)); ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(this.sx(-SIDELINE), this.sy(this.togo)); ctx.lineTo(this.sx(SIDELINE), this.sy(this.togo)); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.lineCap = 'round';
   }
 
   teamColor(team) { return team === 'O' ? this.colors.off : this.colors.def; }

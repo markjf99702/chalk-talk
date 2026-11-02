@@ -1499,6 +1499,45 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   await p.context().close();
 }
 
+// The board draws the line to gain, the yards to go past the line of scrimmage, in yellow (a dark gold on the
+// whiteboard) right across the field: at 10 yards on 1st & 10, at 2 on 3rd & 2, before the snap and as the play runs.
+{
+  for (const colorScheme of ['light', 'dark']) {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme });
+    const p = await c.newPage();
+    p.on('pageerror', e => problems.push(e.message));
+    await p.goto(base);
+    // How near the board's pixels round a spot (yards) come to its yellow, 0 for the same colour, and whether the
+    // yellow line's colour is 3:1 against the board.
+    const look = () => p.evaluate(() => {
+      const { board } = window.chalkTalk, ctx = board.cv.getContext('2d'), dpr = board.dpr;
+      const rgb = v => { const s = document.createElement('span'); s.style.color = v; document.body.append(s); const m = getComputedStyle(s).color.match(/\d+/g).map(Number); s.remove(); return m; };
+      const want = rgb(board.colors.first);
+      const near = (x, y) => {
+        const d = ctx.getImageData(Math.round(board.sx(x) * dpr) - 3, Math.round(board.sy(y) * dpr) - 3, 7, 7).data;
+        let best = 999;
+        for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200) best = Math.min(best, Math.hypot(d[i] - want[0], d[i + 1] - want[1], d[i + 2] - want[2]));
+        return Math.round(best);
+      };
+      const lum = c => { const [r, g, b] = c.map(v => v / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const a = lum(want), b = lum(rgb(board.colors.board));
+      return { togo: board.togo, on: near(-23.5, board.togo), off: near(-23.5, board.togo + 2.5), contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+    });
+    const first = await look();
+    assert.equal(first.togo, 10, `${colorScheme}: 1st & 10`);
+    assert.ok(first.on < 40 && first.off > 80, `${colorScheme}: no yellow line at 10 yards before the snap: ${JSON.stringify(first)}`);
+    assert.ok(first.contrast >= 3, `${colorScheme}: the yellow line is ${first.contrast.toFixed(2)}:1 against the board`);
+    await p.getByRole('radio', { name: '3rd & 2' }).click();
+    const short = await look();
+    assert.equal(short.togo, 2, `${colorScheme}: 3rd & 2`);
+    assert.ok(short.on < 40 && short.off > 80, `${colorScheme}: no yellow line at 2 yards on 3rd & 2: ${JSON.stringify(short)}`);
+    await p.evaluate(() => { const { snap, pause, board, state } = window.chalkTalk; snap(); pause(); state.t = board.t = 1; board.render(); });
+    const playing = await look();
+    assert.ok(playing.on < 40, `${colorScheme}: the yellow line went as the play ran: ${JSON.stringify(playing)}`);
+    await c.close();
+  }
+}
+
 // How to read the board has a drawing of each mark, in the board's own colours in both looks (and on the chalkboard,
 // its chalk dust), with rows for the line of scrimmage and the ball. It's in the playbook, and Key, under the board,
 // opens it in a card: on a phone just under the board, which stays at the top of the screen, and on a computer at the
@@ -1515,14 +1554,14 @@ for (const colorScheme of ['light', 'dark']) {
     const first = cls => sec.querySelector(`.key-art .${cls}`), cs = el => getComputedStyle(el);
     return {
       rows,
-      paint: { o: cs(first('o')).stroke, d: cs(first('d')).stroke, l: cs(first('l')).stroke, h: cs(first('h')).stroke, ball: cs(first('fb')).fill, board: cs(sec.querySelector('.key-art')).backgroundColor },
-      want: { o: col('off'), d: col('def'), l: col('los'), h: col('hot'), ball: col('ball'), board: col('board') },
+      paint: { o: cs(first('o')).stroke, d: cs(first('d')).stroke, l: cs(first('l')).stroke, h: cs(first('h')).stroke, y: cs(first('y')).stroke, ball: cs(first('fb')).fill, board: cs(sec.querySelector('.key-art')).backgroundColor },
+      want: { o: col('off'), d: col('def'), l: col('los'), h: col('hot'), y: col('first'), ball: col('ball'), board: col('board') },
       dust: cs(sec.querySelector('.key-art svg')).maskImage || cs(sec.querySelector('.key-art svg')).webkitMaskImage,
       card: document.getElementById('keyBody').textContent === sec.querySelector('.key-list').textContent,
     };
   });
   assert.ok(key.rows.length >= 12 && key.rows.every(r => r.art && r.words.length > 5), `${colorScheme}: a row of the key without a drawing: ${JSON.stringify(key.rows.filter(r => !r.art))}`);
-  for (const term of ['O and X', 'The line of scrimmage', 'The ball', 'Lines with arrows', 'A dashed line with an arrow', 'Numbers on routes', 'A line with a bar across the end', 'Dashed line to a bubble', 'Dotted line to a receiver', 'Arrows from the defense', 'Trails', 'Dotted line from the quarterback', 'At the whistle']) {
+  for (const term of ['O and X', 'The line of scrimmage', 'The yellow line', 'The ball', 'Lines with arrows', 'A dashed line with an arrow', 'Numbers on routes', 'A line with a bar across the end', 'Dashed line to a bubble', 'Dotted line to a receiver', 'Arrows from the defense', 'Trails', 'Dotted line from the quarterback', 'At the whistle']) {
     assert.ok(key.rows.some(r => r.term === term), `${colorScheme}: the key has no row for ${term}`);
   }
   assert.deepEqual(key.paint, key.want, `${colorScheme}: the key's drawings aren't in the board's colours`);
