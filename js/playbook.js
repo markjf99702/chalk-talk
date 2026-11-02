@@ -67,6 +67,13 @@ export const ROUTES = {
   jet: { ready: 1, name: 'jet', pts: [[3, 0.9], [9, 3.4]], desc: 'Jet: keeps running across at full speed, out to the flat, and takes his defender with him.' },
 };
 
+// Hot routes: what a receiver (a wide receiver or a tight end) or a back can be given instead of his route before the
+// snap, on a pass play (see hotRoutes() in js/sim.js). A back can also stay in to block.
+export const HOT = {
+  receiver: ['go', 'seam', 'post', 'corner', 'out', 'dig', 'slant', 'hitch', 'curl', 'flat', 'drag'],
+  back: ['swing', 'wheel', 'check', 'block'],
+};
+
 // Each pass play says what every eligible player does, by where he lines up:
 // S1, S2, S3 are the receivers on the strong side counted from the outside in, W1, W2 the weak side, RB and FB the backs.
 // side: 'S' strong or 'W' weak for back routes. reads: the quarterback's progression, first to last.

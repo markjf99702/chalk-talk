@@ -1,8 +1,8 @@
 // Unit tests for the simulator:  node --test test/sim.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simulate, prepare, name } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS } from '../js/playbook.js';
+import { simulate, prepare, name, hotRoutes } from '../js/sim.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -792,6 +792,52 @@ test('motion against a disguise: a safety showing deep who has the man in motion
 
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
 const caughtAt = r => { const f = r.frames.find(f => f.t > r.events.find(e => e.kind === 'throw').t && !f.air && f.c === r.result.carrier); return f.xy[2 * r.result.carrier + 1]; };
+
+test('hot routes: a receiver or a back given another route runs it, keeps his place in the reads, and every one runs to a finish', () => {
+  const base = { formation: 'trips', play: 'smash', front: 'nickel', coverage: 'c2', pressure: 'four', flip: false };
+  const reads = S => S.reads.map(r => `${r.label}:${r.job.route}`);
+  // Smash from Gun Trips: the H runs the corner, read first. On a slant he's still read first, and drawn that way.
+  const was = prepare(base, 3), now = prepare({ ...base, hot: { H: 'slant' } }, 3);
+  assert.equal(was.drawn.H, 'corner');
+  assert.deepEqual(now.drawn, was.drawn, 'the play\'s own routes are kept, for the card');
+  assert.deepEqual(reads(now), reads(was).map(r => (r === 'H:corner' ? 'H:slant' : r)));
+  const h = now.P.find(p => p.label === 'H');
+  const pts = now.overlay.find(o => o.kind === 'route' && o.i === h.i).pts;
+  assert.ok(pts.at(-1).x < h.x0 - 8 && pts.at(-1).y < 15, `the H's drawn route isn't a slant: ${JSON.stringify(pts.at(-1))}`);
+  assert.match(now.jobText[h.i], /^Slant:/);
+  // The tight end (Y) sits on Smash and isn't read; given a curl, he's read last.
+  const y = prepare({ ...base, hot: { Y: 'curl' } }, 3);
+  assert.deepEqual(reads(y), [...reads(was), 'Y:curl']);
+  // A back staying in to block isn't read; one on a wheel is, in the back's place.
+  const rb = prepare({ ...base, hot: { RB: 'block' } }, 3);
+  assert.equal(rb.P.find(p => p.label === 'RB').job.kind, 'pro');
+  assert.ok(!reads(rb).some(r => r.startsWith('RB:')));
+  // What can't be given is ignored: a route a man can't run, a run play, the screen, the back on play-action.
+  for (const [call, label] of [[{ ...base, hot: { H: 'wheel' } }, 'H'], [{ ...base, play: 'iz', hot: { H: 'slant' } }, 'H'], [{ ...base, play: 'screen', hot: { RB: 'swing', Z: 'curl' } }, 'Z'], [{ ...base, play: 'pa', hot: { RB: 'wheel' } }, 'RB'], [{ ...base, hot: { LT: 'go', QB: 'go' } }, 'LT']]) {
+    const plain = { ...call };
+    delete plain.hot;
+    assert.equal(JSON.stringify(simulate(call, 9).result), JSON.stringify(simulate(plain, 9).result), `${JSON.stringify(call)} changed the play`);
+  }
+  assert.deepEqual(hotRoutes(PLAYS.find(p => p.id === 'pa'), { cls: 'fb' }), HOT.back, 'the fullback on play-action can be given a route');
+  // Every route each man can be given, from every formation, runs to a finish and is thrown to sometimes.
+  let seed = 1;
+  const thrown = new Set();
+  for (const fm of FORMATIONS) {
+    for (const pl of PLAYS.filter(p => p.type === 'pass')) {
+      const S = prepare({ ...base, formation: fm.id, play: pl.id }, 1);
+      for (const man of S.O) {
+        for (const route of hotRoutes(pl, man)) {
+          const call = { ...base, formation: fm.id, play: pl.id, coverage: COVERAGES[seed % 5].id, flip: seed % 2 === 0, hot: { [man.label]: route } };
+          const r = simulate(call, seed++);
+          assert.ok(KINDS.has(r.result.kind) && ended(r), `${JSON.stringify(call)}: never finished`);
+          const t = r.events.find(e => e.kind === 'throw');
+          if (t && r.players[t.who].label === man.label) thrown.add(route);
+        }
+      }
+    }
+  }
+  assert.deepEqual([...HOT.receiver, ...HOT.back].filter(r => r !== 'block' && !thrown.has(r)), [], 'a hot route nobody ever throws to');
+});
 
 test('a deep catch is run down from behind: no long run after every catch 15 yards downfield', () => {
   // 640 snaps of the four plays that throw deep. From four start seeds (31, 1000, 5000, 77777) catches 15+ yards

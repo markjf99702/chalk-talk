@@ -3,7 +3,7 @@
 // It is a coaching model, not physics: blocks are pairs that push each other until one wins, coverage is
 // men following receivers or defenders guarding spots, and the quarterback throws where nobody can get to first.
 import { rng } from './rng.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT } from './playbook.js';
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -417,6 +417,18 @@ function assignOffense(S) {
   const under = S.fm.under;
   if (play.type === 'run') return assignRun(S);
   const map = play.routes(S.keys);
+  // The play's own route for each man (by his label), and then the hot routes in the call ({ H: 'slant' }): a man
+  // given another one runs it instead, and keeps his place in the reads.
+  S.drawn = {};
+  for (const [key, route] of Object.entries(map)) if (S.keys[key] && key !== 'side') S.drawn[S.keys[key].label] = route;
+  S.drawnReads = play.reads.map(k => S.keys[k]?.label).filter(Boolean);
+  const hot = [];
+  for (const [label, route] of Object.entries(S.call.hot || {})) {
+    const key = Object.keys(S.keys).find(k => S.keys[k]?.label === label);
+    if (!key || !hotRoutes(play, S.keys[key]).includes(route) || route === map[key]) continue;
+    map[key] = route;
+    hot.push(S.keys[key]);
+  }
   for (const [key, route] of Object.entries(map)) {
     const pl = S.keys[key];
     if (!pl || key === 'side') continue;
@@ -460,9 +472,21 @@ function assignOffense(S) {
     rb.job = { kind: 'fake', then: 'pro', aim: 1.7 * p };
   }
   passPro(S);
-  // His reads, from what's left after the protection: a back who stays in to block isn't one.
+  // His reads, from what's left after the protection: a back who stays in to block isn't one. A man given a hot route who
+  // wasn't one of them is now, after the rest.
   S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
+  for (const pl of hot) if (pl.job.kind === 'route' && !S.reads.includes(pl)) S.reads.push(pl);
   S.hold = { quick: 2.4, five: 4.1, pa: 4.4, screen: 2.6 }[play.drop];
+}
+
+// The routes a man can be given before the snap instead of his own (HOT in js/playbook.js), on this play: none on a run,
+// or on the RB Screen, which is built round the back's screen with everyone else clearing out; and none for the back on
+// the Play-Action Shot, whose job is the fake.
+export function hotRoutes(play, pl) {
+  if (play.type !== 'pass' || play.drop === 'screen') return [];
+  if (pl.cls === 'wr' || pl.cls === 'te') return HOT.receiver;
+  if (pl.cls === 'rb' || pl.cls === 'fb') return play.drop === 'pa' && pl.cls === 'rb' ? [] : HOT.back;
+  return [];
 }
 
 // Pass protection: every rusher is somebody's if there are the men for it. The line takes the rushers nearest them,
@@ -639,7 +663,7 @@ export function simulate(call, seed = 1) {
     seed, call: S.call, frames, events: S.events, result: S.result, box: S.box,
     unblocked: (S.unblocked || []).map(d => d.i), free: (S.freeRushers || []).map(d => d.i), cameFree, protection: S.protection.map(p => p.i),
     players: S.P.map(pl => ({ i: pl.i, team: pl.team, label: pl.label, cls: pl.cls, info: pl.info, x: S.pre[pl.i].x, y: S.pre[pl.i].y })),
-    jobs: S.jobText, overlay: S.overlay,
+    jobs: S.jobText, overlay: S.overlay, drawn: S.drawn || {}, drawnReads: S.drawnReads || [],
     motion: S.motion ? { kind: S.motion.kind, who: S.motion.who.i, man: S.motion.man ? S.motion.man.i : -1, t0: S.motion.t0, set: S.motion.setAt } : null,
   };
 }
