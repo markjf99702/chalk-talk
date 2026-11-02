@@ -1790,7 +1790,7 @@ for (const colorScheme of ['light', 'dark']) {
     const { state, board, lineUp } = window.chalkTalk;
     document.querySelector('[data-side="D"]').click();
     Object.assign(state.off, { formation: 'doubles', play: 'verts', flip: false, motion: 'none' });
-    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', disguise: false });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', blitzer: 'M', disguise: false });
     lineUp();
     const drawn = [], ctx = board.ctx, poly = board.poly, arrow = board.arrow;
     board.poly = function (pts) { drawn.push({ kind: 'line', w: ctx.lineWidth, pts: pts.length }); return poly.call(this, pts); };
@@ -3002,7 +3002,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => {
     const { state, lineUp } = window.chalkTalk;
     Object.assign(state.off, { formation: 'doubles', play: 'verts', flip: false, motion: 'none' });
-    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', disguise: false });
+    Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', blitzer: 'M', disguise: false });
     lineUp();
   });
   const spots = await p.evaluate(() => {
