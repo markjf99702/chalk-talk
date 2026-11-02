@@ -965,12 +965,13 @@ for (const width of [320, 360, 375]) {
     for (const x of w) assert.ok(x.inside, `the route tree's "${x.name}" is off the drawing`);
     for (const [k, a] of w.entries()) for (const b of w.slice(k + 1)) assert.ok(a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t, `the route tree's "${a.name}" and "${b.name}" are on each other`);
   }
-  assert.match(tree.caption, /Drawn faint: out, curl and wheel, which no play here runs\.$/);
+  assert.match(tree.caption, /Drawn faint: out, curl and wheel, which no play here runs, but a man can be given one: tap him on the board before the snap, then Change his route\.$/);
   assert.match(tree.rows.Hitch, / Run in Smash\.$/);
   assert.match(tree.rows.Corner, / Run in Smash and Mesh\.$/);
   assert.match(tree.rows.Flat, / Run in Flood, Slant-Flat and Play-Action Shot\.$/, 'a receiver\'s flat and a back\'s are one route');
   assert.match(tree.rows.Drag, / Run in Mesh\.$/);
-  for (const r of ['Out', 'Curl', 'Wheel']) assert.match(tree.rows[r], / No play here runs it\.$/);
+  for (const r of ['Out', 'Curl']) assert.match(tree.rows[r], / No play here runs it, but a receiver can: tap him before the snap and change his route\.$/);
+  assert.match(tree.rows.Wheel, / No play here runs it, but a back can: tap him before the snap and change his route\.$/);
 }
 
 // The words a learner meets, each explained where he can find it: what the personnel digits mean, what the strong side
@@ -1760,7 +1761,7 @@ for (const colorScheme of ['light', 'dark']) {
   const calls = () => p.evaluate(() => { const { state } = window.chalkTalk; return { off: { ...state.off }, def: { ...state.def } }; });
   for (const name of ['Singleback', 'Left', 'Across', 'Power']) await p.getByRole('radio', { name }).click();
   const off = (await calls()).off;
-  assert.deepEqual(off, { formation: 'single', play: 'power', flip: true, motion: 'across' });
+  assert.deepEqual(off, { formation: 'single', play: 'power', flip: true, motion: 'across', hot: {} });
   await p.click('[data-side="D"]');
   await p.getByRole('radio', { name: 'Cover 4' }).click();
   const def = (await calls()).def;
@@ -2423,7 +2424,7 @@ for (const colorScheme of ['light', 'dark']) {
     const { state } = window.chalkTalk;
     return { auto: state.auto, switch: document.getElementById('auto').checked, off: state.off, def: state.def, seed: state.seed, phase: state.phase, focus: document.activeElement.id };
   });
-  assert.deepEqual(s, { auto: false, switch: false, off: { formation: 'trips', play: 'smash', flip: true, motion: 'none' }, def: { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: false }, seed: want.seed, phase: 'playing', focus: 'snap' },
+  assert.deepEqual(s, { auto: false, switch: false, off: { formation: 'trips', play: 'smash', flip: true, motion: 'none', hot: {} }, def: { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: false }, seed: want.seed, phase: 'playing', focus: 'snap' },
     'a typical snap against Cover 3 from the chart (before the snap the chart rushes four with no disguise)');
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), false, 'the switch went off, but wasn\'t saved');
   const done = await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); return state.play.result.yards; });
@@ -2444,6 +2445,113 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#bars button[data-row="power"]');
   assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.side, state.auto, state.off.formation, state.off.play, state.off.flip, state.seed]; }), ['D', false, 'iform', 'power', false, run.seed]);
   assert.match(await p.getAttribute('#bars button[data-row="power"]', 'aria-label'), /\. Watch a typical snap of Power\.$/);
+  await c.close();
+}
+
+// Hot routes: on your own pass play, a receiver's or a back's card has "Change his route", which opens a row under the
+// board with each route he can be given (his route as called first) while the card makes way. One picked redraws his
+// line and the play's name, and he keeps his place in the quarterback's reads; a man who had none is read last, and a
+// back in to block is none. Done puts the row away. They're kept with your call, ride in a shared link, and go with a
+// new play; a run play, the other coach's offense and the lineman have none. The result card and the chart say it's
+// your version of the play.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const tap = label => p.evaluate(label => {
+    const { board, state } = window.chalkTalk;
+    const i = state.play.players.findIndex(q => q.label === label);
+    const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
+    return { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) };
+  }, label).then(at => p.mouse.click(at.x, at.y));
+  const row = () => p.evaluate(() => ({
+    open: !document.getElementById('routes').hidden, card: !document.getElementById('who').hidden,
+    who: document.getElementById('routesWho').textContent,
+    chips: [...document.querySelectorAll('#routeChips .chip')].map(b => b.textContent.replace(/\s+/g, ' ')),
+    on: document.querySelector('#routeChips [aria-checked="true"]')?.dataset.route, focus: document.activeElement.dataset.route || document.activeElement.id,
+  }));
+  const reads = () => p.evaluate(() => { const { state } = window.chalkTalk; return state.play.jobs[state.play.players.findIndex(q => q.label === 'QB')].replace(/^.*His reads: /, ''); });
+  // (against a four-man rush the back is free to go out: against a blitz he can see a man coming and stay in)
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} }); Object.assign(state.def, { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false }); lineUp(); });
+  assert.equal(await reads(), '1. H (corner), 2. Z (hitch), 3. X (dig), 4. RB (check-down).');
+  await tap('H');
+  assert.equal(await p.isVisible('#whoRoutesOpen'), true, 'no Change his route in a receiver\'s card');
+  await p.click('#whoRoutesOpen');
+  assert.deepEqual(await row(), { open: true, card: false, who: 'The H\'s route. He keeps his place in the quarterback\'s reads.', chips: ['corner as called', 'go', 'seam', 'post', 'out', 'dig', 'slant', 'hitch', 'curl', 'flat', 'drag'], on: 'corner', focus: 'corner' });
+  await p.click('#routeChips [data-route="slant"]');
+  let r = await row();
+  assert.deepEqual([r.open, r.on, r.focus], [true, 'slant', 'slant'], 'the row after a route is picked');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), { H: 'slant' });
+  assert.equal(await p.textContent('#caption'), 'Hot route: the H on a slant.');
+  assert.match(await p.textContent('#matchup'), /^Gun Trips · Smash \(H slant\)  vs  /);
+  assert.equal(await reads(), '1. H (slant), 2. Z (hitch), 3. X (dig), 4. RB (check-down).', 'he keeps his place in the reads');
+  // The tight end sits on Smash and isn't read: given a curl, he's read last.
+  await tap('Y');
+  assert.equal(await p.isVisible('#routes'), false, 'a tap on the board left the row up');
+  await p.click('#whoRoutesOpen');
+  assert.match((await row()).who, /^The Y's route\. He isn't one of the quarterback's reads as it's drawn: give him another route and he's read last\.$/);
+  await p.click('#routeChips [data-route="curl"]');
+  assert.equal((await row()).who, 'The Y\'s route. The quarterback reads him last.');
+  assert.equal(await reads(), '1. H (slant), 2. Z (hitch), 3. X (dig), 4. RB (check-down), 5. Y (curl).');
+  // A back: the back's routes, and in to block he isn't read.
+  await tap('RB');
+  await p.click('#whoRoutesOpen');
+  assert.deepEqual((await row()).chips, ['check-down as called', 'swing', 'wheel', 'block']);
+  await p.click('#routeChips [data-route="block"]');
+  assert.equal((await row()).who, 'The RB\'s route. In to block, he isn\'t one of the quarterback\'s reads.');
+  assert.equal(await reads(), '1. H (slant), 2. Z (hitch), 3. X (dig), 4. Y (curl).');
+  await p.click('#routeChips [data-route="check"]'); // back to his route as called
+  assert.equal(await p.textContent('#caption'), 'The RB runs his route as called.');
+  assert.deepEqual(await p.evaluate(() => Object.entries(window.chalkTalk.state.off.hot)), [['Y', 'curl'], ['H', 'slant']], 'kept in the formation\'s order');
+  await p.click('#routesDone');
+  assert.deepEqual(await p.evaluate(() => [document.getElementById('routes').hidden, document.activeElement.id, window.chalkTalk.board.selected]), [true, 'snap', -1], 'Done');
+  // A lineman and a defender have none.
+  await tap('LG');
+  assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route in a lineman\'s card');
+  await tap('FS');
+  assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route in a defender\'s card');
+  await p.click('#whoClose');
+  // The chart is your version.
+  assert.match(await p.textContent('#chartHint'), /^How often your version of Smash \(the Y on a curl and the H on a slant\) succeeds, gaining 4 yards or more, from Gun Trips /);
+  // Snapped: the result card names your version, and the note says it's about the play as drawn.
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#resVs'), /^Smash, Y on a curl, H on a slant from Gun Trips against /);
+  assert.match(await p.textContent('#note'), / That's Smash as it's drawn; yours had the Y on a curl and the H on a slant, so it can go another way\. Run it 100 times each to see how your version does against every coverage\.$/);
+  // In a shared link, and back from it.
+  await c.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await p.click('#share');
+  await p.waitForFunction(() => document.getElementById('share').textContent === 'Link copied' || !document.getElementById('shareUrl').hidden);
+  const link = await p.evaluate(async () => { const box = document.getElementById('shareUrl'); return box.hidden ? navigator.clipboard.readText() : box.value; });
+  assert.match(link, /#p=O\.trips\.smash\.0\.\w+\.\w+\.\w+\.\d+\.[01]\.none\.YcurlHslant$/);
+  const q = await c.newPage();
+  await q.goto(base + link.slice(link.indexOf('#')));
+  await q.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+  assert.deepEqual(await q.evaluate(() => window.chalkTalk.state.off.hot), { Y: 'curl', H: 'slant' }, 'the shared link lost the hot routes');
+  assert.equal(await q.textContent('#resHead'), await p.textContent('#resHead'), 'the shared link plays another snap');
+  // One naming a route he can't run is for a play this version doesn't have; one from before hot routes still opens.
+  await q.evaluate(() => { location.hash = '#p=O.trips.smash.0.nickel.c2.four.15.0.none.Hwheel'; });
+  await q.waitForFunction(() => location.hash === '', null, { timeout: 5000 });
+  assert.equal(await q.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
+  await q.evaluate(() => { location.hash = '#p=O.trips.smash.0.nickel.c2.four.15.0.none'; });
+  await q.waitForFunction(() => window.chalkTalk.state.seed === 15, null, { timeout: 5000 });
+  assert.deepEqual(await q.evaluate(() => window.chalkTalk.state.off.hot), {});
+  await q.close();
+  // Kept with your call: a reload keeps them; a new play starts from the play as drawn.
+  await p.reload();
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), { Y: 'curl', H: 'slant' }, 'a reload lost the hot routes');
+  await p.getByRole('radio', { name: 'Flood' }).click();
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), {}, 'a new play kept the old one\'s hot routes');
+  assert.match(await p.textContent('#matchup'), /^Gun Trips · Flood  vs  /);
+  // A run play has none, and neither has the other coach's offense when you call the defense.
+  await p.getByRole('radio', { name: 'Inside Zone' }).click();
+  await tap('H');
+  assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route on a run');
+  await p.click('[data-side="D"]');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', motion: 'none' }); state.seen = true; lineUp(); });
+  await tap('H');
+  assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route for the other coach\'s receiver');
   await c.close();
 }
 
@@ -2755,7 +2863,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#labels');
   await p.click('[data-speed="0.5"]');
   const want = {
-    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true, motion: 'jet' }, def: { front: '34', coverage: 'c4', pressure: 'blitz', disguise: false }, labels: false, speed: 0.5,
+    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true, motion: 'jet', hot: {} }, def: { front: '34', coverage: 'c4', pressure: 'blitz', disguise: false }, labels: false, speed: 0.5,
     shown: { side: 'D', auto: false, labels: 'false', speed: '0.5' },
   };
   assert.deepEqual(await kept(p), want, 'the calls and settings picked');

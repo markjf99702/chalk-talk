@@ -1,6 +1,6 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS } from './playbook.js';
-import { simulate, prepare, name } from './sim.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT } from './playbook.js';
+import { simulate, prepare, name, hotRoutes } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
 
@@ -20,7 +20,7 @@ const RUN_NOTES = {
 
 const state = {
   side: 'O',
-  off: { formation: 'trips', play: 'smash', flip: false, motion: 'none' },
+  off: { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} },
   def: { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false },
   auto: true,
   labels: true,
@@ -38,10 +38,32 @@ const state = {
   t: 0,
 };
 
-// Whether call a has everything call b has.
-const same = (a, b) => Object.keys(b).every(f => a[f] === b[f]);
+// Whether call a has everything call b has (the hot routes alike, none and {} the same).
+const same = (a, b) => Object.keys(b).every(f => (f === 'hot' ? JSON.stringify(a.hot || {}) === JSON.stringify(b.hot || {}) : a[f] === b[f]));
 // A kept call that this version can play, tidied up, or null.
-const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip, motion: MOTIONS.includes(o.motion) ? o.motion : 'none' } : null);
+const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip, motion: MOTIONS.includes(o.motion) ? o.motion : 'none', hot: okHot(o.hot, o.formation, o.play) } : null);
+// Hot routes: a receiver or a back given another route before the snap, by his label ({ H: 'slant' }), on a pass play
+// (see hotRoutes() in js/sim.js). Kept in the order the formation lists its men, only the ones that can be, and only
+// with the call they were given for: a new play or formation starts from the play as drawn.
+function okHot(hot, formation, play) {
+  const out = {}, pl = byId(PLAYS, play);
+  if (!hot || typeof hot !== 'object') return out;
+  for (const [label, , , cls] of byId(FORMATIONS, formation).players) {
+    if (typeof hot[label] === 'string' && hotRoutes(pl, { cls }).includes(hot[label])) out[label] = hot[label];
+  }
+  return out;
+}
+const hotList = o => Object.entries(o.hot || {});
+// In words: "the H on a slant", "the RB in to block".
+const HOT_WORDS = { go: 'on a go route', seam: 'on a seam route', post: 'on a post', corner: 'on a corner route', out: 'on an out', dig: 'on a dig', slant: 'on a slant', hitch: 'on a hitch', curl: 'on a curl', flat: 'to the flat', drag: 'on a drag', swing: 'on a swing', wheel: 'on a wheel', check: 'on a check-down', block: 'in to block' };
+const and = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : list[0] || '');
+const hotWords = o => and(hotList(o).map(([who, r]) => `the ${who} ${HOT_WORDS[r]}`));
+// The play as the call has it: "Smash", or "Smash, H on a slant". Short, for the line along the top of the board:
+// "Smash (H slant)", or "Smash (3 hot routes)".
+const playName = o => byId(PLAYS, o.play).name + hotList(o).map(([who, r]) => `, ${who} ${HOT_WORDS[r]}`).join('');
+const playShort = o => { const h = hotList(o); return byId(PLAYS, o.play).name + (!h.length ? '' : h.length > 2 ? ` (${h.length} hot routes)` : ` (${h.map(([who, r]) => `${who} ${r === 'check' ? 'check-down' : r}`).join(', ')})`); };
+// The code for them in a shared link: each man's label and his route, run together ("HslantRBblock").
+const hotCode = o => hotList(o).map(([who, r]) => who + r).join('');
 // Motion before the snap (see presnap() in js/sim.js): none, across (he runs over and sets), or jet (at full speed, the
 // ball snapped as he crosses). Every formation here has a receiver off the line to send.
 const MOTIONS = ['none', 'across', 'jet'];
@@ -161,6 +183,7 @@ function rollTheirs() {
       state.off.flip = R() < 0.5;
       const m = R();
       state.off.motion = m < MOTION_SHARE / 2 ? 'across' : m < MOTION_SHARE ? 'jet' : 'none';
+      state.off.hot = {};
     }
   }
 }
@@ -184,6 +207,7 @@ function lineUp(keep = false) {
   board.spot = -1;
   board.spotAll = null;
   hideWho();
+  closeRoutes();
   $('why').hidden = true;
   $('result').hidden = !keep;
   staleResult(keep);
@@ -251,6 +275,7 @@ function play() {
   renderMatchup();
   syncTransport();
   if (board.selected >= 0 && cardClosesOnPlay()) { board.selected = -1; hideWho(); }
+  closeRoutes();
   if (snapped) { // the other side's call is out now: the tapped player's job, and which row of the chart it is
     if (board.selected >= 0) showWho(board.selected);
     syncChart();
@@ -333,6 +358,7 @@ const HOLD = 1300; // ms
 function finish({ hold = false } = {}) {
   state.phase = 'done';
   snappedNow();
+  if (board.selected >= 0 && !$('who').hidden) routeChips(state.play.players[board.selected]); // his route can be changed again
   whistled = state.play;
   tallyDrill();
   cancelAnimationFrame(raf);
@@ -602,6 +628,7 @@ function pick(x, y) {
   const r = $('board').getBoundingClientRect();
   const near = board.hit(x - r.left, y - r.top);
   opener = null;
+  closeRoutes();
   if (!near.length) { board.selected = -1; hideWho(); } else {
     const i = near[(near.indexOf(board.selected) + 1) % near.length];
     board.selected = i; dropHint(); showWho(i);
@@ -637,6 +664,7 @@ function closeWho() {
   const back = opener?.isConnected && ($('who').contains(document.activeElement) || document.activeElement === document.body) ? opener : null;
   board.selected = -1;
   hideWho();
+  closeRoutes();
   draw();
   back?.focus();
 }
@@ -661,11 +689,80 @@ function showWho(i) {
   $('whoAbout').textContent = about;
   $('whoMore').textContent = `More about the ${p.label}`;
   $('whoMore').hidden = !about;
+  routeChips(p);
   $('who').hidden = false;
   syncMore();
   placeWho(fresh);
 }
 function hideWho() { $('who').hidden = true; }
+
+// Hot routes: on your own pass play, until it's snapped (or again once it's over), a receiver's or a back's card has
+// "Change his route". It opens a row under the board with a button for each route he can be given, his route as called
+// first, and the card makes way for it, so the whole board shows, his lines over the others. One picked redraws his
+// line, and he keeps his place in the quarterback's reads (or, if he had none, he's read last): see assignOffense() in
+// js/sim.js. The row stays with him until Done, a tap on the board, the snap, or a change of call other than his route.
+let routesFor = -1; // the man the row is open for
+const routeName = id => (id === 'block' ? 'block' : ROUTES[id]?.name || id);
+const canRoute = p => (p.team === 'O' && (state.side === 'O' || !state.auto) && state.phase !== 'playing' ? hotRoutes(byId(PLAYS, state.off.play), p) : []);
+function routeChips(p) { $('whoRoutesOpen').hidden = !canRoute(p).length; }
+// Where he is in the quarterback's reads, with the route he has now.
+function readWords(p, now, drawn) {
+  if (now === 'block') return 'In to block, he isn\'t one of the quarterback\'s reads.';
+  if (state.play.drawnReads.includes(p.label)) return 'He keeps his place in the quarterback\'s reads.';
+  return now === drawn ? 'He isn\'t one of the quarterback\'s reads as it\'s drawn: give him another route and he\'s read last.' : 'The quarterback reads him last.';
+}
+function openRoutes(i) {
+  const p = state.play.players[i], can = canRoute(p);
+  if (!can.length) { closeRoutes(); return; }
+  routesFor = i;
+  const host = $('routeChips'), drawn = state.play.drawn[p.label], now = state.off.hot?.[p.label] || drawn;
+  $('routesWho').innerHTML = `<b>The ${esc(p.label)}'s route.</b> <span>${esc(readWords(p, now, drawn))}</span>`;
+  host.textContent = '';
+  for (const id of [drawn, ...can.filter(r => r !== drawn)]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(id === now));
+    b.dataset.route = id;
+    b.innerHTML = id === drawn ? `${esc(routeName(id))} <small>as called</small>` : esc(routeName(id));
+    b.addEventListener('click', () => changeRoute(p.label, id));
+    host.append(b);
+  }
+  rove(host);
+  $('routes').hidden = false;
+  hideWho();
+  // in sight: on a phone turned sideways it's under the scrubber, in the stage beside the calls, which scrolls to it
+  const r = $('routes').getBoundingClientRect();
+  if (r.bottom > innerHeight || r.top < 0) $('routes').scrollIntoView({ block: 'nearest', behavior: smooth() });
+}
+function closeRoutes() {
+  routesFor = -1;
+  $('routes').hidden = true;
+}
+onButton($('whoRoutesOpen'), () => {
+  openRoutes(board.selected);
+  $('routeChips').querySelector('[aria-checked="true"]')?.focus({ preventScroll: true });
+});
+$('routesDone').addEventListener('click', () => {
+  closeRoutes();
+  board.selected = -1;
+  hideWho();
+  draw();
+  toSnap();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('routes').hidden && $('who').hidden) $('routesDone').click(); });
+function changeRoute(label, route) {
+  const i = board.selected, drawn = state.play.drawn[label], hot = { ...state.off.hot };
+  if (route === drawn) delete hot[label]; else hot[label] = route;
+  state.off.hot = okHot(hot, state.off.formation, state.off.play);
+  afterChange(); // a change of call: lined up again, with a new roll of the dice
+  board.selected = i;
+  openRoutes(i);
+  draw();
+  setCaption(route === drawn ? `The ${label} runs his route as called.` : `Hot route: the ${label} ${HOT_WORDS[route]}.`);
+  $('routeChips').querySelector(`[data-route="${route}"]`)?.focus({ preventScroll: true });
+}
 
 // What a defender's spot before the snap gives away, from what anyone can see on the board: how deep he is, what he's
 // over, whether he's in the box. On this board the tells are exact (corners pressed only in man, a Mike only creeps up
@@ -859,6 +956,7 @@ function offenseChooser(host, readonly) {
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const set = patch => {
     const was = fm.personnel;
+    if ((patch.formation || state.off.formation) !== state.off.formation || (patch.play || state.off.play) !== state.off.play) patch.hot = {};
     Object.assign(state.off, patch);
     // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
     // or strong side keeps his call, the way an audible at the line does. The board says so until the snap, the way New
@@ -986,7 +1084,7 @@ function theirSummary() {
   }
   // Where the strength is on the board as you see it: the defense's view is turned around, so their right is your left.
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
-  return `${fm.name}, strength to your ${state.off.flip ? 'right' : 'left'}, ${moving(state.off) ? `${motionWords(state.off)}, ` : ''}${pl.name}`;
+  return `${fm.name}, strength to your ${state.off.flip ? 'right' : 'left'}, ${moving(state.off) ? `${motionWords(state.off)}, ` : ''}${playName(state.off)}`;
 }
 
 function syncTheirs() {
@@ -1012,7 +1110,7 @@ function renderMatchup() {
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
   const dim = what => ` <span class="dim">· ${what} hidden</span>`;
   const mo = moving(state.off) ? ` · ${fm.motion.who} ${state.off.motion === 'jet' ? 'jet' : 'across'}` : '';
-  const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : `${esc(mo)} · ${esc(pl.name)}`);
+  const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : `${esc(mo)} · ${esc(playShort(state.off))}`);
   const def = esc(fr.name) + (state.side === 'O' && hidden() ? dim('coverage') : ` · ${esc(cv.name)}${disguised(state.def) ? ' (disguised)' : ''}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ' · Blitz' : ''}`);
   $('matchup').innerHTML = `${off}  vs  ${def}`;
 }
@@ -1159,7 +1257,7 @@ function drillCall() {
     state.def = { front: pers === '10' || pers === '11' ? 'nickel' : 'over', coverage: D.coverage, pressure: D.pressure, disguise: false };
   } else {
     const R = rng(newSeed());
-    state.off = { formation: D.formation, play: R.pick(PLAYS.filter(p => p.type === 'run')).id, flip: R() < 0.5, motion: 'none' };
+    state.off = { formation: D.formation, play: R.pick(PLAYS.filter(p => p.type === 'run')).id, flip: R() < 0.5, motion: 'none', hot: {} };
   }
 }
 function startDrill(id) {
@@ -1405,7 +1503,7 @@ function showResult() {
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
   // (While you're asked what they played, the coverage waits: Cover 0 is said as a blitz, as it is.)
   const blitz = state.def.pressure === 'blitz' || cv.id === 'c0';
-  const from = `${pl.name} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
+  const from = `${playName(state.off)} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
   $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
     : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.${typicalNote()}`;
   // Each line's time is a button that watches that moment again on the board (see replay()).
@@ -1484,7 +1582,7 @@ function coachNote(P) {
   // How the call does in general, then how this snap went, so a snap that goes the other way doesn't read as the note
   // being wrong.
   const lead = pl.type === 'pass' ? `How ${pl.name} does against ${cv.name}:` : `How ${pl.name} works:`;
-  const note = (pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd) + (mask ? ` ${DISGUISE_NOTES[pl.type === 'run' ? 'run' : cv.id]}` : '') + motionNote(P);
+  const note = (pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd) + (mask ? ` ${DISGUISE_NOTES[pl.type === 'run' ? 'run' : cv.id]}` : '') + motionNote(P) + hotNote(P);
   return { lead, note, now: thisTime(P), reads };
 }
 
@@ -1497,6 +1595,13 @@ function motionNote(P) {
   const n = sd => P.players.filter(p => p.team === 'O' && (p.cls === 'wr' || p.cls === 'te') && Math.sign(p === who ? to : p.x) === sd).length;
   const a = n(1), b = n(-1);
   return ` Here the ${who.label} went in motion first, and the play was run from where the receivers stood then: ${a === b ? `${word(a)} each side` : `${word(Math.max(a, b))} on one side and ${word(Math.min(a, b))} on the other`}.`;
+}
+
+// The note is about the play as it's drawn: with hot routes, it says this one wasn't, and where to see how yours does.
+function hotNote(P) {
+  const o = { ...P.call, hot: okHot(P.call.hot, P.call.formation, P.call.play) };
+  if (!hotList(o).length) return '';
+  return ` That's ${byId(PLAYS, o.play).name} as it's drawn; yours had ${hotWords(o)}, so it can go another way. Run it 100 times each to see how your version does against every coverage.`;
 }
 
 // What a disguise changes, after the note on the coverage it is: what the board shows over many snaps against the
@@ -1584,7 +1689,7 @@ function resetShare() {
 }
 $('share').addEventListener('click', async () => {
   const c = call();
-  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none'].join('.');
+  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off)].filter(x => x !== '').join('.');
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
   resetShare();
@@ -1603,23 +1708,26 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion): 'ok' once it's
-// set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front or coverage this version doesn't
-// have (the address is cleared either way), '' when there's none. A link from before there were disguises ends at the
-// seed, and one from before motion at the disguise: they open without them.
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot): 'ok' once
+// it's set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front, coverage or hot route this
+// version doesn't have (the address is cleared either way), '' when there's none. A link from before there were
+// disguises ends at the seed, one from before motion at the disguise, and one with no hot routes at the motion: they
+// open without them. The hot routes are each man's label and his route, run together ("HslantRBblock").
 let linkNote = '';
 function fromLink() {
   const hash = location.hash;
   if (!hash.startsWith('#p=')) return '';
   history.replaceState(null, '', location.pathname + location.search);
-  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01])(?:\.(\w+))?)?/);
+  const m = hash.match(/p=([OD])\.(\w+)\.(\w+)\.([01])\.(\w+)\.(\w+)\.(\w+)\.(\d+)(?:\.([01])(?:\.(\w+)(?:\.([A-Za-z]+))?)?)?/);
   if (!m) return 'bad';
-  const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion] = m;
+  const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion, code = ''] = m;
   if (motion && !MOTIONS.includes(motion)) return 'unknown';
   if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
+  const given = [...code.matchAll(/([A-Z]+)([a-z]+)/g)], hot = okHot(Object.fromEntries(given.map(([, who, r]) => [who, r])), formation, playId);
+  if (given.map(g => g[0]).join('') !== code || Object.keys(hot).length !== given.length) return 'unknown';
   Object.assign(state, { side, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
   drill = drilled = null;
-  state.off = { formation, play: playId, flip: flip === '1', motion: motion || 'none' };
+  state.off = { formation, play: playId, flip: flip === '1', motion: motion || 'none', hot };
   state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four', disguise: disguise === '1' };
   linkNote = '';
   return 'ok';
@@ -1687,7 +1795,8 @@ function chartHint() {
   const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
   if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
-  return `How often your play succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
+  const yours = hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
+  return `How often ${yours} succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
     + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
 }
 // Once a row has its numbers, it can be tapped.
@@ -1857,7 +1966,7 @@ function playbook() {
   const routeDesc = { flat: 'Out toward the sideline about four yards past the line, run by a receiver or by a back coming out of the backfield.' };
   const use = routeUse(), list = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]);
   sec('Routes', false, routeTree(use) + dl(Object.entries(ROUTES).filter(([k]) => !['drag6', 'bflat', 'jet'].includes(k)).map(([k, r]) => [r.name.replace(/^\w/, c => c.toUpperCase()),
-    `${routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())} ${use[k] ? `Run in ${list(use[k])}.` : 'No play here runs it.'}`])));
+    `${routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())} ${use[k] ? `Run in ${list(use[k])}.` : `No play here runs it, but a ${HOT.back.includes(k) ? 'back' : 'receiver'} can: tap him before the snap and change his route.`}`])));
   sec('How to read the board', false, keyList());
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
   // areas in ZONES (js/playbook.js), as the player cards name them.
@@ -1952,7 +2061,7 @@ function routeTree(use) {
   const faint = [...Object.keys(TREE_WR), ...Object.keys(TREE_BACK)].filter(id => !runs(id)).map(id => (id === 'bflat' ? 'flat' : ROUTES[id].name));
   const wr = `<svg class="tree" viewBox="0 0 350 192" role="img" aria-label="The route tree: a receiver split out on the right, and the routes he can run, out toward his sideline or in toward the middle: ${list(Object.keys(TREE_WR).map(id => ROUTES[id].name))}.">${draw(TREE_WR, 7, 196, 166, 0, { x0: -18, y1: 21 }, 'WR')}</svg>`;
   const rb = `<svg class="tree" viewBox="0 0 196 196" role="img" aria-label="Routes from the backfield: ${list(Object.keys(TREE_BACK).map(id => (id === 'bflat' ? 'flat' : ROUTES[id].name)))}.">${draw(TREE_BACK, 10, 34, 104, -5, { x0: -18, y1: 8.5 }, 'RB')}</svg>`;
-  return `<figure class="trees">${wr}${rb}<figcaption>The route tree: each route from where his man lines up, a receiver split out on the right and a back in the backfield, with "out" to the right, toward his sideline. A dashed line starts late: the back blocks first.${faint.length ? ` Drawn faint: ${list(faint)}, which no play here runs.` : ''}</figcaption></figure>`;
+  return `<figure class="trees">${wr}${rb}<figcaption>The route tree: each route from where his man lines up, a receiver split out on the right and a back in the backfield, with "out" to the right, toward his sideline. A dashed line starts late: the back blocks first.${faint.length ? ` Drawn faint: ${list(faint)}, which no play here runs, but a man can be given one: tap him on the board before the snap, then Change his route.` : ''}</figcaption></figure>`;
 }
 
 // "Show on the board", from the playbook: a formation, a play, a front or a coverage goes into the call and is lined up,
@@ -1968,6 +2077,7 @@ function showPart(kind, id) {
   const his = () => state.auto && (k === 'off') !== (state.side === 'O');
   if (drill && his()) { drill = null; state.auto = ownAuto; }
   const was = byId(FORMATIONS, state.off.formation).personnel;
+  if (k === 'off' && state.off[kind] !== id) state.off.hot = {}; // the play as drawn
   state[k][kind] = id;
   let subbed = false;
   if (his()) {

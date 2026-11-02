@@ -55,6 +55,7 @@
             <p class="who-job" id="whoJob"></p>
             <button type="button" class="who-more" id="whoMore" aria-expanded="false" aria-controls="whoAbout"></button>
             <p class="who-about" id="whoAbout"></p>
+            <button type="button" class="who-routes-open" id="whoRoutesOpen" aria-controls="routes" hidden>Change his route</button>
           </div>
         </div>
       </div>
@@ -74,6 +75,13 @@
         </div>
         <button type="button" class="tool toggle" id="labels" aria-pressed="true" aria-label="Position labels" title="Position labels">ABC</button>
         <button type="button" class="tool toggle" id="keyOpen" aria-expanded="false" aria-controls="key" title="How to read the board">Key</button>
+      </div>
+      <div class="routes" id="routes" hidden>
+        <div class="routes-head">
+          <p id="routesWho"></p>
+          <button type="button" class="ghost" id="routesDone">Done</button>
+        </div>
+        <div class="chips" id="routeChips" role="radiogroup" aria-labelledby="routesWho"></div>
       </div>
       <p class="sr-only" id="say" role="status"></p>
     </section>
