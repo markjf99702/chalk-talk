@@ -1301,17 +1301,21 @@ function reveal() {
 // they play?" isn't asked: the drill has said.
 const DRILL_SNAPS = 5;
 let drill = null; // the drill under way: { id, n, ok, last }, snaps seen to the whistle, how many worked, the last one's seed
-let drilled = null; // the drill just finished, for its debrief: { id, n, ok, last }
+// The drill just finished, for its debrief: { id, n, ok, last, sit }, with the situation it ran in, so what it counted
+// is still said right after a new one is set.
+let drilled = null;
 const okDrill = (d, side) => {
   const D = d && DRILLS.find(x => x.id === d.id), whole = v => Number.isInteger(v) && v >= 0;
   return D && (side === undefined || D.side === side) && whole(d.n) && d.n <= DRILL_SNAPS && whole(d.ok) && d.ok <= d.n
-    && (d.last == null || whole(d.last)) ? { id: d.id, n: d.n, ok: d.ok, last: d.last ?? null } : null;
+    && (d.last == null || whole(d.last)) ? { id: d.id, n: d.n, ok: d.ok, last: d.last ?? null, ...(okSit(d.sit) ? { sit: d.sit } : {}) } : null;
 };
+// The situation a finished drill ran in (one kept before it was noted was in the situation it came back in).
+const drillSit = d => byId(SITUATIONS, okSit(d?.sit) || state.sit);
 // What counts: a success in the situation on offense (4 yards or more on 1st & 10, the first down on third down), a run
 // held short of one on defense. A drill is five snaps in one situation (a new one starts it over: see setSit()).
 const drillWorked = (D, res, sit) => (D.side === 'O' ? success(res, sit) : !success(res, sit));
-function drillGoal(D, snap = false) {
-  const sit = situation(), n = needed(sit), first = sit.down > 2;
+function drillGoal(D, snap = false, sit = situation()) {
+  const n = needed(sit), first = sit.down > 2;
   if (snap) return D.side === 'O' ? (first ? 'snap that makes the first down' : `snap that gains ${n} yards or more`) : (first ? 'run held short of the first down' : `run held under ${n} yards`);
   return D.side === 'O' ? (first ? 'made the first down' : `gained ${n} yards or more`) : (first ? 'held short of the first down' : `held under ${n} yards`);
 }
@@ -1363,7 +1367,7 @@ function tallyDrill() {
   const D = byId(DRILLS, drill.id);
   if (drillWorked(D, state.play.result, state.play.sit)) drill.ok++;
   drillNews = `${D.name}: ${drill.ok} of ${drill.n} ${drill.n < DRILL_SNAPS ? `snaps so far ${drillGoal(D)}` : `${drillGoal(D)}, and the coach has a word on it`}.`;
-  if (drill.n >= DRILL_SNAPS) { drilled = { ...drill }; endDrill(); } else renderDrills();
+  if (drill.n >= DRILL_SNAPS) { drilled = { ...drill, sit: state.play.sit.id }; endDrill(); } else renderDrills();
   keepPlay();
 }
 // What a screen reader hears of the count, with the end of the play (see sayResult()).
@@ -1397,7 +1401,9 @@ function renderDrills() {
     p('drill-count', drill.n ? `${drill.n} of ${DRILL_SNAPS} snaps: ${drill.ok} ${drillGoal(D)}.` : `Snap 1 of ${DRILL_SNAPS}.`);
     row.append(button('Stop the drill', () => { endDrill(); toDrills(); }));
   } else {
-    p('drill-count', `<b>${esc(D.name)}: ${drilled.ok} of ${drilled.n} ${drillGoal(D)}.</b>`);
+    // (in the situation it ran in, named once another is set)
+    const ran = drillSit(drilled);
+    p('drill-count', `<b>${esc(D.name)}${ran.id === state.sit ? '' : ` on ${esc(ran.name)}`}: ${drilled.ok} of ${drilled.n} ${drillGoal(D, false, ran)}.</b>`);
     p('drill-note', esc(D.note));
     row.append(button('Run it again', () => startDrill(D.id)), button('Done', () => { drilled = null; renderDrills(); keepPlay(); toDrills(); }));
   }
@@ -1614,7 +1620,7 @@ function showResult() {
   // In a drill, where it's up to; after its last snap, how it went, for a computer, where the drills are down the column.
   const D = byId(DRILLS, (drill || drilled)?.id);
   $('actionsNote').textContent = drill ? `Snap again: the next snap of the drill${state.side === 'D' ? ', a new run' : ''}. ${drill.n} of ${DRILL_SNAPS} snaps so far: ${drill.ok} ${drillGoal(D)}.`
-    : `${drilled?.last === state.seed ? `That was the drill's last snap: ${drilled.ok} of ${drilled.n} ${drillGoal(D)}. The coach's word on it is in Drills. ` : ''}Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
+    : `${drilled?.last === state.seed ? `That was the drill's last snap: ${drilled.ok} of ${drilled.n} ${drillGoal(D, false, drillSit(drilled))}. The coach's word on it is in Drills. ` : ''}Snap again: the same two calls, played out fresh.${state.auto ? ' New look: the other coach changes his call.' : ''}`;
   $('result').hidden = false;
   staleResult(false);
   syncTheirs();

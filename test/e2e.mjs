@@ -2318,6 +2318,13 @@ for (const colorScheme of ['light', 'dark']) {
   await down();
   assert.equal(await p.textContent('#actionsNote'), 'Snap again: the same two calls, played out fresh. New look: the other coach changes his call.', 'a snap after the drill says it was its last');
   assert.equal((await card()).now?.startsWith(`Beat Cover 2: ${ok} of 5`), true, 'a snap after the drill counted');
+  // A new situation leaves the debrief saying what it counted, in the situation it ran in, after a reload too.
+  await p.getByRole('radio', { name: '3rd & 8' }).click();
+  assert.equal((await card()).now, `Beat Cover 2 on 1st & 10: ${ok} of 5 gained 4 yards or more. ${D.note} Run it again Done`, 'a new situation changed what the finished drill counted');
+  await p.reload();
+  assert.equal((await card()).now, `Beat Cover 2 on 1st & 10: ${ok} of 5 gained 4 yards or more. ${D.note} Run it again Done`, 'after a reload');
+  await p.getByRole('radio', { name: '1st & 10' }).click();
+  assert.equal((await card()).now, `Beat Cover 2: ${ok} of 5 gained 4 yards or more. ${D.note} Run it again Done`);
   // Run it again starts over, with the focus on the drill's button; Stop ends it, and Done puts a debrief away.
   await p.click('#drillNow button:text-is("Run it again")');
   assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 1st & 10, a snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill`);
