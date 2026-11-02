@@ -232,11 +232,16 @@ await page.getByRole('radio', { name: 'Cover 0' }).click();
 assert.equal(await page.evaluate(() => window.chalkTalk.state.def.coverage), 'c0');
 assert.equal(await page.getByRole('radio', { name: 'Blitz' }).isDisabled(), true, 'Cover 0 always blitzes');
 
-// The chart runs every play against this defense: eleven rows, waiting until it does.
-assert.equal(await page.locator('#bars .bar-row.idle').count(), 11, 'the defense\'s chart before it runs');
-assert.equal(await page.textContent('#runChart'), 'Run it 100 times each', 'a chart for the other side is a new one');
-await page.click('#runChart');
-await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 11, null, { timeout: 30000 });
+// The chart runs every play his formation can run against this defense (all of them, or from Empty the passes but the
+// play-action and the screen), waiting until it does.
+{
+  const { PLAYS } = await import('../js/playbook.js'), { cantCall } = await import('../js/sim.js');
+  const his = await page.evaluate(() => window.chalkTalk.state.off.formation), rows = PLAYS.filter(pl => !cantCall(his, pl.id)).length;
+  assert.equal(await page.locator('#bars .bar-row.idle').count(), rows, `the defense's chart before it runs, against ${his}`);
+  assert.equal(await page.textContent('#runChart'), 'Run it 100 times each', 'a chart for the other side is a new one');
+  await page.click('#runChart');
+  await page.waitForFunction(n => document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === n, rows, { timeout: 30000 });
+}
 
 // The headline and the verdict over it round the same way: the simulator spots the ball to the half yard, and a
 // 3.5-yard run reads "Gain of 4 yards", the line where a play counts as a win for the offense on 1st & 10.

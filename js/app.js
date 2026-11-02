@@ -1882,11 +1882,12 @@ function clearChart() {
   $('runChart').removeAttribute('aria-disabled');
   drawIdle();
 }
-// Before a run, the rows it will fill: every coverage (or every play, calling the defense), each with an empty track.
+// Before a run, the rows it will fill: every coverage (or every play his formation can run, calling the defense), each
+// with an empty track.
 function drawIdle() {
   const host = $('bars');
   host.innerHTML = '<div class="bar-head" aria-hidden="true">success · avg yards</div>';
-  for (const r of state.side === 'O' ? COVERAGES : PLAYS) {
+  for (const r of state.side === 'O' ? COVERAGES : PLAYS.filter(p => !cantCall(state.off.formation, p.id))) {
     const row = document.createElement('div');
     row.className = 'bar-row idle';
     row.setAttribute('role', 'listitem');
