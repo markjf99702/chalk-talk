@@ -171,6 +171,33 @@ test('Empty: the back splits out as a fifth receiver, only the five linemen bloc
   assert.ok(hot / n > 0.5, `${hot} hot throws in ${n} dropbacks from Empty against Cover 0`);
 });
 
+test('Stick: the outside man clears out deep, the next one sits at five yards, and the flat goes under him', () => {
+  const routes = (formation, flip) => { const S = prepare({ formation, play: 'stick', front: 'nickel', coverage: 'c3', pressure: 'four', flip }, 2); return [S, Object.fromEntries(S.O.filter(p => p.job.kind === 'route').map(p => [p.key || p.label, p.job.route]))]; };
+  for (const flip of [false, true]) {
+    const [T, trips] = routes('trips', flip), [, doubles] = routes('doubles', flip);
+    assert.equal(T.play.id, 'stick');
+    assert.deepEqual([trips.S1, trips.S2, trips.S3], ['go', 'stick', 'flat'], 'from three receivers: go, stick, flat');
+    assert.deepEqual([doubles.S1, doubles.S2, doubles.RB], ['go', 'stick', 'bflat'], 'from two: the back runs the flat');
+    assert.equal(T.reads[0].job.route, 'stick', 'the stick is his first read');
+    const st = T.keys.S2, end = st.path.at(-1);
+    assert.ok(end.y - st.y0 > 4 && end.y - st.y0 < 7 && ROUTES.stick.settle, `the stick sits down ${(end.y - st.y0).toFixed(1)} yards up`);
+  }
+  // Over many snaps: short, sure throws, the stick or a flat route nearly every time, against zone and man alike.
+  for (const coverage of ['c1', 'c3', 'c4']) {
+    let n = 0, y = 0, short = 0, comp = 0, att = 0;
+    for (const fm of FORMATIONS) for (const front of ['over', 'nickel']) for (let k = 0; k < 6; k++) {
+      const r = simulate({ formation: fm.id, play: 'stick', front, coverage, pressure: 'four', flip: k % 2 === 1 }, 700 + n++);
+      y += r.result.yards;
+      const t = r.events.find(e => e.kind === 'throw');
+      if (t && ['stick', 'flat', 'bflat'].includes(t.route)) short++;
+      if (r.result.kind !== 'sack') att++;
+      if (r.result.kind === 'catch') comp++;
+    }
+    assert.ok(short / n > 0.7, `${coverage}: the stick or the flat on ${short} of ${n} snaps`);
+    assert.ok(comp / att > 0.55 && y / n > 3 && y / n < 9, `${coverage}: ${(100 * comp / att).toFixed(0)}% complete for ${(y / n).toFixed(1)} yards a dropback`);
+  }
+});
+
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
   for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'power'))) for (const flip of [false, true]) for (const front of ['over', '34']) {
     const S = prepare({ formation: fm.id, play: 'power', front, coverage: 'c3', pressure: 'four', flip }, 7);
@@ -934,11 +961,11 @@ test('the drills\' notes say what the board shows', () => {
   // it. The offense drills face their coverage from the front the drill sets (nickel against 10 and 11 personnel, the
   // 4-3 Over otherwise), every play from every formation that can run it, 25 snaps each; the run drill is I-Form's
   // runs, 50 snaps each, against the two calls its note names. From 240 snaps a play and three start seeds (1, 100000,
-  // 7777777), with the seven formations: against Cover 2, Four Verticals 21.8-22.5 yards a play and Play-Action Shot
-  // 17.3-20.4, the next 13.9; Slant-Flat 78-80% succeed, the next 74%. Against Cover 3, Four Verticals 11.6-13.3 yards
-  // and Play-Action Shot 10.0-11.3, the next 8.9; the Draw 68-74% and Slant-Flat 65-75%, the next 66% (a tie with Smash
-  // for second at 100000). Against Cover 0, the RB Screen 59-70%, then Smash, Slant-Flat and Play-Action Shot 46-55%,
-  // the next 46%, and the Draw 3-5%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz stops 80-82% for
+  // 7777777), with the seven formations and Stick: against Cover 2, Four Verticals 21.8-22.5 yards a play and
+  // Play-Action Shot 17.3-20.4, the next 13.9; Stick 80-82% and Slant-Flat 78-80% succeed, the next 74%. Against Cover
+  // 3, Four Verticals 11.6-13.3 yards and Play-Action Shot 10.0-11.3, the next 8.9; the Draw 68-73% and Slant-Flat
+  // 71-73%, the next 68%. Against Cover 0, the RB Screen 63-67%, then Smash, Slant-Flat and Play-Action Shot 44-53%,
+  // the next 46%, and the Draw 3-4% and Power 3-12%, the next 22%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz stops 80-82% for
   // 2.3-3.2 yards a run, and in Cover 0 82-85% for 5.6-6.9.
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
@@ -956,15 +983,15 @@ test('the drills\' notes say what the board shows', () => {
   const drill = id => DRILLS.find(d => d.id === id);
   const c2 = by(drill('c2').coverage, drill('c2').pressure);
   assert.deepEqual(top(c2, 'avg', 2), ['pa', 'verts'], `Cover 2, yards a play: ${say(c2, 'avg')}`);
-  assert.deepEqual(top(c2, 'rate', 1), ['slants'], `Cover 2, success: ${say(c2, 'rate')}`);
-  assert.ok(c2.slants.rate > 0.72 && c2.slants.rate < 0.88, `"about four times in five": ${say(c2, 'rate')}`);
+  assert.deepEqual(top(c2, 'rate', 2), ['slants', 'stick'], `Cover 2, success: ${say(c2, 'rate')}`);
+  for (const id of ['slants', 'stick']) assert.ok(c2[id].rate > 0.72 && c2[id].rate < 0.88, `"about four times in five": ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
   assert.deepEqual(top(c3, 'avg', 2), ['pa', 'verts'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
   assert.deepEqual(top(c3, 'rate', 2), ['draw', 'slants'], `Cover 3, success: ${say(c3, 'rate')}`);
   const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
   assert.deepEqual(top(c0, 'rate', 1), ['screen'], `Cover 0, success: ${say(c0, 'rate')}`);
   for (const id of ['smash', 'slants', 'pa']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.62, `"about half the time each": ${say(c0, 'rate')}`);
-  assert.equal(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate)[0][0], 'draw', `Cover 0, success: ${say(c0, 'rate')}`);
+  assert.deepEqual(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate).slice(0, 2).map(([id]) => id).sort(), ['draw', 'power'], `Cover 0, success: ${say(c0, 'rate')}`);
   const runs = PLAYS.filter(p => p.type === 'run').map(p => p.id);
   const stop = (front, coverage, pressure) => {
     let n = 0, s = 0, y = 0;

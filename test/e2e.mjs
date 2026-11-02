@@ -982,7 +982,7 @@ for (const width of [320, 360, 375]) {
     d.open = false;
     return out;
   });
-  assert.deepEqual(tree.words.map(w => w.map(x => x.name)), [['go', 'seam', 'post', 'corner', 'out', 'sail', 'dig', 'deep over', 'slant', 'hitch', 'curl', 'flat', 'drag', 'sit'], ['wheel', 'swing', 'flat', 'check-down', 'screen']]);
+  assert.deepEqual(tree.words.map(w => w.map(x => x.name)), [['go', 'seam', 'post', 'corner', 'out', 'sail', 'dig', 'deep over', 'slant', 'hitch', 'curl', 'flat', 'drag', 'sit', 'stick'], ['wheel', 'swing', 'flat', 'check-down', 'screen']]);
   assert.deepEqual(tree.words.flat().filter(x => x.faint).map(x => x.name), ['out', 'curl', 'wheel'], 'the routes no play runs, drawn faint');
   for (const w of tree.words) {
     for (const x of w) assert.ok(x.inside, `the route tree's "${x.name}" is off the drawing`);
@@ -990,8 +990,9 @@ for (const width of [320, 360, 375]) {
   }
   assert.match(tree.caption, /Drawn faint: out, curl and wheel, which no play here runs, but a man can be given one: tap him on the board before the snap, then Change his route\.$/);
   assert.match(tree.rows.Hitch, / Run in Smash\.$/);
+  assert.match(tree.rows.Stick, /^Five or six yards up, then he stops and turns in to face the quarterback, sitting down in the open spot\. Run in Stick\.$/);
   assert.match(tree.rows.Corner, / Run in Smash and Mesh\.$/);
-  assert.match(tree.rows.Flat, / Run in Flood, Slant-Flat and Play-Action Shot\.$/, 'a receiver\'s flat and a back\'s are one route');
+  assert.match(tree.rows.Flat, / Run in Flood, Slant-Flat, Stick and Play-Action Shot\.$/, 'a receiver\'s flat and a back\'s are one route');
   assert.match(tree.rows.Drag, / Run in Mesh\.$/);
   for (const r of ['Out', 'Curl']) assert.match(tree.rows[r], / No play here runs it, but a receiver can: tap him before the snap and change his route\.$/);
   assert.match(tree.rows.Wheel, / No play here runs it, but a back can: tap him before the snap and change his route\.$/);
@@ -2584,7 +2585,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#auto');
   await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false, motion: 'none' }); state.seen = true; lineUp(); });
   await p.click('#runChart');
-  await first(11);
+  await first((await import('../js/playbook.js')).PLAYS.length); // (every play: I-Form can run them all)
   const run = await typical('power');
   await p.click('#bars button[data-row="power"]');
   assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.side, state.auto, state.off.formation, state.off.play, state.off.flip, state.seed]; }), ['D', false, 'iform', 'power', false, run.seed]);

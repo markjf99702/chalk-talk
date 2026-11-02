@@ -76,6 +76,7 @@ export const ROUTES = {
   flat: { ready: 1, name: 'flat', pts: [[1.5, 1.5], [6, 3.5], [14, 4.5]], desc: 'Flat: out toward the sideline about four yards past the line.' },
   drag: { ready: 2, name: 'drag', pts: [[-1.5, 2.5], [-5, 5], [-34, 5.5]], desc: 'Drag: a shallow crossing route about five yards past the line.' },
   drag6: { ready: 2, name: 'drag', pts: [[-1.5, 3], [-5, 6.5], [-34, 7]], desc: 'Drag: a shallow crossing route about six or seven yards past the line.' },
+  stick: { ready: 1, name: 'stick', pts: [[0, 5.5], [-0.8, 5.1]], settle: true, desc: 'Stick: five or six yards up, then he stops and turns in to face the quarterback, sitting down in the open spot.' },
   sit: { ready: 2, name: 'sit', pts: [[0, 5], [-1.5, 9]], settle: true, desc: 'Sit: up to about 9 yards, then settles in the hole between the zone defenders.' },
   // Backs: "out" is the side given by the play.
   wheel: { ready: 3, name: 'wheel', pts: [[3, -0.5], [7, 1], [9, 5], [9.5, 50]], desc: 'Wheel: out to the flat, then turns straight up the sideline.' },
@@ -138,6 +139,11 @@ export const PLAYS = [
     id: 'slants', name: 'Slant-Flat', type: 'pass', drop: 'quick', reads: ['S1', 'S2', 'W1', 'W2'],
     routes: r => ({ S1: 'slant', S2: 'flat', S3: 'seam', W1: 'slant', W2: 'flat', RB: 'check', FB: 'check' }),
     blurb: 'Quick game: the outside receivers run slants, the inside ones run to the flat, and the ball is out in about a second. It beats the blitz.',
+  },
+  {
+    id: 'stick', name: 'Stick', type: 'pass', drop: 'quick', reads: ['S2', 'S3', 'FB', 'RB', 'W2', 'W1'],
+    routes: r => ({ S1: 'go', S2: 'stick', S3: 'flat', W1: r.W2 ? 'go' : 'slant', W2: 'stick', RB: r.S3 || r.FB ? 'check' : 'bflat', FB: 'bflat', side: 'S' }),
+    blurb: 'Quick game: the outside receiver runs off deep, the next one in runs a stick route, five yards up and sitting down facing the quarterback, and the man inside him runs to the flat under it. The defender between them can\'t take both: if he widens for the flat, the stick is open; if he sits on the stick, the flat is.',
   },
   {
     id: 'pa', name: 'Play-Action Shot', type: 'pass', drop: 'pa', reads: ['S1', 'W1', 'S2', 'RB'],
@@ -340,7 +346,7 @@ export const DRILLS = [
   {
     id: 'c2', name: 'Beat Cover 2', side: 'O', coverage: 'c2', pressure: 'four',
     brief: 'They play Cover 2 and rush four, every snap.',
-    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Slant-Flat gets there most often, about four times in five.',
+    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Stick and Slant-Flat get there most often, about four times in five: quick throws underneath, in front of the corner sitting in the flat or beside him.',
   },
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
@@ -350,7 +356,7 @@ export const DRILLS = [
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
     brief: 'They blitz, every snap. Count who\'s coming and who\'s left to cover.',
-    note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw runs straight into it.',
+    note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw and Power run straight into it.',
   },
   {
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
@@ -402,6 +408,13 @@ export const NOTES = {
     c2: 'Two deep safeties sit over the top of the post, but the linebackers bite on the fake and the crosser gets the space they left.',
     c3: 'The lone middle safety can\'t take both the post and the deep crosser, and the linebackers who stepped up for the fake are out of the throwing lane.',
     c4: 'Quarters safeties read the run fake and come up, which is exactly when the post goes behind them, or they stay home and the crosser is underneath.',
+  },
+  stick: {
+    c0: 'Against an all-out blitz the ball comes out hot, most often to the back in the flat, but the man covering him is waiting there and tackles him short. Stick\'s throws are all short, and Cover 0 has a man on each of them.',
+    c1: 'In man coverage the stick turns in at five yards and sits down, with the man chasing him still behind him: an easy completion most of the time, though a short one, with the free safety deep.',
+    c2: 'The Cover 2 corner sits in the flat, so the flat route is covered; the stick settles in front of the linebackers and behind the corner, and that\'s where the ball goes most often.',
+    c3: 'The curl-flat defender has to choose: when he sits on the stick, the flat route under it is open, and that\'s where the ball goes most of the time. Cover 3\'s corners bail deep, so there\'s room underneath, for short gains.',
+    c4: 'Quarters keeps four deep and three underneath, so the stick and the flat are both open, but short: the safeties come down fast once the ball is caught.',
   },
   screen: {
     c0: 'The screen\'s best look: every rusher in an all-out blitz runs past the back, and there\'s nobody left to tackle him but the corners, who are running with their receivers.',

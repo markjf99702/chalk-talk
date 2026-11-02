@@ -2154,7 +2154,7 @@ function routeUse() {
 // route off sooner, the yards up it stops.
 const TREE_WR = { go: ['start', 0.6, 0], seam: ['end', -0.6, 0], post: ['end', -0.6, 0], corner: ['start', 0.6, 0], out: ['start', 0.6, 0], sail: ['start', 0.6, 0],
   dig: ['end', -0.6, 0], over: ['end', -0.6, 0], slant: ['end', -0.6, -0.2, 10], hitch: ['start', 0.7, -0.4], curl: ['end', -1.2, 0.7],
-  flat: ['start', 0.6, 0], drag: ['end', -0.6, 0], sit: ['end', -1.2, -0.6] };
+  flat: ['start', 0.6, 0], drag: ['end', -0.6, 0], sit: ['end', -1.2, -0.6], stick: ['start', 1.4, 2.3] };
 const TREE_BACK = { wheel: ['start', 0.5, 0], swing: ['start', 0.5, 0], bflat: ['start', 0.5, 0], check: ['middle', 0, 0.8], screen: ['middle', -1.8, -2.35] };
 function routeTree(use) {
   const list = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]);
