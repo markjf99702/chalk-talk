@@ -1804,9 +1804,12 @@ function playbook() {
   sec('Run plays', false, dl(PLAYS.filter(p => p.type === 'run').map(p => [p.name, p.blurb, ['play', p.id, p.name]])));
   sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb, ['play', p.id, p.name]]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation. A man in motion is counted where he sets: from Gun Trips the H going across leaves two each side, and the routes go by the new count.']]));
   // drag6 and bflat are the same routes as drag and flat at another depth or from the backfield, so they're listed once;
-  // jet is what a man in jet motion does on a run, under "Jet motion" in the words coaches use.
+  // jet is what a man in jet motion does on a run, under "Jet motion" in the words coaches use. Each says which plays
+  // run it, and the route tree draws them all.
   const routeDesc = { flat: 'Out toward the sideline about four yards past the line, run by a receiver or by a back coming out of the backfield.' };
-  sec('Routes', false, dl(Object.entries(ROUTES).filter(([k]) => !['drag6', 'bflat', 'jet'].includes(k)).map(([k, r]) => [r.name.replace(/^\w/, c => c.toUpperCase()), routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())])));
+  const use = routeUse(), list = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]);
+  sec('Routes', false, routeTree(use) + dl(Object.entries(ROUTES).filter(([k]) => !['drag6', 'bflat', 'jet'].includes(k)).map(([k, r]) => [r.name.replace(/^\w/, c => c.toUpperCase()),
+    `${routeDesc[k] || r.desc.replace(/^[^:]+: /, '').replace(/^\w/, c => c.toUpperCase())} ${use[k] ? `Run in ${list(use[k])}.` : 'No play here runs it.'}`])));
   sec('How to read the board', false, keyList());
   // The words on the board, the cards and the notes that aren't a position, a play or a coverage. The zones are the
   // areas in ZONES (js/playbook.js), as the player cards name them.
@@ -1833,6 +1836,75 @@ function playbook() {
     ['Big play', 'A run of 10 yards or more, or a pass play that gains 20 or more: a common way analysts count explosive plays (Sharp Football Analysis, for one). Teams draw the line in different places.'],
     ['Takeaway', 'The defense taking the ball away: an interception, or a fumble it recovers. There are no fumbles on this board, so here a takeaway is an interception.'],
   ]));
+}
+
+// Which plays run each route, in the playbook's order: the routes each pass play gives its receivers and backs, by where
+// they line up in each formation (S1, S2... counted from the outside in, as prepare() in js/sim.js counts them, with
+// nobody in motion). A drag at six or seven yards is a drag, and a back's flat route a flat route.
+function routeUse() {
+  const use = {};
+  for (const fm of FORMATIONS) {
+    const men = fm.players.map(([label, x, y, cls]) => ({ label, x, y, cls }));
+    const elig = men.filter(p => p.cls === 'wr' || p.cls === 'te');
+    const side = sg => elig.filter(p => Math.sign(p.x) === sg).sort((a, b) => Math.abs(b.x) - Math.abs(a.x));
+    const ps = side(-1).length > side(1).length ? -1 : 1;
+    const keys = { RB: men.find(p => p.cls === 'rb'), FB: men.find(p => p.cls === 'fb') };
+    side(ps).forEach((p, n) => { keys[`S${n + 1}`] = p; });
+    side(-ps).forEach((p, n) => { keys[`W${n + 1}`] = p; });
+    for (const pl of PLAYS.filter(x => x.type === 'pass')) {
+      for (const [key, route] of Object.entries(pl.routes(keys))) {
+        if (key === 'side' || !keys[key] || !ROUTES[route]) continue;
+        const id = { drag6: 'drag', bflat: 'flat' }[route] || route;
+        if (!(use[id] ||= []).includes(pl.name)) use[id].push(pl.name);
+      }
+    }
+  }
+  for (const id in use) use[id].sort((a, b) => PLAYS.findIndex(x => x.name === a) - PLAYS.findIndex(x => x.name === b));
+  return use;
+}
+
+// The route tree: every route drawn from where its man lines up, the way the technique diagram draws the line, in the
+// board's own chalk. A receiver split out on the right, so "out" is to the right, toward his sideline, and a back in
+// the backfield, whose routes go out the same way. Long routes are cut off at the top and the long crossers at the
+// left, each with its arrowhead. A route no play here runs is drawn faint. The words are placed by hand, beside each
+// route's end (or a short way up it), so they don't run into each other: a route moved in js/playbook.js may need its
+// words moved too.
+// [text-anchor, yards across, yards up] for the words, from the route's end; and for some, where the drawing cuts the
+// route off sooner, the yards up it stops.
+const TREE_WR = { go: ['start', 0.6, 0], seam: ['end', -0.6, 0], post: ['end', -0.6, 0], corner: ['start', 0.6, 0], out: ['start', 0.6, 0], sail: ['start', 0.6, 0],
+  dig: ['end', -0.6, 0], over: ['end', -0.6, 0], slant: ['end', -0.6, -0.2, 10], hitch: ['start', 0.7, -0.4], curl: ['end', -1.2, 0.7],
+  flat: ['start', 0.6, 0], drag: ['end', -0.6, 0], sit: ['end', -1.2, -0.6] };
+const TREE_BACK = { wheel: ['start', 0.5, 0], swing: ['start', 0.5, 0], bflat: ['start', 0.5, 0], check: ['middle', 0, 0.8], screen: ['middle', -1.8, -2.35] };
+function routeTree(use) {
+  const list = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]);
+  const runs = id => !!use[{ bflat: 'flat' }[id] || id];
+  // routes: TREE_WR or TREE_BACK; K: pixels a yard; ox: where he lines up, in pixels across; los: the line of
+  // scrimmage, pixels down; y0: how far behind the line he lines up, in yards; box: where the drawing ends, x0 yards to
+  // the left and y1 up the field
+  const draw = (routes, K, ox, los, y0, box, label) => {
+    const X = x => +(ox + x * K).toFixed(1), Y = y => +(los - y * K).toFixed(1);
+    let s = `<line class="los" x1="0" y1="${los}" x2="400" y2="${los}"/>`;
+    for (const [id, [anchor, dx, dy, up = box.y1]] of Object.entries(routes)) {
+      const r = ROUTES[id], all = [[0, y0], ...r.pts.map(([o, u]) => [o, r.fromLine ? u : y0 + u])], pts = [];
+      for (const [k, [x, y]] of all.entries()) { // his path in yards, cut off at the edge of the drawing
+        if (x >= box.x0 && y <= up) { pts.push([x, y]); continue; }
+        const [px, py] = all[k - 1], f = Math.min(x < box.x0 ? (box.x0 - px) / (x - px) : 1, y > up ? (up - py) / (y - py) : 1);
+        pts.push([px + (x - px) * f, py + (y - py) * f]);
+        break;
+      }
+      // the arrowhead, as Board.arrow() draws one
+      const [a, b] = pts.slice(-2), tip = [X(b[0]), Y(b[1])], ang = Math.atan2(tip[1] - Y(a[1]), tip[0] - X(a[0]));
+      const wing = d => `${(tip[0] - 6 * Math.cos(ang + d)).toFixed(1)},${(tip[1] - 6 * Math.sin(ang + d)).toFixed(1)}`;
+      s += `<g${runs(id) ? '' : ' class="unused"'}><polyline points="${pts.map(([x, y]) => `${X(x)},${Y(y)}`).join(' ')}"${r.delay ? ' stroke-dasharray="5 4"' : ''}/>`
+        + `<polygon points="${tip.join(',')} ${wing(-0.45)} ${wing(0.45)}"/>`
+        + `<text x="${X(b[0] + dx)}" y="${Y(b[1] + dy)}" text-anchor="${anchor}">${id === 'bflat' ? 'flat' : esc(r.name)}</text></g>`;
+    }
+    return `${s}<circle class="man" cx="${ox}" cy="${Y(y0)}" r="6"/><text class="pos" x="${ox}" y="${Y(y0) + 20}" text-anchor="middle">${label}</text>`;
+  };
+  const faint = [...Object.keys(TREE_WR), ...Object.keys(TREE_BACK)].filter(id => !runs(id)).map(id => (id === 'bflat' ? 'flat' : ROUTES[id].name));
+  const wr = `<svg class="tree" viewBox="0 0 350 192" role="img" aria-label="The route tree: a receiver split out on the right, and the routes he can run, out toward his sideline or in toward the middle: ${list(Object.keys(TREE_WR).map(id => ROUTES[id].name))}.">${draw(TREE_WR, 7, 196, 166, 0, { x0: -18, y1: 21 }, 'WR')}</svg>`;
+  const rb = `<svg class="tree" viewBox="0 0 196 196" role="img" aria-label="Routes from the backfield: ${list(Object.keys(TREE_BACK).map(id => (id === 'bflat' ? 'flat' : ROUTES[id].name)))}.">${draw(TREE_BACK, 10, 34, 104, -5, { x0: -18, y1: 8.5 }, 'RB')}</svg>`;
+  return `<figure class="trees">${wr}${rb}<figcaption>The route tree: each route from where his man lines up, a receiver split out on the right and a back in the backfield, with "out" to the right, toward his sideline. A dashed line starts late: the back blocks first.${faint.length ? ` Drawn faint: ${list(faint)}, which no play here runs.` : ''}</figcaption></figure>`;
 }
 
 // "Show on the board", from the playbook: a formation, a play, a front or a coverage goes into the call and is lined up,

@@ -625,6 +625,18 @@ button:disabled { cursor: default; }
 .tech text.gap { fill: var(--muted); font-size: 13px; }
 .tech text.pos { fill: var(--muted); font-size: 12px; }
 .tech circle, .tech rect { fill: none; stroke: var(--off); stroke-width: 2.2; }
+/* the route tree (see routeTree() in js/app.js): the routes in the offense's chalk, the ones no play runs faint */
+.trees { margin: 6px 0 12px; display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 4px 12px; }
+.tree { display: block; width: 100%; max-width: 350px; }
+.tree + .tree { max-width: 196px; }
+.tree polyline, .tree .los { fill: none; stroke: var(--off); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tree polygon { fill: var(--off); }
+.tree .los { stroke: var(--los); stroke-dasharray: 6 5; opacity: .85; }
+.tree .man { fill: none; stroke: var(--off); stroke-width: 2.2; }
+.tree text { font-family: var(--cond); font-weight: 700; font-size: 13px; fill: var(--ink); dominant-baseline: central; }
+.tree text.pos { fill: var(--muted); font-size: 12px; }
+.tree .unused { opacity: .4; }
+.trees figcaption { flex-basis: 100%; font-size: 14px; color: var(--muted); }
 
 /* ---------------------------------------------------------------- footer */
 

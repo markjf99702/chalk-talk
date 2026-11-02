@@ -942,6 +942,37 @@ for (const width of [320, 360, 375]) {
   assert.ok(tech.gaps.every(g => g >= 12), `the diagram's 5, 7 and 6 are ${tech.gaps} apart`);
 }
 
+// The playbook's routes: a route tree draws every one from where its man lines up, a receiver's and a back's, each with
+// its name, none of the names on another or off the drawing, and the ones no play runs (out, curl, wheel) faint. Each
+// route says which plays run it.
+{
+  const tree = await page.evaluate(() => {
+    const d = [...document.querySelectorAll('.pb')].find(x => x.querySelector('summary').textContent === 'Routes');
+    d.open = true;
+    const svgs = [...d.querySelectorAll('svg.tree')];
+    const words = svgs.map(svg => {
+      const box = svg.getBoundingClientRect();
+      return [...svg.querySelectorAll('text:not(.pos)')].map(t => { const b = t.getBoundingClientRect(); return { name: t.textContent, faint: !!t.closest('.unused'), l: b.left, r: b.right, t: b.top, b: b.bottom, inside: b.left >= box.left - 0.5 && b.right <= box.right + 0.5 && b.top >= box.top - 0.5 && b.bottom <= box.bottom + 0.5 }; });
+    });
+    const rows = Object.fromEntries([...d.querySelectorAll('dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]));
+    const out = { words, rows, caption: d.querySelector('figcaption').textContent };
+    d.open = false;
+    return out;
+  });
+  assert.deepEqual(tree.words.map(w => w.map(x => x.name)), [['go', 'seam', 'post', 'corner', 'out', 'sail', 'dig', 'deep over', 'slant', 'hitch', 'curl', 'flat', 'drag', 'sit'], ['wheel', 'swing', 'flat', 'check-down', 'screen']]);
+  assert.deepEqual(tree.words.flat().filter(x => x.faint).map(x => x.name), ['out', 'curl', 'wheel'], 'the routes no play runs, drawn faint');
+  for (const w of tree.words) {
+    for (const x of w) assert.ok(x.inside, `the route tree's "${x.name}" is off the drawing`);
+    for (const [k, a] of w.entries()) for (const b of w.slice(k + 1)) assert.ok(a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t, `the route tree's "${a.name}" and "${b.name}" are on each other`);
+  }
+  assert.match(tree.caption, /Drawn faint: out, curl and wheel, which no play here runs\.$/);
+  assert.match(tree.rows.Hitch, / Run in Smash\.$/);
+  assert.match(tree.rows.Corner, / Run in Smash and Mesh\.$/);
+  assert.match(tree.rows.Flat, / Run in Flood, Slant-Flat and Play-Action Shot\.$/, 'a receiver\'s flat and a back\'s are one route');
+  assert.match(tree.rows.Drag, / Run in Mesh\.$/);
+  for (const r of ['Out', 'Curl', 'Wheel']) assert.match(tree.rows[r], / No play here runs it\.$/);
+}
+
 // The words a learner meets, each explained where he can find it: what the personnel digits mean, what the strong side
 // is (on a balanced formation, the side you call), and a playbook section for the rest, the zones as the cards name them.
 {
