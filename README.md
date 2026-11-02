@@ -28,7 +28,7 @@
 - **Share a play.** "Copy link to this play" makes a link that replays exactly the same snap, on the same down, for whoever opens it.
 - No account and no server. Your last calls stay in your browser. It works offline and installs to a phone's home screen.
 
-The simulator is a coaching model, not physics. Blocks are pairs that push each other until one wins, coverage is defenders following receivers or guarding spots, and tackling is a dice roll weighted by angle and who's involved. Over many snaps it comes out near real football: about four yards a carry, about two passes in three complete, sacks on about one dropback in twenty-two. The classic matchups mostly work the way coaches draw them up: four verticals hurt Cover 2 most, Smash beats Cover 2, Flood beats Cover 3, crossing routes get open against Cover 1's man coverage, and Cover 3's extra safety in the box slows the run.
+The simulator is a coaching model, not physics. Blocks are pairs that push each other until one wins, coverage is defenders following receivers or guarding spots, and tackling is a dice roll weighted by angle and who's involved. Over many snaps it comes out near real football: about four yards a carry, about two passes in three complete, sacks on about one dropback in twenty-five. The classic matchups mostly work the way coaches draw them up: four verticals hurt Cover 2 most, Smash beats Cover 2, Flood beats Cover 3, crossing routes get open against Cover 1's man coverage, and Cover 3's extra safety in the box slows the run.
 
 ## Running it
 

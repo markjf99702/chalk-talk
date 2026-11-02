@@ -1039,12 +1039,11 @@ test('the drills\' notes say what the board shows', () => {
 
 test('over many snaps the numbers look like football', () => {
   // 2,100 snaps, enough to hold the README's numbers: about four yards a carry, about two passes in three complete, a
-  // sack on about one dropback in twenty-two. From twelve start seeds (77 + k * 7919) this recipe gives 3.73-5.41 yards
-  // a carry, 64.7-68.9% complete, sacks on 3.0-4.5% of dropbacks and interceptions on 1.1-2.2% of throws; at 700 snaps
-  // a carry ranged from 3.1 to 5.1 yards. Four of those twelve start seeds come out above the 66% completion bound
-  // (66.1-68.9%), two sit just over the 1% interception floor (1.1%), and one is over the 5.3-yard ceiling (5.41) with
-  // two just under it (5.28, 5.23): a back who gets past the linebackers too often goes the distance, and a few 60-yard
-  // runs move the average. This one gives 64.9%, 2.0% and 4.53.
+  // sack on about one dropback in twenty-five. From twelve start seeds (77 + k * 7919) this recipe gave 3.73-5.41 yards
+  // a carry and 64.7-68.9% complete before the Pistol, Gun Ace, Empty and Stick (four seeds above the 66% completion
+  // bound, mean 66.0%); with them it gives 3.33-4.75 yards a carry, 64.8-67.8% complete (mean 66.4%, nine seeds above
+  // 66%), sacks on 3.1-4.7% of dropbacks and interceptions on 1.4-2.4% of throws. Stick is a quick throw that's caught
+  // about three times in four, and nudges the rate up. This one gives 65.3%, 1.6% and 4.30.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
