@@ -2504,6 +2504,25 @@ for (const colorScheme of ['light', 'dark']) {
   await p.goto(base + link.slice(link.indexOf('#')).replace('blitzSS', 'blitz'));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.deepEqual(await p.evaluate(() => { const d = window.chalkTalk.state.def; return [d.pressure, d.blitzer]; }), ['blitz', 'M'], 'a link from before there was a choice is the Mike\'s');
+  // Calling the offense against it, the chart's words name the blitzer its rows use: the nickel back's blitz is the
+  // Mike's outside the Nickel front, and the safety's is the Mike's from a disguise.
+  await p.click('[data-side="O"]');
+  if (await p.evaluate(() => window.chalkTalk.state.auto)) await p.click('#auto');
+  const theirs = name => p.locator('#theirsBody').getByRole('radio', { name, exact: true }).click();
+  const hint = () => p.textContent('#chartHint');
+  for (const name of ['Nickel', 'Cover 3', 'Blitz', 'Nickel back']) await theirs(name);
+  assert.match(await hint(), / a Nickel front with a nickel blitz\./);
+  await theirs('4-3 Over');
+  assert.match(await hint(), / a 4-3 Over front with a blitz\./, 'no nickel back in the 4-3');
+  await p.click('#runChart');
+  await p.waitForFunction(() => document.querySelectorAll('#bars button.bar-row').length === 5, null, { timeout: 90000 });
+  assert.match(await hint(), / a 4-3 Over front with a blitz\./, 'and once the chart has run');
+  await theirs('Safety');
+  await theirs('Cover 2');
+  assert.match(await hint(), / with a safety blitz, the Mike's in Cover 2 and Cover 4, where both safeties play deep\./);
+  await theirs('Cover 3');
+  await theirs('Show two deep');
+  assert.match(await hint(), / a 4-3 Over front with a blitz, with Cover 1 and Cover 3 disguised as two deep\./, 'no safety blitz from a disguise');
   await p.context().close();
 }
 

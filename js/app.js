@@ -77,6 +77,10 @@ const okDef = d => (d && FRONTS.some(f => f.id === d.front) && COVERAGES.some(c 
 // Who blitzes on a blitz: the one picked if he can, or else the Mike (see blitzerFor() in js/sim.js); a call keeps its
 // pick through a change of front or coverage and back, as it keeps its disguise. Cover 0 sends everyone anyway.
 const blitzer = d => (d.coverage !== 'c0' && !blitzerFor(d.front, d.coverage, d.blitzer, d.disguise) ? d.blitzer || 'M' : 'M');
+// Who blitzes in the chart, whose rows are every coverage: the one picked, unless he can't be in any of them (the nickel
+// back outside the Nickel front, the safety from a disguise), when it's the Mike. (The safety's rows in Cover 2 and Cover
+// 4, where he can't come, are the Mike's too, and the chart's words say so.)
+const chartBlitzer = d => (BLITZERS.some(b => b.id === d.blitzer) && !blitzerFor(d.front, 'c3', d.blitzer, d.disguise) ? d.blitzer : 'M');
 // The blitz as the board says it: "blitz" for the Mike's, as it always was, or "Will blitz", "nickel blitz", "safety blitz".
 const blitzWord = d => ({ M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' })[blitzer(d)];
 // Only Cover 1 and Cover 3 disguise, showing two deep and rotating at the snap (see the end of buildDefense() in
@@ -1936,7 +1940,7 @@ function chartHint() {
   const goal = `on ${sit.name}, ${sit.down > 2 ? `making the first down (${sit.togo} yard${sit.togo === 1 ? '' : 's'})` : `gaining ${n} yards or more`}`;
   if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense ${goal}${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
-  const who = chart ? chart.blitzer : blitzer(state.def), bw = { M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' }[who] || 'blitz';
+  const who = chart ? chart.blitzer : chartBlitzer(state.def), bw = { M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' }[who] || 'blitz';
   const yours = hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
   return `How often ${yours} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? `with a ${bw}${who === 'SS' ? ', the Mike\'s in Cover 2 and Cover 4, where both safeties play deep' : ''}` : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
     + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
@@ -1974,7 +1978,7 @@ async function runChart() {
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
     : PLAYS.filter(p => !cantCall(base.formation, p.id)).map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others'; from Empty, no runs)
   const sit = situation();
-  chart = { rows, pressure: base.pressure, blitzer: base.pressure === 'blitz' ? base.blitzer || 'M' : 'M', disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
+  chart = { rows, pressure: base.pressure, blitzer: base.pressure === 'blitz' ? chartBlitzer(base) : 'M', disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();
