@@ -103,7 +103,7 @@ assert.equal(await page.textContent('#caption'), HINT, 'the first hint stays whe
 await page.getByRole('radio', { name: 'Smash' }).click();
 // Before the snap every coverage gets a four-man rush, but Cover 0's row blitzes, as Cover 0 always does: the chart
 // says so.
-assert.match(await page.textContent('#chartHint'), /^How often your play succeeds, gaining 4 yards or more, from Gun Trips against a .+ front rushing four \(Cover 0 always blitzes\)\. Beside each bar, the average yards a play\. /);
+assert.match(await page.textContent('#chartHint'), /^How often your play succeeds on 1st & 10, gaining 4 yards or more, from Gun Trips against a .+ front rushing four \(Cover 0 always blitzes\)\. Beside each bar, the average yards a play\. /);
 // Before it runs, the chart shows the rows it will fill: every coverage, with an empty track.
 assert.deepEqual(await page.$$eval('#bars .bar-row.idle', r => r.map(x => [x.getAttribute('role'), x.getAttribute('aria-label'), x.querySelector('.bar-val').textContent])),
   ['Cover 0', 'Cover 1', 'Cover 2', 'Cover 3', 'Cover 4'].map(c => ['listitem', `${c}: not run yet`, '–']), 'the chart before it runs');
@@ -169,7 +169,9 @@ assert.equal(await page.textContent('#actionsNote'), 'Snap again: the same two c
 await until(() => page.isVisible('#why'), 3000, 'the board points to the explanation when the play ends');
 assert.equal(await page.textContent('#caption'), '', 'the button takes the place of the play\'s last line');
 assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('why')).animationName), 'why-in', 'the button to the explanation fades in');
-assert.equal((await page.textContent('#why')).replace(/\s+/g, ' ').trim(), `${await page.textContent('#resHead')} · Why ↓`);
+// (shortened where it's measured against the first down: "Gain of 6, 2 short", "Gain of 12, first down")
+const shortHead = h => h.replace(/ yards?, (\d+) short of the first down$/, ', $1 short').replace(/(\+?) yards? and a first down$/, '$1, first down');
+assert.equal((await page.textContent('#why')).replace(/\s+/g, ' ').trim(), `${shortHead(await page.textContent('#resHead'))} · Why ↓`);
 
 // The scrubber reaches the whole play: halfway is halfway, and the far end is the end of the play.
 const scrub = to => page.evaluate(to => {
@@ -237,7 +239,7 @@ await page.click('#runChart');
 await page.waitForFunction(() => document.querySelectorAll('#bars .bar-row:not(.waiting):not(.idle)').length === 11, null, { timeout: 30000 });
 
 // The headline and the verdict over it round the same way: the simulator spots the ball to the half yard, and a
-// 3.5-yard run reads "Gain of 4 yards", the line where a play counts as a win for the offense.
+// 3.5-yard run reads "Gain of 4 yards", the line where a play counts as a win for the offense on 1st & 10.
 const close = await page.evaluate(() => {
   const { state, board, simulate, lineUp, finish } = window.chalkTalk;
   Object.assign(state.off, { formation: 'iform', play: 'iz', flip: false, motion: 'none' });
@@ -250,7 +252,7 @@ const close = await page.evaluate(() => {
   }
 });
 assert.ok(close, 'no 3.5-yard run in 3,000 snaps of Inside Zone');
-assert.equal(close.head, 'Gain of 4 yards', `seed ${close.seed}`);
+assert.equal(close.head, 'Gain of 4 yards, 6 short of the first down', `seed ${close.seed}`);
 assert.equal(close.kicker, 'A win for the offense', `"Gain of 4 yards" under "${close.kicker}" (seed ${close.seed})`);
 // A gain short of that says why it's a win for the defense, so it doesn't look like a mistake.
 const short = await page.evaluate(() => {
@@ -262,31 +264,47 @@ const short = await page.evaluate(() => {
     return { seed, head: document.getElementById('resHead').textContent, kicker: document.getElementById('resKicker').textContent };
   }
 });
-assert.equal(short?.head, 'Gain of 3 yards');
+assert.equal(short?.head, 'Gain of 3 yards, 7 short of the first down');
 assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards that make a play a success', `"Gain of 3 yards" under "${short.kicker}" (seed ${short.seed})`);
 // The verdict says a big play (a run of 10 yards or more, a catch of 20 or more) and a takeaway for what they are,
-// and a 3-yard gain why it's the defense's. Each is a shared play: one that no longer comes out this way (after a
-// change to the simulator) needs another seed that does.
+// and a 3-yard gain why it's the defense's. The headline says how far short of the first down a gain was, or that it
+// made one. Both go by the down: a success is 40% of the yards to go on first down, 60% on second (4 of 6, in whole
+// yards) and all of them on third and fourth, where a 6-yard gain on 3rd & 8 is a win for the defense; and on fourth
+// down, anything short of the first down hands the ball over. Each is a shared play: one that no longer comes out this
+// way (after a change to the simulator) needs another seed that does.
 {
   const p = await ctx.newPage();
   p.on('pageerror', e => problems.push(e.message));
   await p.goto(base);
   for (const [code, head, kicker, win] of [
-    ['O.single.iz.0.over.c3.four.1', 'Gain of 3 yards', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
+    ['O.single.iz.0.over.c3.four.1', 'Gain of 3 yards, 7 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
     ['O.trips.smash.0.nickel.c3.four.65', 'Intercepted', 'A takeaway for the defense', 'D'],
-    ['O.trips.smash.0.nickel.c2.four.262', 'Gain of 19 yards', 'A win for the offense', 'O'],
-    ['O.trips.smash.0.nickel.c2.four.10', 'Gain of 20 yards', 'A big play for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.579', 'Gain of 9 yards', 'A win for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards', 'A big play for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c2.four.262', 'Gain of 19 yards and a first down', 'A win for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c2.four.10', 'Gain of 20 yards and a first down', 'A big play for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.579', 'Gain of 9 yards, 1 short of the first down', 'A win for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.1.0.none.2and6', 'Gain of 3 yards, 3 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
+    ['O.single.iz.0.over.c3.four.2.0.none.2and6', 'Gain of 4 yards, 2 short of the first down', 'A win for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.1.0.none.3and2', 'Gain of 3 yards and a first down', 'A win for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.47.0.none.3and8', 'Gain of 6 yards, 2 short of the first down', 'A win for the defense: short of the first down', 'D'],
+    ['D.single.iz.0.over.c3.four.8.0.none.3and8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c3.four.1.0.none.3and8', 'Incomplete', 'A win for the defense', 'D'],
+    ['O.single.iz.0.over.c3.four.11.0.none.4and1', 'Gain of 1 yard and a first down', 'A win for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.10.0.none.4and1', 'No gain', 'A win for the defense: a turnover on downs', 'D'],
+    ['O.trips.smash.0.nickel.c3.four.1.0.none.4and1', 'Incomplete', 'A win for the defense: a turnover on downs', 'D'],
+    ['O.trips.smash.0.nickel.c3.four.65.0.none.4and1', 'Intercepted', 'A takeaway for the defense', 'D'],
   ]) {
     await p.evaluate(code => { location.hash = `#p=${code}`; }, code);
-    await p.waitForFunction(seed => { const { state } = window.chalkTalk; return state.seed === seed && state.phase === 'playing'; }, +code.split('.').at(-1), { timeout: 5000 });
+    await p.waitForFunction(seed => { const { state } = window.chalkTalk; return state.seed === seed && state.phase === 'playing'; }, +code.split('.')[7], { timeout: 5000 });
     const seen = await p.evaluate(() => {
       const s = document.getElementById('scrub'); s.value = s.max; s.dispatchEvent(new Event('input'));
       const k = document.getElementById('resKicker');
-      return { head: document.getElementById('resHead').textContent, kicker: k.textContent, win: k.dataset.win };
+      return { head: document.getElementById('resHead').textContent, kicker: k.textContent, win: k.dataset.win, vs: document.getElementById('resVs').textContent };
     });
     assert.equal(seen.head, head, `#p=${code} no longer shows this: pick another seed`);
+    const down = { '2and6': '2nd & 6', '3and2': '3rd & 2', '3and8': '3rd & 8', '4and1': '4th & 1' }[code.split('.')[10]] || '1st & 10';
+    assert.ok(seen.vs.startsWith(`On ${down}, `), `#p=${code}: "${seen.vs}" doesn't say the down`);
+    delete seen.vs;
     assert.deepEqual(seen, { head, kicker, win }, `#p=${code}`);
   }
   // On the RB Screen the line lets the rushers through on purpose, so the pre-snap read doesn't say one came unblocked
@@ -994,7 +1012,7 @@ for (const width of [320, 360, 375]) {
   assert.match(said['Gun Trips'].strong ?? '', /^The strong side is the tight end's side, or the side with more receivers\./, 'the strong side is explained');
   assert.match(said['Gun Doubles'].strong ?? '', /^Gun Doubles is balanced, two receivers on each side, so the strong side is whichever side you call\./);
   assert.match(said.Singleback.strong ?? '', /^Singleback is balanced, a tight end and a receiver on each side, so/);
-  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Three-step and five-step drop', 'Check-down', 'Hot route', 'Deep thirds, halves and quarters', 'Success', 'Big play', 'Takeaway']) {
+  for (const w of ['Strong side and weak side', 'Play side and back side', 'The box', 'Shotgun', 'Press', 'Leverage', 'Over the top', 'Three-step and five-step drop', 'Check-down', 'Hot route', 'Deep thirds, halves and quarters', 'Down and distance', 'Success', 'Turnover on downs', 'Big play', 'Takeaway']) {
     assert.ok(said.words.includes(w), `the playbook's words don't explain "${w}"`);
   }
   for (const z of said.zones) assert.ok(said.words.some(w => w.toLowerCase().startsWith(z.replace(/ \(.*/, ''))), `the playbook's words don't explain the ${z}`);
@@ -1664,7 +1682,7 @@ for (const colorScheme of ['light', 'dark']) {
     return out;
   });
   assert.deepEqual(seen.before, [], 'something is written at the spot before the whistle');
-  assert.equal(seen.head, 'Gain of 30 yards');
+  assert.equal(seen.head, 'Gain of 30 yards and a first down');
   assert.equal(seen.after.length, 1);
   assert.equal(seen.after[0].t, '+30');
   assert.ok(seen.after[0].size >= 18 * 1.4 - 0.01, `a big play's writing is ${seen.after[0].size} px`);
@@ -1972,7 +1990,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#whoClose');
   await whistle();
   assert.equal(await p.isVisible('#result'), true);
-  assert.equal(await p.textContent('#resVs'), 'Smash from Gun Trips against Nickel with a blitz.', 'the result card names the coverage before it is answered');
+  assert.equal(await p.textContent('#resVs'), 'On 1st & 10, Smash from Gun Trips against Nickel with a blitz.', 'the result card names the coverage before it is answered');
   assert.deepEqual(await buttons('#noteAsk'), COVS, 'the coach\'s note gives way to the question');
   assert.deepEqual(await p.$$eval('#note, #noteNow, #reads', els => els.map(e => e.hidden)), [true, true, true], 'the coach\'s note is up before it is answered');
   assert.ok(!(await p.textContent('#story')).includes('Cover 0'), 'the play-by-play names Cover 0 before it is answered');
@@ -1989,7 +2007,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.match(await p.textContent('#story'), /Cover 0: the .+ blitz/, 'the play-by-play says Cover 0 once it is answered');
   assert.match(await p.textContent('#matchup'), /Nickel · Cover 0$/);
   assert.equal(await p.evaluate(() => window.chalkTalk.board.showTheirs), true);
-  assert.equal(await p.textContent('#resVs'), 'Smash from Gun Trips against Nickel, Cover 0.');
+  assert.equal(await p.textContent('#resVs'), 'On 1st & 10, Smash from Gun Trips against Nickel, Cover 0.');
   assert.equal(await streak(), '', 'a streak before there is one');
   assert.deepEqual(await saved(), { quiz: true, streak: 0, best: 0 });
   // Snap again: the call is out, so it isn't asked.
@@ -2170,7 +2188,7 @@ for (const colorScheme of ['light', 'dark']) {
   const H = await p.evaluate(() => { const { state, board } = window.chalkTalk, i = state.play.motion.who; return board.pos(0, i); });
   assert.ok(Math.abs(H.x + 10) < 0.01, `across: set in the slot on the other side at the snap, at ${H.x}`);
   await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); });
-  assert.match(await p.textContent('#resVs'), /^Smash from Gun Trips, the H in motion across, against Nickel, Cover 1\.$/);
+  assert.match(await p.textContent('#resVs'), /^On 1st & 10, Smash from Gun Trips, the H in motion across, against Nickel, Cover 1\.$/);
   assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: the nickel back ran with the H. Someone running with a man in motion means man coverage.'));
   assert.match(await p.textContent('#note'), / Here the H went in motion first, and the play was run from where the receivers stood then: two each side\.$/);
   assert.match(await p.textContent('#boardWords'), / Before the snap the H goes in motion across to the left\. /, 'the board in words says where he goes');
@@ -2264,7 +2282,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.ok(await p.evaluate(() => document.getElementById('drills').compareDocumentPosition(document.getElementById('mine')) & Node.DOCUMENT_POSITION_FOLLOWING), 'the drills are above Your call');
   await p.click('#drillChips button:text-is("Beat Cover 2")');
   const D = DRILLS[0];
-  assert.deepEqual(await card(), { pressed: ['Beat Cover 2'], hint: false, now: `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill` });
+  assert.deepEqual(await card(), { pressed: ['Beat Cover 2'], hint: false, now: `Beat Cover 2. ${D.brief} On 1st & 10, a snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill` });
   assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false }, 'in a drill');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false });
   assert.equal(await p.textContent('#caption'), 'Drill: Beat Cover 2. Call a play, then Snap.');
@@ -2277,7 +2295,7 @@ for (const colorScheme of ['light', 'dark']) {
   for (let k = 1; k <= 2; k++) {
     if (await down()) ok++;
     assert.equal(await p.isVisible('#theirsAsk'), false, 'a drill asks what they played');
-    assert.equal((await card()).now, `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. ${k} of 5 snaps: ${ok} gained 4 yards or more. Stop the drill`);
+    assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 1st & 10, a snap that gains 4 yards or more counts. ${k} of 5 snaps: ${ok} gained 4 yards or more. Stop the drill`);
   }
   assert.match(await p.textContent('#say'), new RegExp(`Beat Cover 2: ${ok} of 2 snaps so far gained 4 yards or more\\.$`));
   assert.equal(await p.textContent('#actionsNote'), `Snap again: the next snap of the drill. 2 of 5 snaps so far: ${ok} gained 4 yards or more.`);
@@ -2285,7 +2303,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const s = document.getElementById('scrub'); s.value = '0'; s.dispatchEvent(new Event('input')); s.value = s.max; s.dispatchEvent(new Event('input')); });
   await p.evaluate(() => { const { state, board, play, finish } = window.chalkTalk; play(); state.t = board.duration(); finish(); });
   await p.reload();
-  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. 2 of 5 snaps: ${ok} gained 4 yards or more. Stop the drill`, 'a snap counted twice, or a reload lost the drill');
+  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 1st & 10, a snap that gains 4 yards or more counts. 2 of 5 snaps: ${ok} gained 4 yards or more. Stop the drill`, 'a snap counted twice, or a reload lost the drill');
   assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false }, 'in a drill after a reload');
   // A change of play between snaps is part of it: the drill goes on.
   await p.getByRole('radio', { name: 'Four Verticals' }).click();
@@ -2300,11 +2318,30 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal((await card()).now?.startsWith(`Beat Cover 2: ${ok} of 5`), true, 'a snap after the drill counted');
   // Run it again starts over, with the focus on the drill's button; Stop ends it, and Done puts a debrief away.
   await p.click('#drillNow button:text-is("Run it again")');
-  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} A snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill`);
+  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 1st & 10, a snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill`);
   assert.equal(await p.evaluate(() => document.activeElement.textContent), 'Beat Cover 2');
   await p.click('#drillNow button:text-is("Stop the drill")');
   assert.deepEqual(await card(), { pressed: [], hint: true, now: null });
   assert.deepEqual(await his(), { auto: true, side: 'O', switch: true, newLook: true, ask: true });
+  // What counts goes by the down, and a drill is five snaps in one situation: a new one starts it over.
+  await p.click('#drillChips button:text-is("Beat Cover 2")');
+  await down();
+  await p.getByRole('radio', { name: '3rd & 8' }).click();
+  assert.equal(await p.textContent('#caption'), '3rd & 8: the drill starts over.');
+  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 3rd & 8, a snap that makes the first down counts. Snap 1 of 5. Stop the drill`);
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false }, 'a new situation changed the drill\'s call');
+  let firsts = 0;
+  for (let k = 1; k <= 3; k++) {
+    if (await p.evaluate(() => {
+      const { state, board, snap, finish } = window.chalkTalk;
+      snap(); state.t = board.duration(); finish();
+      const r = state.play.result, n = Math.sign(r.yards) * Math.round(Math.abs(r.yards));
+      return (r.kind === 'run' || r.kind === 'catch') && n >= 8;
+    })) firsts++;
+  }
+  assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 3rd & 8, a snap that makes the first down counts. 3 of 5 snaps: ${firsts} made the first down. Stop the drill`);
+  await p.click('#drillNow button:text-is("Stop the drill")');
+  await p.getByRole('radio', { name: '1st & 10' }).click();
   // The blitz drill doesn't name its coverage before the first snap.
   await p.click('#drillChips button:text-is("Beat the blitz")');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def.coverage), 'c0');
@@ -2554,7 +2591,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route in a defender\'s card');
   await p.click('#whoClose');
   // The chart is your version.
-  assert.match(await p.textContent('#chartHint'), /^How often your version of Smash \(the Y on a curl and the H on a slant\) succeeds, gaining 4 yards or more, from Gun Trips /);
+  assert.match(await p.textContent('#chartHint'), /^How often your version of Smash \(the Y on a curl and the H on a slant\) succeeds on 1st & 10, gaining 4 yards or more, from Gun Trips /);
   // Paused part way through the play, his route can't be changed (only before the snap, or once it's over).
   await p.evaluate(() => { const { state, snap, pause } = window.chalkTalk; snap(); state.t = 1; pause(); });
   await tap('H');
@@ -2564,7 +2601,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#whoClose');
   // Snapped: the result card names your version, and the note says it's about the play as drawn.
   await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
-  assert.match(await p.textContent('#resVs'), /^Smash, Y on a curl, H on a slant from Gun Trips against /);
+  assert.match(await p.textContent('#resVs'), /^On 1st & 10, Smash, Y on a curl, H on a slant from Gun Trips against /);
   assert.match(await p.textContent('#note'), / That's Smash as it's drawn; yours had the Y on a curl and the H on a slant, so it can go another way\. Run it 100 times each to see how your version does against every coverage\.$/);
   // In a shared link, and back from it.
   await c.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -2606,7 +2643,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', motion: 'none', hot: { H: 'slant' } }); lineUp(); });
   await p.click('#runChart');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.chart().rows.filter(r => Object.keys(r.call.hot || {}).length).map(r => [r.id, r.call.hot])), [['smash', { H: 'slant' }]], 'the chart ran every play with the H on a slant');
-  assert.match(await p.textContent('#chartHint'), /^How often each play from Gun Trips succeeds against your defense, gaining 4 yards or more: Smash as you changed it \(the H on a slant\), the rest as drawn\. /);
+  assert.match(await p.textContent('#chartHint'), /^How often each play from Gun Trips succeeds against your defense on 1st & 10, gaining 4 yards or more: Smash as you changed it \(the H on a slant\), the rest as drawn\. /);
   await c.close();
 }
 
@@ -2679,6 +2716,26 @@ for (const colorScheme of ['light', 'dark']) {
   assert.deepEqual(await o.evaluate(() => [window.chalkTalk.state.side, window.chalkTalk.state.sit, window.chalkTalk.state.labels]), ['D', '1and10', false], 'a save from before downs');
   await old.close();
   assert.deepEqual(errors, []);
+}
+
+// The chart counts a success by the down, as the result card does: on 3rd & 8 a row's bar is how often it made the
+// first down. A new situation once its first numbers are up takes the chart away, saying so until it's run again.
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.goto(base);
+  await p.getByRole('radio', { name: '3rd & 8' }).click();
+  await p.click('#runChart');
+  assert.match(await p.textContent('#chartHint'), /^How often your play succeeds on 3rd & 8, making the first down \(8 yards\), from Gun Trips /);
+  await p.waitForFunction(() => window.chalkTalk.chart()?.rows.every(r => r.avg !== undefined), null, { timeout: 60000 });
+  const rows = await p.evaluate(() => window.chalkTalk.chart().rows.map(r => ({ name: r.name, n: r.n, ok: r.ok, firsts: r.snaps.filter(x => Math.round(x.yards) >= 8).length })));
+  for (const r of rows) assert.equal(r.ok, r.firsts, `${r.name}: ${r.ok} successes counted on 3rd & 8, ${r.firsts} first downs`);
+  assert.ok(rows.some(r => r.firsts < r.n), 'no snap fell short');
+  await p.getByRole('radio', { name: '2nd & 6' }).click();
+  assert.match(await p.textContent('#chartHint'), /^How often your play succeeds on 2nd & 6, gaining 4 yards or more, from Gun Trips .* The situation changed\. Run it again for Smash on 2nd & 6\.$/);
+  assert.equal(await p.$$eval('#bars .bar-row.idle', r => r.length), 5, 'the chart for the last situation stayed up');
+  await c.close();
 }
 
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback

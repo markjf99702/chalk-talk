@@ -1,5 +1,5 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS, needed } from './playbook.js';
 import { simulate, prepare, name, hotRoutes } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
@@ -209,7 +209,7 @@ function lineUp(keep = false) {
   state.phase = 'pre';
   board.setPlay(state.play);
   board.togo = state.play.sit.togo; // the yellow line
-  board.mark = endMark(state.play.result);
+  board.mark = endMark(state.play.result, state.play.sit);
   state.t = board.t = board.start(); // the snap, or before it with a man in motion
   board.waitSnap = atSnap = false;
   board.selected = -1;
@@ -384,7 +384,7 @@ function finish({ hold = false } = {}) {
 function say(text) { $('say').textContent = text; }
 function sayResult() {
   const where = resultBeside() ? 'beside' : 'under';
-  say(`${headline(state.play.result)}. ${$('resKicker').textContent}. ${asking() ? `Name their coverage ${where} the board, and the coach's note says why.` : `Why it worked is ${where} the board.`}${drillNews ? ` ${drillNews}` : ''}`);
+  say(`${headline(state.play.result, state.play.sit)}. ${$('resKicker').textContent}. ${asking() ? `Name their coverage ${where} the board, and the coach's note says why.` : `Why it worked is ${where} the board.`}${drillNews ? ` ${drillNews}` : ''}`);
   drillNews = '';
 }
 const resultBeside = () => $('result').getBoundingClientRect().left >= $('board').getBoundingClientRect().right;
@@ -405,7 +405,7 @@ function showWhy() {
   setCaption('');
   board.spot = -1; board.spotAll = null; // the caption makes way for the headline, and nobody is named
   draw();
-  $('why').innerHTML = `${esc(headline(state.play.result))} · <span class="why-go">Why <span aria-hidden="true">${resultBeside() ? '→' : '↓'}</span></span>`;
+  $('why').innerHTML = `${esc(headline(state.play.result, state.play.sit, true))} · <span class="why-go">Why <span aria-hidden="true">${resultBeside() ? '→' : '↓'}</span></span>`;
   $('why').hidden = false;
   placeWhy();
   placeWho(); // draw() placed the card before the button was there
@@ -523,7 +523,7 @@ function syncScrub() {
   const dt = F.length > 1 ? F[1].t - F[0].t : 0.05;
   s.max = String(F.length - 1);
   s.value = String(Math.min(F.length - 1, Math.round((state.t - F[0].t) / dt)));
-  const now = state.phase === 'pre' ? '' : state.phase === 'done' ? headline(state.play.result) : $('caption').lastElementChild?.textContent;
+  const now = state.phase === 'pre' ? '' : state.phase === 'done' ? headline(state.play.result, state.play.sit) : $('caption').lastElementChild?.textContent;
   const when = state.t < -0.049 ? `${(-state.t).toFixed(1)} seconds before the snap` : `${Math.max(0, state.t).toFixed(1)} of ${board.duration().toFixed(1)} seconds`;
   s.setAttribute('aria-valuetext', `${when}${now ? `: ${now}` : ''}`);
 }
@@ -1109,15 +1109,17 @@ function renderSituation() {
   $('sitBlurb').textContent = sit.blurb;
 }
 // A new down and distance. The other coach makes a new call for it, hidden until the snap as usual (see rollTheirs()),
-// unless it's a drill's. The chart was for the last one.
+// unless it's a drill's: a drill is five snaps in one situation, so a new one starts it over. The chart was for the
+// last one.
 function setSit(id) {
   if (!okSit(id) || id === state.sit) return;
   state.sit = id;
+  if (drill) drill = { ...drill, n: 0, ok: 0, last: null };
   const repick = state.auto && !drill;
   if (repick) rollTheirs();
   afterChange('sit');
   const s = situation();
-  setCaption(`${s.name}: ${repick ? 'they\'ve changed their call.' : `${s.togo} yard${s.togo === 1 ? '' : 's'} to go.`}`);
+  setCaption(`${s.name}: ${drill ? 'the drill starts over.' : repick ? 'they\'ve changed their call.' : `${s.togo} yard${s.togo === 1 ? '' : 's'} to go.`}`);
 }
 
 function theirSummary() {
@@ -1287,9 +1289,14 @@ const okDrill = (d, side) => {
   return D && (side === undefined || D.side === side) && whole(d.n) && d.n <= DRILL_SNAPS && whole(d.ok) && d.ok <= d.n
     && (d.last == null || whole(d.last)) ? { id: d.id, n: d.n, ok: d.ok, last: d.last ?? null } : null;
 };
-// What counts: a gain of 4 yards or more on offense, a run held short of it on defense.
-const drillWorked = (D, res) => (D.side === 'O' ? success(res) : !success(res));
-const drillGoal = D => (D.side === 'O' ? 'gained 4 yards or more' : 'held under 4 yards');
+// What counts: a success in the situation on offense (4 yards or more on 1st & 10, the first down on third down), a run
+// held short of one on defense. A drill is five snaps in one situation (a new one starts it over: see setSit()).
+const drillWorked = (D, res, sit) => (D.side === 'O' ? success(res, sit) : !success(res, sit));
+function drillGoal(D, snap = false) {
+  const sit = situation(), n = needed(sit), first = sit.down > 2;
+  if (snap) return D.side === 'O' ? (first ? 'snap that makes the first down' : `snap that gains ${n} yards or more`) : (first ? 'run held short of the first down' : `run held under ${n} yards`);
+  return D.side === 'O' ? (first ? 'made the first down' : `gained ${n} yards or more`) : (first ? 'held short of the first down' : `held under ${n} yards`);
+}
 
 // His call for the drill: its coverage and pressure, from the front he'd set against your personnel; or a run from its
 // formation, to either side.
@@ -1336,7 +1343,7 @@ function tallyDrill() {
   drill.last = state.seed;
   drill.n++;
   const D = byId(DRILLS, drill.id);
-  if (drillWorked(D, state.play.result)) drill.ok++;
+  if (drillWorked(D, state.play.result, state.play.sit)) drill.ok++;
   drillNews = `${D.name}: ${drill.ok} of ${drill.n} ${drill.n < DRILL_SNAPS ? `snaps so far ${drillGoal(D)}` : `${drillGoal(D)}, and the coach has a word on it`}.`;
   if (drill.n >= DRILL_SNAPS) { drilled = { ...drill }; endDrill(); } else renderDrills();
   keepPlay();
@@ -1368,7 +1375,7 @@ function renderDrills() {
   const row = document.createElement('div');
   row.className = 'actions';
   if (drill) {
-    p('drill-brief', `<b>${esc(D.name)}.</b> ${esc(D.brief)} A ${D.side === 'O' ? 'snap that gains 4 yards or more' : 'run held under 4 yards'} counts.`);
+    p('drill-brief', `<b>${esc(D.name)}.</b> ${esc(D.brief)} On ${esc(situation().name)}, a ${drillGoal(D, true)} counts.`);
     p('drill-count', drill.n ? `${drill.n} of ${DRILL_SNAPS} snaps: ${drill.ok} ${drillGoal(D)}.` : `Snap 1 of ${DRILL_SNAPS}.`);
     row.append(button('Stop the drill', () => { endDrill(); toDrills(); }));
   } else {
@@ -1501,31 +1508,38 @@ function boardWords(P) {
 // Whole yards, as the headline says them. The simulator spots the ball to the half yard, and a half rounds away from
 // zero, so a 3.5-yard run is a gain of 4 and a success in the headline, the verdict over it and the chart alike.
 const gained = res => Math.sign(res.yards) * Math.round(Math.abs(res.yards));
-const success = res => (res.kind === 'run' || res.kind === 'catch') && gained(res) >= 4;
+// A success by the down (sit, one of SITUATIONS): a run or a catch that gains 40% of the yards to go on first down, 60%
+// on second, and all of them on third and fourth, in whole yards. On 1st & 10 that's 4.
+const carried = res => res.kind === 'run' || res.kind === 'catch';
+const success = (res, sit) => carried(res) && gained(res) >= needed(sit);
 // The verdict over the headline, and which side's colour it's in. A big play is a run of 10 yards or more or a catch of
-// 20 or more (see "Big play" in the playbook), and a gain short of 4 yards counts for the defense, which looks like a
-// mistake unless it says why.
-const bigPlay = res => success(res) && gained(res) >= (res.kind === 'run' ? 10 : 20);
-function kicker(res) {
-  const n = gained(res), carried = res.kind === 'run' || res.kind === 'catch';
+// 20 or more (see "Big play" in the playbook), and a gain short of a success counts for the defense, which looks like a
+// mistake unless it says why: short of the yards that make it one, or on third down of the first down. On fourth down
+// anything short of the first down hands the ball over.
+const bigPlay = (res, sit) => success(res, sit) && gained(res) >= (res.kind === 'run' ? 10 : 20);
+function kicker(res, sit) {
+  const n = gained(res);
   if (res.kind === 'int') return ['A takeaway for the defense', 'D'];
-  if (success(res)) return [bigPlay(res) ? 'A big play for the offense' : 'A win for the offense', 'O'];
-  if (carried && n >= 0) return ['A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'];
+  if (success(res, sit)) return [bigPlay(res, sit) ? 'A big play for the offense' : 'A win for the offense', 'O'];
+  if (sit.down === 4) return ['A win for the defense: a turnover on downs', 'D'];
+  if (carried(res) && n >= 0) return [sit.down === 3 ? 'A win for the defense: short of the first down' : `A win for the defense: short of the ${needed(sit)}\u00a0yards that make a play a success`, 'D'];
   return ['A win for the defense', 'D'];
 }
 
 // What's written in marker on the board at the whistle (see Board.endMark()), the yards as the headline counts them:
 // "+17", "−3", "Sack −7", "Incomplete", "Picked off". A big play's is written bigger, and it's in the colour of the
 // side that won the play, as the verdict over the headline is.
-function endMark(res) {
+function endMark(res, sit) {
   const n = gained(res);
   const text = { incomplete: 'Incomplete', throwaway: 'Thrown away', int: 'Picked off' }[res.kind]
     || (res.kind === 'sack' ? (n ? `Sack −${-n}` : 'Sack') : res.long ? `${Math.min(n, 60)}+` : n > 0 ? `+${n}` : n < 0 ? `−${-n}` : 'No gain');
-  return { text, big: bigPlay(res), win: kicker(res)[1] };
+  return { text, big: bigPlay(res, sit), win: kicker(res, sit)[1] };
 }
 
-function headline(res) {
-  const n = Math.abs(gained(res));
+// The headline: how far it went, and against the yellow line, how far short of it or that it got there. Short, for the
+// button on the board, where the whole of it would be cut off on a phone: "Gain of 6, 2 short", "Gain of 12, first down".
+function headline(res, sit, short = false) {
+  const n = Math.abs(gained(res)), g = gained(res);
   const yd = v => `${v} yard${v === 1 ? '' : 's'}`;
   switch (res.kind) {
     case 'incomplete': return 'Incomplete';
@@ -1533,20 +1547,22 @@ function headline(res) {
     case 'throwaway': return 'Thrown away';
     case 'sack': return n ? `Sacked for a loss of ${yd(n)}` : 'Sacked at the line';
     default:
-      if (res.long) return `Gain of ${Math.min(n, 60)}+ yards`; // still running when the board stopped counting
-      return gained(res) > 0 ? `Gain of ${yd(n)}` : gained(res) < 0 ? `Loss of ${yd(n)}` : 'No gain';
+      if (res.long) return short ? `Gain of ${Math.min(n, 60)}+${g >= sit.togo ? ', first down' : ''}` : `Gain of ${Math.min(n, 60)}+ yards${g >= sit.togo ? ' and a first down' : ''}`; // still running when the board stopped counting
+      if (g > 0 && short) return `Gain of ${n}, ${g >= sit.togo ? 'first down' : `${sit.togo - g} short`}`;
+      if (g > 0) return g >= sit.togo ? `Gain of ${yd(n)} and a first down` : `Gain of ${yd(n)}, ${sit.togo - g} short of the first down`;
+      return g < 0 ? `Loss of ${yd(n)}` : 'No gain';
   }
 }
 
 function showResult() {
   const P = state.play, res = P.result;
-  [$('resKicker').textContent, $('resKicker').dataset.win] = kicker(res);
-  $('resHead').textContent = headline(res);
+  [$('resKicker').textContent, $('resKicker').dataset.win] = kicker(res, P.sit);
+  $('resHead').textContent = headline(res, P.sit);
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
   // (While you're asked what they played, the coverage waits: Cover 0 is said as a blitz, as it is.)
   const blitz = state.def.pressure === 'blitz' || cv.id === 'c0';
-  const from = `${playName(state.off)} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
+  const from = `On ${P.sit.name}, ${playName(state.off)} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
   $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
     : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.${typicalNote()}`;
   // Each line's time is a button that watches that moment again on the board (see replay()).
@@ -1701,7 +1717,7 @@ function thisTime(P) {
   }[t.how] || `he threw to ${on}`;
   const end = E.findLast(e => e.kind === 'inc' || e.kind === 'pbu' || e.kind === 'int');
   let came;
-  if (res.kind === 'catch') came = res.long ? `, and it went for ${Math.min(n, 60)}+ yards` : n >= 4 ? `, and it went for ${yd(n)}` : n > 0 ? `, but it went for only ${yd(n)}` : n < 0 ? `, but he was dropped for a loss of ${yd(-n)}` : ', but it went for no gain';
+  if (res.kind === 'catch') came = res.long ? `, and it went for ${Math.min(n, 60)}+ yards` : success(res, P.sit) ? `, and it went for ${yd(n)}` : n > 0 ? `, but it went for only ${yd(n)}` : n < 0 ? `, but he was dropped for a loss of ${yd(-n)}` : ', but it went for no gain';
   else if (res.kind === 'int') came = end?.how === 'off' ? `, but the throw was off target and ${nm(P, by)} picked it off` : `, and ${nm(P, by)} jumped the route and picked it off`;
   else came = { out: ', but the throw went out of bounds', off: ', but the throw was off target', drop: ', but he dropped it' }[end?.how]
     || (end?.kind === 'pbu' ? `, but ${nm(P, by)} broke it up` : by >= 0 ? `, but ${nm(P, by)} got a hand on it` : ', but it fell incomplete');
@@ -1840,10 +1856,13 @@ function chartHint() {
   const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
   // (calling both sides, with routes changed: those are for that one play, and the rest are run as drawn; see runChart())
   const changed = hotList(state.off).length ? `: ${byId(PLAYS, state.off.play).name} as you changed it (${hotWords(state.off)}), the rest as drawn` : '';
-  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
+  // what a success is on this down (see success())
+  const sit = chart ? chart.sit : situation(), n = needed(sit);
+  const goal = `on ${sit.name}, ${sit.down > 2 ? `making the first down (${sit.togo} yard${sit.togo === 1 ? '' : 's'})` : `gaining ${n} yards or more`}`;
+  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense ${goal}${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
   const yours = hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
-  return `How often ${yours} succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
+  return `How often ${yours} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
     + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
 }
 // Once a row has its numbers, it can be tapped.
@@ -1878,7 +1897,8 @@ async function runChart() {
   const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
     : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others')
-  chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side };
+  const sit = situation();
+  chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();
@@ -1897,7 +1917,7 @@ async function runChart() {
           slice = performance.now();
         }
         const flip = r.n % 2 === 1, seed = newSeed(), res = simulate({ ...r.call, flip }, seed).result;
-        r.n++; r.yds += res.yards; if (success(res)) r.ok++;
+        r.n++; r.yds += res.yards; if (success(res, sit)) r.ok++;
         r.snaps.push({ seed, flip, yards: res.yards });
       }
       r.avg = r.yds / r.n; r.rate = r.ok / r.n; r.of = r.n;
@@ -2038,7 +2058,10 @@ function playbook() {
     ['Middle hook', 'The middle of the field in front of the safeties, 3 to 14 yards deep.'],
     ['Short middle, "the rat"', 'The middle of the field up to about 10 yards. In Cover 1 the defender left over sits there to take away crossing routes.'],
     ['Deep thirds, halves and quarters', 'The deep field, from about 9 yards on, split between the deep defenders: in thirds in Cover 3 (the corners and the free safety), in halves in Cover 2 (the two safeties), in quarters in Cover 4 (the corners and the safeties). The deep middle third is the middle one of the three; an inside quarter is one of the two nearest the middle.'],
-    ['Success', 'A play that gains 4 yards or more. Coaches judge a gain by the down and the distance to go; with no downs on this board, 4 yards, a good start on 1st and 10, is the line. The chart\'s bars show how often a play gets there.'],
+    ['Down and distance', 'The offense has four downs, four plays, to gain 10 yards. Get there and it\'s a first down, with four more. "3rd & 8" is the third down with 8 yards still to go. Here it\'s the Situation, above your call, and the yellow line across the field is how far there is to go.'],
+    ['Success', 'A play that gains enough for its down: 40% of the yards to go on first down, 60% on second, and all of them, a first down, on third and fourth. That\'s how Pro-Football-Reference counts it. On 1st & 10 it\'s 4 yards; on 2nd & 6, 4 (60% of 6, in whole yards); on 3rd & 8, all 8, so a 6-yard gain that\'s a win on first down is a failure there. The chart\'s bars and the drills count it.'],
+    // (counted from nflverse's 2023 play-by-play file, regular season: 793 tries of 4,047 fourth downs; 430 of 775 with 1 or 2 to go)
+    ['Turnover on downs', 'A fourth down that comes up short of the first down: the other team gets the ball where the play ended. So on most fourth downs a team punts or kicks a field goal instead. NFL teams went for it on one fourth down in five in 2023, but on more than half of those with a yard or two to go.'],
     ['Big play', 'A run of 10 yards or more, or a pass play that gains 20 or more: a common way analysts count explosive plays (Sharp Football Analysis, for one). Teams draw the line in different places.'],
     ['Takeaway', 'The defense taking the ball away: an interception, or a fumble it recovers. There are no fumbles on this board, so here a takeaway is an interception.'],
   ]));

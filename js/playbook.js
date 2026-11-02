@@ -304,12 +304,17 @@ export const SITUATIONS = [
     blurb: 'Fourth down: a yard for a first down, or the other team gets the ball where the play ends, a turnover on downs. NFL offenses ran on about two snaps in three; defenses played man coverage and blitzed on most throws.',
   },
 ];
+// The yards a play has to gain to be a success in a situation: 40%, 60% or all of the yards to go, in the whole yards
+// the board counts (60% of 6 is 3.6, so 4).
+export const NEED = [0.4, 0.6, 1, 1];
+export const needed = s => Math.ceil(NEED[s.down - 1] * s.togo - 1e-9);
 
 // Drills: five snaps against one call from the other coach, and then a line from the coach's notes on what beats it.
 // On offense his defense is the drill's (with his front set to your personnel: nickel against three or four receivers,
 // the 4-3 Over against two backs or two tight ends); on defense he runs from the drill's formation, a different run
-// each snap. A snap that gains 4 yards or more is a success for the offense, as everywhere on the board. Each note says
-// what the board shows over many snaps (test/sim.test.mjs holds them to it).
+// each snap. A snap counts as a success by its down, as everywhere on the board (see SITUATIONS): on 1st & 10, a gain
+// of 4 yards or more. Each note says what the board shows over many snaps on 1st & 10 (test/sim.test.mjs holds them
+// to it).
 export const DRILLS = [
   {
     id: 'c2', name: 'Beat Cover 2', side: 'O', coverage: 'c2', pressure: 'four',
