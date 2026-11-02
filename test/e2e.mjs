@@ -2002,8 +2002,9 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('[data-side="D"]');
   assert.equal(await p.isVisible('#askSwitch'), false, 'the switch is there calling the defense');
   await p.click('#snap');
+  // (his offense can send a man in motion first: his call is out once the ball is snapped, a few seconds on)
+  await p.waitForFunction(() => /^They called: /.test(document.getElementById('theirsHint').textContent), null, { timeout: 10000 });
   assert.equal(await p.isVisible('#theirsAsk'), false, 'asked calling the defense');
-  assert.match(await p.textContent('#theirsHint'), /^They called: /);
   // Turned off in another tab while this one is asking: the question goes here too, and his call is out.
   await p.click('[data-side="O"]');
   await p.click('#theirsLook');
