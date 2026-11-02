@@ -2323,6 +2323,12 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, lineUp, snap, finish } = window.chalkTalk; Object.assign(state.def, { coverage: 'c3' }); lineUp(); snap(); finish(); });
   assert.match(await p.textContent('#story'), /Nobody follows him: zone\./);
   assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: nobody ran with the H; the defense only slid over. That means zone.'));
+  // From I-Form it's the Z who goes, and in man coverage the cornerback on him goes too: the strong safety slides over to
+  // the side he left (the bump), and the play-by-play and the read say so.
+  await p.evaluate(() => { const { state, lineUp, snap, finish } = window.chalkTalk; Object.assign(state.off, { formation: 'iform', play: 'oz' }); Object.assign(state.def, { coverage: 'c1' }); lineUp(); snap(); finish(); });
+  assert.match(await p.textContent('#story'), /The strong safety slides over to the side the cornerback left, to keep a run inside there: the bump\./);
+  assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: a cornerback ran with the Z. Someone running with a man in motion means man coverage. And the strong safety slid over to the side the cornerback left, to keep a run inside there: the bump.'), (await p.locator('#reads li').allTextContents()).join(' | '));
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash' }); Object.assign(state.def, { coverage: 'c3' }); lineUp(); });
   // Jet: crossing the middle at full speed at the snap.
   await p.getByRole('radio', { name: 'Jet' }).click();
   const jet = await p.evaluate(() => { const { state, board } = window.chalkTalk, i = state.play.motion.who; return { t0: board.start(), x: board.pos(0, i).x, v: (board.pos(0, i).x - board.pos(-0.05, i).x) / 0.05 }; });

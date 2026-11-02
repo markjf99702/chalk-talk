@@ -1698,7 +1698,7 @@ function coachNote(P) {
   // Motion: who went with him, which says man or zone.
   if (P.motion) {
     const m = P.motion, who = P.players[m.who].label;
-    reads.push(m.man >= 0 ? `Motion: ${nm(P, m.man).replace(/^a corner$/, 'a cornerback')} ran with the ${who}. Someone running with a man in motion means man coverage.`
+    reads.push(m.man >= 0 ? `Motion: ${nm(P, m.man).replace(/^a corner$/, 'a cornerback')} ran with the ${who}. Someone running with a man in motion means man coverage.${m.bump >= 0 ? ' And the strong safety slid over to the side the cornerback left, to keep a run inside there: the bump.' : ''}`
       : `Motion: nobody ran with the ${who}; the defense only slid over. That means zone.`);
   }
   reads.push(`Box: ${P.box.box} defenders near the line against ${P.box.blockers} blockers.`);
@@ -2157,7 +2157,8 @@ function playbook() {
     ['Strong side and weak side', 'The strong side is the tight end\'s side, or the side with more receivers; the weak side is the other one. The defense sets its strength to it: the Sam and the strong safety go to the strong side, the Will to the weak side.'],
     ['Play side and back side', 'On a run, the play side is where the ball is going and the back side is the other half of the line. Every run on this board is drawn up to the strong side.'],
     ['The box', 'The area near the line where defenders play the run. The board counts it out to 3 yards past the end of the line on each side (the tight end, or the tackle where there\'s no tight end) and up to 8 yards deep. More defenders in the box than there are blockers makes a run hard: there aren\'t enough blockers to go round.'],
-    ['Motion', 'A receiver off the line running across the formation before the snap. The defense has to answer it, and how it does gives the coverage away: in man coverage the man covering him runs with him; in zone the defenders only slide over. Once he sets he\'s counted on his new side, so three receivers to one side can become two and two.'],
+    ['Motion', 'A receiver off the line running across the formation before the snap. The defense has to answer it, and how it does gives the coverage away: in man coverage the man covering him runs with him (and if he\'s a cornerback, a safety slides over to the side he left: see The bump); in zone the defenders only slide over. Once he sets he\'s counted on his new side, so three receivers to one side can become two and two.'],
+    ['The bump', 'When a cornerback runs across the formation with a man in motion, the side he left has nobody out wide to keep a run from getting round the end: a run there could go the distance. So a safety slides over and takes his place, a few yards outside the tight end. Here it\'s the strong safety, in Cover 1 and Cover 0: in Cover 1 he holds the edge, outside the ball carrier, until the run gets to the line, the way the cornerback would have; in Cover 0 he stays on his man, the tight end, from outside him.'],
     ['Jet motion', 'Motion at full speed, with the ball snapped as he crosses the formation. A man covering him has to run with him flat out. On a run he keeps going, out to the flat, and takes his defender with him.'],
     ['Shotgun', 'The quarterback lines up about five yards behind the center and takes a short snap through the air, instead of under center with his hands on the ball. He sees the defense from there, and needs only a short drop to throw.'],
     ['Press', 'A corner lined up a yard or so off the receiver, right in his face, to jam him at the snap and stay on him. Corners press in man coverage.'],

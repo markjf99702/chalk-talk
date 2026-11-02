@@ -1815,7 +1815,7 @@ function rotateLine(S) {
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
   const text = jobWords(S, pl), m = S.motion;
-  if (m && pl.bump) return `The cornerback goes across with the ${m.who.label}, so he takes his place on the ${Math.sign(pl.bump) === S.s ? 'strong' : 'weak'} side, keeping a run inside there: the bump. ${text}`;
+  if (m && pl.bump) return `When the cornerback goes across with the ${m.who.label}, he slides over to take the cornerback's place on the ${Math.sign(pl.bump) === S.s ? 'strong' : 'weak'} side, keeping a run inside there: the bump. ${text}`;
   if (!m || (pl !== m.who && pl !== m.man)) return text;
   const side = Math.sign(m.end.x) === S.s ? 'strong' : 'weak';
   if (pl === m.man) return `${text} When the ${m.who.label} goes in motion, he runs with him.`;
