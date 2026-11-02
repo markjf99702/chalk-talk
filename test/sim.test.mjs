@@ -654,9 +654,10 @@ test('with a rusher closing in and nobody open, the quarterback throws it away, 
 
 test('with a blitzer coming unblocked the quarterback throws hot, before he gets there', () => {
   // Every pass play but the screen against Cover 0 (everyone rushes who isn't in man coverage), 48 dropbacks from each
-  // formation: more than half are hot throws now, every one out within 2.75 seconds (the Play-Action Shot's fake takes
-  // the longest: over 3,000 such dropbacks the latest hot throw came at 2.6 seconds) and naming a rusher nobody
-  // blocked.
+  // formation: more than half are hot throws now, every one out within 2.75 seconds and naming a rusher nobody blocked.
+  // (Now and then one comes later: over 3,840 such dropbacks from seed 60000, seven came at 2.5 seconds or later, the
+  // latest at 2.8, Four Verticals from Singleback against the Nickel front at seed 60991, as it did before the Pistol,
+  // Gun Ace and Empty.)
   let seed = 1, n = 0, hotN = 0;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.drop !== 'screen')) for (const fr of FRONTS) for (const flip of [false, true]) {
     if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
@@ -1064,13 +1065,15 @@ test('over many snaps the numbers look like football', () => {
 
 test('the README\'s matchups', () => {
   // The README says four verticals hurt Cover 2 most, Smash beats Cover 2, Flood beats Cover 3, crossing routes get open
-  // against Cover 1's man coverage, and runs struggle with more defenders in the box than blockers. Each cell is 240
+  // against Cover 1's man coverage, and runs struggle with more defenders in the box than blockers. Each cell is 420
   // snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start seeds (2718,
-  // 31415, 16180, 14142) Four Verticals gained 21.8-24.3 yards a dropback against Cover 2 and 8.6-11.7 against Cover 3
-  // and 4, Smash 10.2-11.4 against Cover 2 and 5.6-8.4 against Cover 3 and 4, Flood 10.4-12.0 against Cover 3 and
-  // 4.6-8.7 against Cover 1 and 2, a throw to Mesh's crossers 13.6-15.0 yards against Cover 1 and 4.2-6.2 against
-  // Cover 3, and runs succeeded 36-40% of the time at even numbers in the box and 18-25% with two more defenders than
-  // blockers. A change to the balance that undoes one of these has to change the README with it.
+  // 31415, 16180, 14142), with the Pistol, Gun Ace and Empty, Four Verticals gained 22.2-24.1 yards a dropback against
+  // Cover 2 and 9.1-12.8 against Cover 3 and 4, Smash 14.0-14.7 against Cover 2 and 6.2-8.3 against Cover 3 and 4,
+  // Flood 8.9-9.5 against Cover 3 and 4.8-8.5 against Cover 1 and 2 (its lead over Cover 1 is 0.4-1.5 yards, down from
+  // at least 1.7 before those formations: from Gun Ace and the Pistol it does worst against Cover 3), a throw to Mesh's
+  // crossers 10.9-12.2 yards against Cover 1 and 4.4-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
+  // numbers in the box and 19% with two more defenders than blockers. A change to the balance that undoes one of these
+  // has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const cell = (play, coverage, each) => {
