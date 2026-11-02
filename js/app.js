@@ -28,7 +28,8 @@ const state = {
   zoom: false, // zoomed to the line, on a narrow board (not kept: each visit starts with the whole field)
   seed: newSeed(),
   linked: false, // showing a shared play: both calls, until the first change
-  seen: false, // the other coach's call has been out since he picked it: a snap showed it
+  seen: false, // the other coach's call has been out since he picked it: a snap showed it, or the playbook did
+  book: false, // the playbook set his call and showed it, and it hasn't been snapped yet (see showPart())
   quiz: true, // calling the offense against the other coach, ask what he played after the snap (see answer())
   streak: 0, best: 0, // coverages named right in a row, and the most, on this device
   ask: null, // that question for his call: { guess: null } while it's open, then { guess } once it's answered
@@ -97,7 +98,7 @@ function takeQuiz(s) {
 // visit gets a fresh look.
 const PLAY_KEY = 'chalk-talk.v1.play';
 function keepPlay() {
-  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, ask: state.ask, drill, drilled, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
+  try { sessionStorage.setItem(PLAY_KEY, JSON.stringify({ side: state.side, auto: state.auto, off: state.off, def: state.def, seed: state.seed, seen: state.seen, book: state.book, ask: state.ask, drill, drilled, snapped: state.phase !== 'pre' })); } catch { /* fine */ }
 }
 // The kept play, if it's for the calls you have now (after a shared play, say, it isn't).
 function keptPlay() {
@@ -110,7 +111,7 @@ function keptPlay() {
     if ((!auto || state.side === 'D') && !same(def, own.def)) return null;
     const ask = k.ask && (k.ask.guess === null || COVERAGES.some(c => c.id === k.ask.guess)) ? { guess: k.ask.guess } : null;
     const done = okDrill(k.drilled), drilled = done?.n === DRILL_SNAPS ? done : null;
-    return { off, def, seed: k.seed, seen: !!k.seen, ask: k.snapped ? ask : null, drill, drilled, snapped: !!k.snapped };
+    return { off, def, seed: k.seed, seen: !!k.seen, book: !!k.seen && !k.snapped && k.book === true, ask: k.snapped ? ask : null, drill, drilled, snapped: !!k.snapped };
   } catch { return null; }
 }
 
@@ -136,7 +137,7 @@ const MOTION_SHARE = 1 / 3;
 // disguises 46% of those. (A design choice, so a look can't be trusted every time; not a published statistic.)
 const DISGUISE_SHARE = 0.46;
 function rollTheirs() {
-  state.seen = false;
+  state.seen = state.book = false;
   state.ask = null;
   if (drill) { drillCall(); return; }
   const R = rng(newSeed());
@@ -230,7 +231,7 @@ function play() {
   if (!state.play) return;
   moment = null;
   const snapped = state.phase === 'pre';
-  if (snapped) { linkNote = ''; dropHint(); } // a word about a link that couldn't open lasts until the next play
+  if (snapped) { linkNote = ''; state.book = false; dropHint(); } // a word about a link that couldn't open lasts until the next play
   // His call is out now, and stays out until he picks again, unless you're to say what he played first: then it's
   // out once you have (see answer()). For a replay the status line is cleared, so that its end is said again.
   // A call of his that was hidden stays off the board through any motion before the snap, until the ball is snapped.
@@ -1002,7 +1003,7 @@ function syncTheirs() {
   else if (hidden()) hint.textContent = state.side === 'O'
     ? 'Hidden until the snap. Read their alignment: how many safeties are deep, how far off the corners are, how many defenders are in the box. Then call the play that beats it: change your play and they keep their call; change your personnel and they\'ll substitute.'
     : 'Hidden until the snap. You can see their formation; the play is a surprise. Read their personnel: two backs or two tight ends lean run, four receivers lean pass. Change your call to match it: they keep theirs.';
-  else if (state.phase === 'pre') hint.textContent = `Same call as last snap: ${theirSummary()}. New look gets you a new one.`;
+  else if (state.phase === 'pre') hint.textContent = `${state.book ? 'From the playbook' : 'Same call as last snap'}: ${theirSummary()}. New look gets you a new one.`;
   else hint.textContent = `They called: ${theirSummary()}.`;
 }
 
@@ -1134,8 +1135,9 @@ function reveal() {
 // A drill: five snaps against one call from the other coach (DRILLS in js/playbook.js), counting the ones that work,
 // and then a line from the coach's notes on what beats it. It takes his picking over: his call is the drill's, hidden
 // until the first snap as usual, and your side is the drill's; you can change your own call between snaps. It's over
-// after the fifth whistle, and Stop, the other side, a shared link or another drill ends it sooner; his picking goes
-// back to how you had it, with the drill's call as his. "What did they play?" isn't asked: the drill has said.
+// after the fifth whistle, and Stop, the other side, a shared link, another drill or a part of his call put on the board
+// from the playbook ends it sooner; his picking goes back to how you had it, with the drill's call as his. "What did
+// they play?" isn't asked: the drill has said.
 const DRILL_SNAPS = 5;
 let drill = null; // the drill under way: { id, n, ok, last }, snaps seen to the whistle, how many worked, the last one's seed
 let drilled = null; // the drill just finished, for its debrief: { id, n, ok, last }
@@ -1789,16 +1791,18 @@ function playbook() {
     d.innerHTML = `<summary>${esc(title)}</summary>${body}`;
     grid.append(d);
   };
-  const dl = rows => `<dl>${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`;
+  // A row can end with what it shows on the board, [kind, id, name]: its name then has a button beside it (see showPart()).
+  const showing = (a, [kind, id, name]) => `<dt class="shows"><span>${esc(a)}</span><button type="button" class="show" data-show="${kind}:${esc(id)}" aria-label="Show on the board: ${esc(name)}">Show on the board</button></dt>`;
+  const dl = rows => `<dl>${rows.map(([a, b, show]) => `${show ? showing(a, show) : `<dt>${esc(a)}</dt>`}<dd>${esc(b)}</dd>`).join('')}</dl>`;
   const pos = keys => keys.map(k => [`${k.replace(/34|slot/, '')} · ${POSITIONS[k][0]}`, POSITIONS[k][1]]);
   sec('Offense positions', false, dl(pos(['QB', 'RB', 'FB', 'X', 'Z', 'H', 'Y', 'U', 'LT', 'LG', 'C', 'RG', 'RT'])));
   sec('Defense positions', false, dl(pos(['DE', 'DT', 'NT', 'S', 'M', 'W', 'J', 'CB', 'NB', 'FS', 'SS'])));
-  sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p><p>Personnel is the defense's first read: two backs or two tight ends lean run, four receivers lean pass.</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb])));
+  sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p><p>Personnel is the defense's first read: two backs or two tight ends lean run, four receivers lean pass.</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb, ['formation', f.id, f.name]])));
   sec('Fronts and techniques', false, `<p>Technique numbers tell a defensive lineman where to line up against the offensive line. Gaps between the blockers are lettered from the center out: A between the center and a guard, B between guard and tackle, C outside the tackle, D outside the tight end.</p>`
-    + techDiagram() + dl([...TECHNIQUES, ...FRONTS.map(f => [f.name, f.blurb])]));
-  sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. The corners help too: up close and pressing means man; about five yards off means Cover 2; seven or more means a deep zone, thirds or quarters. Defenses disguise it, though, and so can the ones on this board: see Disguise.'], ['Disguise', 'Lining up to look like one coverage and playing another. Here Cover 1 and Cover 3 can show two deep, the way Cover 4 lines up, and rotate at the snap: the strong safety comes down and the free safety runs to the middle, leaving one deep. The other coach does it about one snap in four. So read the safeties again at the snap: if one comes down, it\'s one deep after all, and the corners say which. Dropping into deep thirds is Cover 3; running with their receivers is Cover 1.']]));
-  sec('Run plays', false, dl(PLAYS.filter(p => p.type === 'run').map(p => [p.name, p.blurb])));
-  sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation. A man in motion is counted where he sets: from Gun Trips the H going across leaves two each side, and the routes go by the new count.']]));
+    + techDiagram() + dl([...TECHNIQUES, ...FRONTS.map(f => [f.name, f.blurb, ['front', f.id, f.name]])]));
+  sec('Coverages', false, dl([...COVERAGES.map(c => [c.name, c.blurb, ['coverage', c.id, c.name]]), ['Man and zone', 'In man coverage each defender follows one receiver wherever he goes. In zone coverage each defender guards an area and plays whoever comes into it.'], ['Reading the shell', 'Before the snap, count the safeties deep. Two deep usually means Cover 2 or Cover 4; one deep means Cover 1 or Cover 3; none means Cover 0 and a blitz. The corners help too: up close and pressing means man; about five yards off means Cover 2; seven or more means a deep zone, thirds or quarters. Defenses disguise it, though, and so can the ones on this board: see Disguise.'], ['Disguise', 'Lining up to look like one coverage and playing another. Here Cover 1 and Cover 3 can show two deep, the way Cover 4 lines up, and rotate at the snap: the strong safety comes down and the free safety runs to the middle, leaving one deep. The other coach does it about one snap in four. So read the safeties again at the snap: if one comes down, it\'s one deep after all, and the corners say which. Dropping into deep thirds is Cover 3; running with their receivers is Cover 1.']]));
+  sec('Run plays', false, dl(PLAYS.filter(p => p.type === 'run').map(p => [p.name, p.blurb, ['play', p.id, p.name]])));
+  sec('Pass plays', false, dl([...PLAYS.filter(p => p.type === 'pass').map(p => [p.name, p.blurb, ['play', p.id, p.name]]), ['Reading the routes', 'Receivers are counted from the outside in on each side: #1 is the widest, #2 the next one in. A pass concept tells each number what to run, so the same play works from any formation. A man in motion is counted where he sets: from Gun Trips the H going across leaves two each side, and the routes go by the new count.']]));
   // drag6 and bflat are the same routes as drag and flat at another depth or from the backfield, so they're listed once;
   // jet is what a man in jet motion does on a run, under "Jet motion" in the words coaches use.
   const routeDesc = { flat: 'Out toward the sideline about four yards past the line, run by a receiver or by a back coming out of the backfield.' };
@@ -1830,6 +1834,38 @@ function playbook() {
     ['Takeaway', 'The defense taking the ball away: an interception, or a fumble it recovers. There are no fumbles on this board, so here a takeaway is an interception.'],
   ]));
 }
+
+// "Show on the board", from the playbook: a formation, a play, a front or a coverage goes into the call and is lined up,
+// with the board back in view and Snap ready to press. Your side and "Let the other coach pick" stay as they are. A
+// part of the other coach's call (a coverage when you call the offense, a play when you call the defense) becomes his,
+// and it's out, not hidden until the snap: you asked to see it. (A formation or a front is out anyway: it's in the
+// alignment.) A coverage of his is shown as it plays, not disguised. Your own part goes in the way its chip would put
+// it, new personnel and all. A drill under way ends when it's his call that changes, as it does when you switch sides.
+const PARTS = { formation: ['off', FORMATIONS], play: ['off', PLAYS], front: ['def', FRONTS], coverage: ['def', COVERAGES] };
+function showPart(kind, id) {
+  const [k, list] = PARTS[kind], thing = list.find(x => x.id === id);
+  if (!thing) return;
+  const his = () => state.auto && (k === 'off') !== (state.side === 'O');
+  if (drill && his()) { drill = null; state.auto = ownAuto; }
+  const was = byId(FORMATIONS, state.off.formation).personnel;
+  state[k][kind] = id;
+  let subbed = false;
+  if (his()) {
+    if (kind === 'coverage') state.def.disguise = false;
+    if (kind === 'coverage' || kind === 'play') { state.seen = state.book = true; state.ask = null; }
+  } else if (kind === 'formation' && state.auto && state.side === 'O' && thing.personnel !== was) { rollTheirs(); subbed = true; }
+  afterChange();
+  setCaption(`From the playbook: ${thing.name}.${subbed ? ' New personnel: they\'ve substituted.' : ''}`);
+  toSnap();
+  // The board is near the top of the page, but out of sight from the playbook, even where it stays at the top of a
+  // phone: it stays at the top only as far down as the calls go.
+  const b = $('board').getBoundingClientRect();
+  if (b.top < 0 || b.bottom > innerHeight) scrollTo({ top: 0, behavior: smooth() });
+}
+$('pbGrid').addEventListener('click', e => {
+  const b = e.target.closest('[data-show]');
+  if (b) showPart(...b.dataset.show.split(':'));
+});
 
 // ---------------------------------------------------------------- the key
 
@@ -1921,7 +1957,7 @@ const link = fromLink();
 const kept = link ? null : keptPlay();
 if (link === 'ok') firstHint = false; // a shared play runs on its own
 if (kept) { // back after a reload: no new look from the other coach
-  Object.assign(state, { off: kept.off, def: kept.def, seed: kept.seed, seen: kept.seen, ask: kept.ask });
+  Object.assign(state, { off: kept.off, def: kept.def, seed: kept.seed, seen: kept.seen, book: kept.book, ask: kept.ask });
   ({ drill, drilled } = kept);
   if (drill) state.auto = true;
   firstHint = !kept.snapped;

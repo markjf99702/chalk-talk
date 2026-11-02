@@ -2280,6 +2280,81 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Show on the board, from the playbook: every formation, front, coverage and play has a button beside its name that
+// puts it in the call, lines it up and brings the board back into view, with Snap ready to press. Your side and "Let
+// the other coach pick" stay as they are. A part of his call becomes his, and it's out (his coverage on the board and
+// in his card, and no question after the snap): you asked to see it. Your own part goes in as its chip would put it,
+// new personnel and all, and a drill ends when it's his call that changes.
+{
+  const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const { FORMATIONS, PLAYS, FRONTS, COVERAGES } = await import('../js/playbook.js');
+  const buttons = await p.$$eval('#pbGrid [data-show]', b => b.map(x => [x.closest('details').querySelector('summary').textContent, x.textContent, x.getAttribute('aria-label')]));
+  assert.deepEqual(buttons, [
+    ...FORMATIONS.map(f => ['Formations and personnel', 'Show on the board', `Show on the board: ${f.name}`]),
+    ...FRONTS.map(f => ['Fronts and techniques', 'Show on the board', `Show on the board: ${f.name}`]),
+    ...COVERAGES.map(cv => ['Coverages', 'Show on the board', `Show on the board: ${cv.name}`]),
+    ...PLAYS.filter(x => x.type === 'run').map(x => ['Run plays', 'Show on the board', `Show on the board: ${x.name}`]),
+    ...PLAYS.filter(x => x.type === 'pass').map(x => ['Pass plays', 'Show on the board', `Show on the board: ${x.name}`]),
+  ], 'a Show on the board button for every formation, front, coverage and play');
+  const now = () => p.evaluate(() => {
+    const { state } = window.chalkTalk, b = document.getElementById('board').getBoundingClientRect();
+    return { side: state.side, auto: state.auto, switch: document.getElementById('auto').checked, off: state.off, def: state.def, caption: document.getElementById('caption').textContent, matchup: document.getElementById('matchup').textContent,
+      hint: document.getElementById('theirsHint').textContent, inView: b.top >= 0 && b.bottom <= innerHeight, focus: document.activeElement.id };
+  });
+  const show = async name => {
+    const b = p.locator(`[aria-label="Show on the board: ${name}"]`); // (in a closed section, out of the accessibility tree)
+    await b.evaluate(x => { x.closest('details').open = true; });
+    await b.scrollIntoViewIfNeeded();
+    await b.click();
+    await p.waitForFunction(() => { const b = document.getElementById('board').getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; }, null, { timeout: 5000 });
+    return now();
+  };
+  // Calling the offense with the other coach picking: his coverage, out, and no disguise; his front and pressure stay.
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { front: 'over', coverage: 'c1', pressure: 'blitz', disguise: true }); lineUp(); });
+  assert.match(await p.textContent('#matchup'), /coverage hidden/);
+  let s = await show('Cover 3');
+  assert.deepEqual({ side: s.side, auto: s.auto, switch: s.switch, def: s.def, inView: s.inView, focus: s.focus }, { side: 'O', auto: true, switch: true, def: { front: 'over', coverage: 'c3', pressure: 'blitz', disguise: false }, inView: true, focus: 'snap' });
+  assert.equal(s.caption, 'From the playbook: Cover 3.');
+  assert.match(s.matchup, /vs  4-3 Over · Cover 3 · Blitz$/, 'his coverage from the playbook is hidden on the board');
+  assert.equal(s.hint, 'From the playbook: 4-3 Over, Cover 3, blitz. New look gets you a new one.');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.play.overlay.filter(o => o.team === 'D' && o.kind === 'zone').length > 0 && window.chalkTalk.board.showTheirs), true, 'his zone drops aren\'t drawn');
+  // Snapped, it isn't asked about: it was out already, and the hint goes back to how it was.
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.equal(await p.locator('#theirsAsk').isHidden(), true, 'a coverage shown from the playbook is asked about after the snap');
+  assert.equal(await p.textContent('#theirsHint'), 'They called: 4-3 Over, Cover 3, blitz.');
+  // Your own play: in, as its chip puts it; he keeps his call.
+  s = await show('Flood');
+  assert.deepEqual([s.off.play, s.def.coverage, s.caption], ['flood', 'c3', 'From the playbook: Flood.']);
+  assert.equal(await p.getByRole('radio', { name: 'Flood' }).getAttribute('aria-checked'), 'true');
+  // A formation with new personnel: he substitutes, and his new call is hidden.
+  s = await show('I-Form');
+  assert.deepEqual([s.off.formation, s.caption], ['iform', 'From the playbook: I-Form. New personnel: they\'ve substituted.']);
+  assert.match(s.matchup, /coverage hidden$/);
+  // Calling the defense: his play, out; your front.
+  await p.click('[data-side="D"]');
+  s = await show('Mesh');
+  assert.deepEqual([s.side, s.auto, s.off.play, s.caption], ['D', true, 'mesh', 'From the playbook: Mesh.']);
+  assert.match(s.matchup, / · Mesh  vs  /, 'his play from the playbook is hidden on the board');
+  s = await show('3-4');
+  assert.deepEqual([s.def.front, s.off.play, s.caption], ['34', 'mesh', 'From the playbook: 3-4.']);
+  // In a drill: your own part keeps it going; his ends it, and his picking goes back to how you had it.
+  await p.click('[data-side="O"]');
+  await p.click('#drillChips button:text-is("Beat Cover 2")');
+  s = await show('Slant-Flat');
+  assert.deepEqual([s.off.play, s.def.coverage, await p.evaluate(() => document.getElementById('drillNow').hidden)], ['slants', 'c2', false], 'your own play from the playbook ended the drill');
+  s = await show('Cover 4');
+  assert.deepEqual([s.auto, s.def.coverage, await p.evaluate(() => document.getElementById('drillNow').hidden), s.matchup.includes('Cover 4')], [true, 'c4', true, true], 'his coverage from the playbook in a drill');
+  // Calling both sides, it's simply yours.
+  await p.click('#auto');
+  s = await show('Cover 0');
+  assert.deepEqual([s.auto, s.def.coverage, s.caption], [false, 'c0', 'From the playbook: Cover 0.']);
+  await c.close();
+}
+
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback
 // 55%, Gun Trips 35 to 40% and Gun Doubles about 25%, and every play stays possible from every formation. The card says
 // what to read before the snap, and so does the playbook. Calling the offense, the card doesn't.
