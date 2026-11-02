@@ -434,10 +434,11 @@ function assignOffense(S) {
     if (!pl || key === 'side') continue;
     if (route === 'block') { pl.job = { kind: 'pro' }; continue; }
     const r = ROUTES[route];
-    // Backs run their routes to the side the play says (strong by default, the screen to the back's own side).
+    // Backs run their routes to the side the play says (strong by default, the screen to the back's own side, or from
+    // the Pistol, with the back straight behind the quarterback, to the weak side, as a shotgun back beside him is).
     let out = pl.side || S.s;
     if (pl.cls === 'rb' || pl.cls === 'fb') {
-      out = route === 'screen' && !under ? Math.sign(pl.x) || S.s : (map.side === 'W' ? -S.ps : S.ps);
+      out = route === 'screen' && !under ? Math.sign(pl.x) || -S.s : (map.side === 'W' ? -S.ps : S.ps);
       if (pl.cls === 'fb' && (route === 'check' || route === 'bflat')) out = map.side === 'S' && route === 'bflat' ? S.ps : -S.ps;
       // A back set off to one side checks down on his own side, outside his own tackle, not across the pocket.
       if (route === 'check' && Math.abs(pl.x) > 0.5) out = Math.sign(pl.x);
@@ -520,7 +521,8 @@ function passPro(S) {
     const extra = Math.abs(o.x) > 2 ? 0.9 : Math.abs(o.x) > 1 ? 0.25 : 0;
     o.set = { x: o.x * 1.15, y: o.y - depth - extra };
   }
-  for (const b of S.O) if (b.cls !== 'ol' && b.cls !== 'qb') b.set = { x: b.cls === 'te' ? b.x * 1.05 : b.x * 0.6 + Math.sign(b.x || S.s) * 1.5, y: Math.min(b.y, -3.2) };
+  // (A back straight behind the quarterback, in the Pistol, sets to the side his route goes.)
+  for (const b of S.O) if (b.cls !== 'ol' && b.cls !== 'qb') b.set = { x: b.cls === 'te' ? b.x * 1.05 : b.x * 0.6 + Math.sign(b.x || (b.job.kind === 'route' && b.job.out) || S.s) * 1.5, y: Math.min(b.y, -3.2) };
 }
 
 function assignRun(S) {

@@ -115,6 +115,31 @@ test('formations are legal: seven on the line, eleven a side, nobody offside', (
   }
 });
 
+test('the Pistol puts the back straight behind a quarterback 4 yards back, and Gun Ace splits both tight ends off the line', () => {
+  for (const flip of [false, true]) {
+    const P = prepare({ formation: 'pistol', play: 'screen', front: 'over', coverage: 'c2', pressure: 'four', flip }, 4), s = flip ? -1 : 1;
+    assert.deepEqual([P.QB.x, P.QB.y, P.RB.x, P.RB.y].map(v => v + 0), [0, -4, 0, -7], 'the Pistol\'s backfield');
+    // With the back behind him rather than beside him on the weak side, the screen still goes weak, and the back sets
+    // to that side to block for a moment first, rather than the other way and then back across.
+    assert.equal(P.RB.job.out, -s, 'the Pistol\'s screen goes to the weak side');
+    assert.ok(P.RB.set.x * -s > 1, `the back sets to the weak side first, at x ${P.RB.set.x}`);
+    const A = prepare({ formation: 'ace', play: 'smash', front: 'over', coverage: 'c2', pressure: 'four', flip }, 4);
+    const ends = A.O.filter(p => p.cls === 'te');
+    assert.equal(ends.length, 2);
+    for (const te of ends) assert.ok(te.y < -1 && Math.abs(te.x) > 5, `Gun Ace's ${te.label} is split off the line, at ${te.x}, ${te.y}`);
+    assert.deepEqual([A.ends[1], A.ends[-1]], [undefined, undefined], 'neither tight end is on the line');
+    assert.deepEqual([A.keys.S2.cls, A.keys.W2.cls], ['te', 'te'], 'each is the second receiver on his side');
+  }
+  // The screen from the Pistol: the quarterback isn't sacked by the end the screen side lets through any more often than
+  // from the other shotgun sets (it was one dropback in three when the screen went to the strong side).
+  let n = 0, sacks = 0;
+  for (const front of ['over', 'under', '34', 'nickel']) for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (let k = 0; k < 10; k++) {
+    n++;
+    if (simulate({ formation: 'pistol', play: 'screen', front, coverage, pressure: 'four', flip: k % 2 === 1 }, 500 + n).result.kind === 'sack') sacks++;
+  }
+  assert.ok(sacks / n < 0.15, `the Pistol's screen is a sack ${sacks} times in ${n}`);
+});
+
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
   for (const fm of FORMATIONS) for (const flip of [false, true]) for (const front of ['over', '34']) {
     const S = prepare({ formation: fm.id, play: 'power', front, coverage: 'c3', pressure: 'four', flip }, 7);
@@ -558,9 +583,10 @@ test('with a rusher closing in and nobody open, the quarterback throws it away, 
 });
 
 test('with a blitzer coming unblocked the quarterback throws hot, before he gets there', () => {
-  // Every pass play but the screen against Cover 0 (everyone rushes who isn't in man coverage), 192 dropbacks: more
-  // than half are hot throws now, every one out within 2.5 seconds (the Play-Action Shot's fake takes the longest) and
-  // naming a rusher nobody blocked.
+  // Every pass play but the screen against Cover 0 (everyone rushes who isn't in man coverage), 48 dropbacks from each
+  // formation: more than half are hot throws now, every one out within 2.75 seconds (the Play-Action Shot's fake takes
+  // the longest: over 3,000 such dropbacks the latest hot throw came at 2.6 seconds) and naming a rusher nobody
+  // blocked.
   let seed = 1, n = 0, hotN = 0;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.drop !== 'screen')) for (const fr of FRONTS) for (const flip of [false, true]) {
     const r = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: 'c0', pressure: 'blitz', flip }, seed++);
@@ -568,7 +594,7 @@ test('with a blitzer coming unblocked the quarterback throws hot, before he gets
     const t = r.events.find(e => e.kind === 'throw' && /, hot, with /.test(e.text));
     if (!t) continue;
     hotN++;
-    assert.ok(t.t < 2.5, `${pl.id} seed ${seed - 1}: a hot throw at ${t.t} s`);
+    assert.ok(t.t < 2.75, `${pl.id} seed ${seed - 1}: a hot throw at ${t.t} s`);
     const S = prepare(r.call, seed - 1), b = S.D.find(d => t.text.includes(`with ${name(S, d)} coming unblocked`));
     assert.ok(b && !r.frames.some(f => f.t <= t.t && f.eng[b.i] >= 0), `${pl.id} seed ${seed - 1}: "${t.text}" names a man nobody blocked`);
   }
@@ -711,7 +737,7 @@ test('motion: the board plays the time before the snap, and every call with it r
   // play without motion, and the frames before the snap come first, a twentieth of a second apart up to the snap, with
   // nobody jumping. A play without motion starts at the snap.
   let seed = 61;
-  for (const fm of FORMATIONS) for (const pl of PLAYS) for (const cv of COVERAGES) for (const motion of ['across', 'jet']) {
+  for (const fm of FORMATIONS.filter(f => f.motion)) for (const pl of PLAYS) for (const cv of COVERAGES) for (const motion of ['across', 'jet']) {
     const call = { formation: fm.id, play: pl.id, front: FRONTS[seed % 4].id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip: seed % 2 === 0, motion };
     const r = simulate(call, seed++), what = `${JSON.stringify(call)} seed ${seed - 1}`, F = r.frames;
     assert.ok(KINDS.has(r.result.kind), `${what}: result ${r.result.kind}`);
@@ -735,14 +761,14 @@ test('motion: the board plays the time before the snap, and every call with it r
 
 test('motion: he runs across and is counted on his new side; in man coverage his man runs with him, in zone they slide', () => {
   // Across: he starts where the formation has him and is set on the other side at the snap, at the spot the playbook
-  // gives him, counted there (Gun Trips becomes two and two, Gun Doubles three and one, and from I-Form and Singleback
-  // his side has more receivers than the tight end's, so the pass plays go his way). Jet: at the snap he's at the
+  // gives him, counted there (Gun Trips becomes two and two, Gun Doubles and the Pistol three and one, and from I-Form
+  // and Singleback his side has more receivers than the tight end's, so the pass plays go his way). Jet: at the snap he's at the
   // middle, at full speed. In man coverage the man who had him before the motion has him at the snap, on his side of
   // the field; in zone nobody does, and nobody crosses to the other side of the field to follow him.
   // (From I-Form and Singleback the Z leaves more receivers on the other side, and the pass plays go that way.)
-  const key = { trips: 'W2', doubles: 'S3', iform: 'S2', single: 'S2' };
+  const key = { trips: 'W2', doubles: 'S3', iform: 'S2', single: 'S2', pistol: 'S2' };
   let seed = 81;
-  for (const fm of FORMATIONS) for (const flip of [false, true]) for (const coverage of ['c1', 'c3', 'c0', 'c2']) for (const motion of ['across', 'jet']) {
+  for (const fm of FORMATIONS.filter(f => f.motion)) for (const flip of [false, true]) for (const coverage of ['c1', 'c3', 'c0', 'c2']) for (const motion of ['across', 'jet']) {
     const call = { formation: fm.id, play: 'smash', front: 'nickel', coverage, pressure: 'four', flip, motion }, what = JSON.stringify(call);
     const S = prepare(call, seed), r = simulate(call, seed), was = prepare({ ...call, motion: 'none' }, seed);
     seed++;
@@ -753,7 +779,7 @@ test('motion: he runs across and is counted on his new side; in man coverage his
     assert.equal(who.key, key[fm.id], `${what}: counted as ${who.key}`);
     if (motion === 'across') {
       assert.ok(Math.abs(at(snap, who.i).x - fm.motion.to * f) < 1e-3 && Math.hypot(at(snap, who.i).x - at(before, who.i).x, at(snap, who.i).y - at(before, who.i).y) < 1e-3, `${what}: set on the other side at the snap`);
-      assert.match(r.events.find(e => e.text.startsWith('He sets'))?.text ?? '', fm.id === 'trips' ? /two receivers each side now/ : fm.id === 'doubles' ? /three receivers on his side now, one on the other/ : /two receivers on his side now, one on the other|three receivers on his side now, one on the other/, what);
+      assert.match(r.events.find(e => e.text.startsWith('He sets'))?.text ?? '', fm.id === 'trips' ? /two receivers each side now/ : fm.id === 'doubles' || fm.id === 'pistol' ? /three receivers on his side now, one on the other/ : /two receivers on his side now, one on the other|three receivers on his side now, one on the other/, what);
     } else {
       assert.ok(Math.abs(at(snap, who.i).x) < 1, `${what}: at the snap the jet man is at the middle, at ${at(snap, who.i).x.toFixed(1)}`);
       assert.ok(Math.hypot(at(snap, who.i).x - at(before, who.i).x, at(snap, who.i).y - at(before, who.i).y) / 0.05 > 7, `${what}: still running at full speed at the snap`);
@@ -780,7 +806,8 @@ test('motion against a disguise: a safety showing deep who has the man in motion
   // gives the man coverage away, rather than diving down to the line to cross the formation.
   let found = 0;
   for (let seed = 1; seed < 400 && found < 5; seed++) {
-    const call = { formation: FORMATIONS[seed % 4].id, play: 'smash', front: FRONTS[Math.floor(seed / 4) % 4].id, coverage: 'c1', pressure: seed % 2 ? 'four' : 'blitz', disguise: true, motion: seed % 3 ? 'jet' : 'across', flip: seed % 5 < 2 };
+    const moves = FORMATIONS.filter(f => f.motion);
+    const call = { formation: moves[seed % moves.length].id, play: 'smash', front: FRONTS[Math.floor(seed / 4) % 4].id, coverage: 'c1', pressure: seed % 2 ? 'four' : 'blitz', disguise: true, motion: seed % 3 ? 'jet' : 'across', flip: seed % 5 < 2 };
     const r = simulate(call, seed);
     if (r.motion.man < 0 || r.players[r.motion.man].cls !== 's') continue;
     found++;
@@ -860,8 +887,8 @@ test('the drills\' notes say what the board shows', () => {
   // 4-3 Over otherwise), every play from every formation, 25 snaps each (100 a play); the run drill is I-Form's four
   // runs, 50 snaps each, against the two calls its note names. From 240 snaps a play and three start seeds (1, 100000,
   // 7777777): against Cover 2, Four Verticals 23.2-25.5 yards a play and Play-Action Shot 19.7-22.9, the next 13.3;
-  // Slant-Flat 75-80% and the Draw 72-75% succeed, the next 63%. Against Cover 3, Play-Action Shot 11.7-12.5 yards, the
-  // next 10.4; the Draw 72-78% and Slant-Flat 68-73%, the next 65%. Against Cover 0, the RB Screen 66-69%, Smash 59-62%
+  // Slant-Flat 75-80% and the Draw 72-75% succeed, the next 63%. Against Cover 3, Four Verticals 11.8-13.1 yards and
+  // Play-Action Shot 10.4-11.2 (from the six formations with the Pistol and Gun Ace), the next 8.1; the Draw 72-78% and Slant-Flat 68-73%, the next 65%. Against Cover 0, the RB Screen 66-69%, Smash 59-62%
   // and Slant-Flat 54-57%, the next 45%, and the Draw 1-3%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz
   // stops 80-82% for 2.3-3.2 yards a run, and in Cover 0 82-85% for 5.6-6.9. At this test's size four of five start
   // seeds (11, 222, 3333, 5; not 44444, where the Draw came out third against Cover 2) hold every line.
@@ -883,7 +910,7 @@ test('the drills\' notes say what the board shows', () => {
   assert.deepEqual(top(c2, 'avg', 2), ['pa', 'verts'], `Cover 2, yards a play: ${say(c2, 'avg')}`);
   assert.deepEqual(top(c2, 'rate', 2), ['draw', 'slants'], `Cover 2, success: ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
-  assert.deepEqual(top(c3, 'avg', 1), ['pa'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
+  assert.deepEqual(top(c3, 'avg', 2), ['pa', 'verts'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
   assert.deepEqual(top(c3, 'rate', 2), ['draw', 'slants'], `Cover 3, success: ${say(c3, 'rate')}`);
   const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
   assert.deepEqual(top(c0, 'rate', 3), ['screen', 'slants', 'smash'], `Cover 0, success: ${say(c0, 'rate')}`);

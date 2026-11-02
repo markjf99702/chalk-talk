@@ -66,7 +66,8 @@ const playShort = o => { const h = hotList(o); return byId(PLAYS, o.play).name +
 // The code for them in a shared link: each man's label and his route, run together ("HslantRBblock").
 const hotCode = o => hotList(o).map(([who, r]) => who + r).join('');
 // Motion before the snap (see presnap() in js/sim.js): none, across (he runs over and sets), or jet (at full speed, the
-// ball snapped as he crosses). Every formation here has a receiver off the line to send.
+// ball snapped as he crosses). A formation with a receiver off the line to send has its motion in the playbook (Gun Ace
+// has none: its men off the line are its two tight ends).
 const MOTIONS = ['none', 'across', 'jet'];
 const moving = o => (o.motion === 'across' || o.motion === 'jet') && !!byId(FORMATIONS, o.formation).motion;
 // "the H in motion across", "the H in jet motion", or '' with none.
@@ -159,7 +160,7 @@ const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.a
 // share of his plays are runs from each formation on 1st & 10, the rest passes, and every play stays possible. (A
 // design choice in the direction real offenses lean, more backs and tight ends running more; not a published
 // statistic.) The down moves it (see lean()).
-const RUN_SHARE = { iform: 0.6, single: 0.55, trips: 0.375, doubles: 0.25 };
+const RUN_SHARE = { iform: 0.6, single: 0.55, ace: 0.5, pistol: 0.45, trips: 0.375, doubles: 0.25 };
 // The down and distance moves his call the way NFL teams' calls moved from 1st & 10 to that situation in 2023 (nfl in
 // SITUATIONS, js/playbook.js), from his 1st & 10 call as it always was. A yes-or-no share moves by the same odds as the
 // NFL's did, so it stays between none and all: his nickel front by the NFL's five or more defensive backs, his blitz by

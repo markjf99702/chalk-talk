@@ -425,7 +425,7 @@ for (const side of ['O', 'D']) {
   await p.goto(base);
   const seen = await p.evaluate(() => {
     const { board, state, simulate, lineUp } = window.chalkTalk, ctx = board.ctx, on = [];
-    for (const formation of ['iform', 'single', 'doubles', 'trips']) for (const front of ['over', 'under', '34', 'nickel']) for (const coverage of ['c1', 'c3']) for (const side of ['O', 'D']) {
+    for (const formation of ['iform', 'single', 'pistol', 'ace', 'doubles', 'trips']) for (const front of ['over', 'under', '34', 'nickel']) for (const coverage of ['c1', 'c3']) for (const side of ['O', 'D']) {
       const play = simulate({ formation, play: 'power', flip: false, front, coverage, pressure: 'four' }, 3);
       board.setPlay(play); board.t = 0; board.flip = side === 'D'; board.render();
       const r = board.radius(), fs = board.labelSize();
@@ -2764,7 +2764,8 @@ for (const colorScheme of ['light', 'dark']) {
 }
 
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback
-// 55%, Gun Trips 35 to 40% and Gun Doubles about 25%, and every play stays possible from every formation. The card says
+// 55%, Gun Ace 50%, the Pistol 45%, Gun Trips 35 to 40% and Gun Doubles about 25%, and every play stays possible from
+// every formation. The card says
 // what to read before the snap, and so does the playbook. Calling the offense, the card doesn't.
 {
   const p = await phone();
@@ -2775,7 +2776,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap\. .*Read their personnel: two backs or two tight ends lean run, four receivers lean pass\./);
   const picks = await p.evaluate(() => {
     const { state, rollTheirs } = window.chalkTalk, runs = ['iz', 'oz', 'power', 'draw'], seen = {};
-    for (let k = 0; k < 6000; k++) {
+    for (let k = 0; k < 9000; k++) {
       rollTheirs();
       const f = (seen[state.off.formation] ||= { n: 0, run: 0, plays: {} });
       f.n++;
@@ -2784,9 +2785,10 @@ for (const colorScheme of ['light', 'dark']) {
     }
     return Object.fromEntries(Object.entries(seen).map(([f, { n, run, plays }]) => [f, { n, run: run / n, plays: Object.keys(plays).length }]));
   });
-  for (const [f, lo, hi] of [['iform', 0.54, 0.66], ['single', 0.49, 0.61], ['trips', 0.32, 0.43], ['doubles', 0.2, 0.3]]) {
+  const { PLAYS } = await import('../js/playbook.js');
+  for (const [f, lo, hi] of [['iform', 0.54, 0.66], ['single', 0.49, 0.61], ['ace', 0.44, 0.56], ['pistol', 0.39, 0.51], ['trips', 0.32, 0.43], ['doubles', 0.2, 0.3]]) {
     assert.ok(picks[f].run >= lo && picks[f].run <= hi, `${f} runs ${(picks[f].run * 100).toFixed(1)}% of the time (${picks[f].n} picks), not ${lo * 100}-${hi * 100}%`);
-    assert.equal(picks[f].plays, 11, `${f}: only ${picks[f].plays} of the 11 plays came up`);
+    assert.equal(picks[f].plays, PLAYS.length, `${f}: only ${picks[f].plays} of the ${PLAYS.length} plays came up`);
   }
   await p.context().close();
 }

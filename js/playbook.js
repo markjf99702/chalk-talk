@@ -8,7 +8,7 @@ export const HASH = 3.08;
 
 // Offensive line: the same five in every formation.
 // motion: who can go in motion (a receiver off the line) and where he sets on the other side, x as written (strength to
-// the right): the Z or the H runs across the formation, behind the line.
+// the right): the Z or the H runs across the formation, behind the line. A formation without it has no motion row.
 const LINE = [['LT', -3, -0.6, 'ol'], ['LG', -1.5, -0.6, 'ol'], ['C', 0, -0.6, 'ol'], ['RG', 1.5, -0.6, 'ol'], ['RT', 3, -0.6, 'ol']];
 
 export const FORMATIONS = [
@@ -23,6 +23,18 @@ export const FORMATIONS = [
     blurb: 'One back, a tight end at each end of the line, and two receivers a step off the line.',
     players: [['X', -16, -1.4, 'wr'], ['U', -4.6, -0.6, 'te'], ...LINE, ['Y', 4.6, -0.6, 'te'], ['Z', 16, -1.4, 'wr'],
       ['QB', 0, -1.3, 'qb'], ['RB', 0, -6.3, 'rb']],
+  },
+  {
+    id: 'pistol', name: 'Pistol', personnel: '11', under: false, motion: { who: 'H', to: 9.5 },
+    blurb: 'The quarterback 4 yards behind the center, nearer than in the shotgun, with the back straight behind him, so where the back lines up doesn\'t tell the defense which way a run is going. A tight end on the line and three receivers.',
+    players: [['X', -17.5, -0.6, 'wr'], ['H', -10, -1.4, 'wr'], ...LINE, ['Y', 4.6, -0.6, 'te'], ['Z', 16, -1.4, 'wr'],
+      ['QB', 0, -4, 'qb'], ['RB', 0, -7, 'rb']],
+  },
+  {
+    id: 'ace', name: 'Gun Ace', personnel: '12', under: false,
+    blurb: 'Shotgun with two tight ends, each split a few yards outside a tackle and a step off the line, and a receiver out wide on each side. From there a tight end can block on a run or get straight into his route.',
+    players: [['X', -18, -0.6, 'wr'], ['U', -6.2, -1.4, 'te'], ...LINE, ['Y', 6.2, -1.4, 'te'], ['Z', 18, -0.6, 'wr'],
+      ['QB', 0, -5, 'qb'], ['RB', -1.6, -5.2, 'rb']],
   },
   {
     id: 'doubles', name: 'Gun Doubles', personnel: '10', under: false, motion: { who: 'H', to: 6.5 },
@@ -324,7 +336,7 @@ export const DRILLS = [
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
     brief: 'They play Cover 3 and rush four, every snap.',
-    note: 'Play-Action Shot gains the most yards a play against Cover 3 here: the linebackers step up for the fake, and the deep crosser runs in behind them. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, the Draw and Slant-Flat get there most often.',
+    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 3 here: four receivers going deep against three deep defenders, and the deep crosser running in behind linebackers who stepped up for the fake. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, the Draw and Slant-Flat get there most often.',
   },
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
