@@ -1,6 +1,6 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS, needed } from './playbook.js';
-import { simulate, prepare, name, hotRoutes } from './sim.js';
+import { simulate, prepare, name, hotRoutes, cantCall } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
 
@@ -42,7 +42,8 @@ const state = {
 // Whether call a has everything call b has (the hot routes alike, none and {} the same).
 const same = (a, b) => Object.keys(b).every(f => (f === 'hot' ? JSON.stringify(a.hot || {}) === JSON.stringify(b.hot || {}) : a[f] === b[f]));
 // A kept call that this version can play, tidied up, or null.
-const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: o.play, flip: !!o.flip, motion: MOTIONS.includes(o.motion) ? o.motion : 'none', hot: okHot(o.hot, o.formation, o.play) } : null);
+// (One the formation can't run, a run from Empty, plays Smash: see callable().)
+const okOff = o => (o && FORMATIONS.some(f => f.id === o.formation) && PLAYS.some(p => p.id === o.play) ? { formation: o.formation, play: cantCall(o.formation, o.play) ? 'smash' : o.play, flip: !!o.flip, motion: MOTIONS.includes(o.motion) ? o.motion : 'none', hot: okHot(o.hot, o.formation, o.play) } : null);
 // Hot routes: a receiver or a back given another route before the snap, by his label ({ H: 'slant' }), on a pass play
 // (see hotRoutes() in js/sim.js). Kept in the order the formation lists its men, only the ones that can be, and only
 // with the call they were given for: a new play or formation starts from the play as drawn.
@@ -160,7 +161,7 @@ const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.a
 // share of his plays are runs from each formation on 1st & 10, the rest passes, and every play stays possible. (A
 // design choice in the direction real offenses lean, more backs and tight ends running more; not a published
 // statistic.) The down moves it (see lean()).
-const RUN_SHARE = { iform: 0.6, single: 0.55, ace: 0.5, pistol: 0.45, trips: 0.375, doubles: 0.25 };
+const RUN_SHARE = { iform: 0.6, single: 0.55, ace: 0.5, pistol: 0.45, trips: 0.375, doubles: 0.25, empty: 0 };
 // The down and distance moves his call the way NFL teams' calls moved from 1st & 10 to that situation in 2023 (nfl in
 // SITUATIONS, js/playbook.js), from his 1st & 10 call as it always was. A yes-or-no share moves by the same odds as the
 // NFL's did, so it stays between none and all: his nickel front by the NFL's five or more defensive backs, his blitz by
@@ -173,7 +174,7 @@ function lean(sit) {
   const odds = (from, to) => p => { if (from === to) return p; const o = (p / (1 - p)) * (to / (100 - to)) / (from / (100 - from)); return o / (1 + o); };
   const share = n => { const all = Object.values(n.cover).reduce((x, y) => x + y, 0); return c => n.cover[c] / all; };
   const was = share(a), now = share(b);
-  return { nickel: odds(a.nickel, b.nickel), blitz: odds(a.blitz, b.blitz), run: odds(100 - a.pass, 100 - b.pass), cover: (c, p) => Math.max(0.01, p + now(c) - was(c)) };
+  return { nickel: odds(a.nickel, b.nickel), blitz: odds(a.blitz, b.blitz), run: odds(100 - a.pass, 100 - b.pass), cover: (c, p) => Math.max(0.01, p + now(c) - was(c)), passing: b.pass / a.pass };
 }
 // Calling the defense, his offense puts a man in motion about one snap in three, across or jet alike. (A design
 // choice, so motion comes up as you watch your own defense; not a published statistic.)
@@ -203,9 +204,13 @@ function rollTheirs() {
       state.def.pressure = R() < L.blitz(0.25) ? 'blitz' : 'four';
       state.def.disguise = DISGUISES.includes(state.def.coverage) && R() < DISGUISE_SHARE;
     } else {
-      state.off.formation = R.pick(FORMATIONS).id;
-      const run = L.run(RUN_SHARE[state.off.formation] ?? 0.42), runs = PLAYS.filter(p => p.type === 'run').length;
-      state.off.play = w(PLAYS.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (PLAYS.length - runs)]));
+      // Empty, which can only throw, half as often as each of the others on 1st & 10, and more or less often as the NFL's
+      // passes went with the down (a design choice, so it comes up without taking over; not a published statistic)
+      state.off.formation = w(FORMATIONS.map(f => [f.id, f.id === 'empty' ? 0.5 * L.passing : 1]));
+      // (only the plays his formation can run: from Empty, no runs, no fake and no screen)
+      const can = PLAYS.filter(p => !cantCall(state.off.formation, p.id)), runs = can.filter(p => p.type === 'run').length;
+      const run = runs ? L.run(RUN_SHARE[state.off.formation] ?? 0.42) : 0;
+      state.off.play = w(can.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (can.length - runs)]));
       state.off.flip = R() < 0.5;
       const m = R();
       state.off.motion = m < MOTION_SHARE / 2 ? 'across' : m < MOTION_SHARE ? 'jet' : 'none';
@@ -942,10 +947,12 @@ function chips(host, label, items, current, pick, opts = {}) {
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(it.id === current));
       b.dataset.key = `${label}:${it.id}`; // the same chip once the choosers are drawn again, for the keyboard's focus
-      b.disabled = !!opts.disabled;
+      // A chip can be greyed out on its own (off: why, which a screen reader says after its name, and a pointer shows).
+      b.disabled = !!opts.disabled || !!it.off;
+      if (it.off) b.title = it.off;
       // The small print a screen reader says in full: "I-Form 21 personnel", not a bare "twenty-one". (The name still
       // starts with the words on the chip, for speech input: WCAG 2.2, 2.5.3 Label in Name.)
-      b.innerHTML = it.sub ? `${esc(it.name)} <small>${esc(it.sub)}<span class="sr-only"> ${esc(it.subWord)}</span></small>` : esc(it.name);
+      b.innerHTML = (it.sub ? `${esc(it.name)} <small>${esc(it.sub)}<span class="sr-only"> ${esc(it.subWord)}</span></small>` : esc(it.name)) + (it.off ? `<span class="sr-only">: ${esc(it.off)}</span>` : '');
       b.addEventListener('click', () => pick(it.id));
       row.append(b);
     }
@@ -991,10 +998,11 @@ function offenseChooser(host, readonly) {
     // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
     // or strong side keeps his call, the way an audible at the line does. The board says so until the snap, the way New
     // look does, since his new call is hidden.
+    const fixed = callable();
     const subbed = state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was;
     if (subbed) rollTheirs();
     afterChange();
-    if (subbed) setCaption('New personnel: they\'ve substituted.');
+    if (subbed || fixed) setCaption([fixed, subbed ? 'New personnel: they\'ve substituted.' : ''].filter(Boolean).join(' '));
   };
   chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel, subWord: 'personnel' })), fm.id, id => set({ formation: id }), {
     disabled: readonly, blurb: `${fm.blurb} ${personnelWords(fm.personnel)}`,
@@ -1007,10 +1015,24 @@ function offenseChooser(host, readonly) {
       disabled: readonly, blurb: motionBlurb(fm, moving(state.off) ? state.off.motion : 'none'),
     });
   }
-  chips(host, 'Play', PLAYS, pl.id, id => set({ play: id }), {
-    disabled: readonly, blurb: pl.blurb,
-    groups: [{ name: 'Runs', items: PLAYS.filter(p => p.type === 'run') }, { name: 'Passes', items: PLAYS.filter(p => p.type === 'pass') }],
+  // From Empty the plays that need a back are greyed out, each saying why (see cantCall() in js/sim.js).
+  const items = PLAYS.map(p => ({ id: p.id, name: p.name, type: p.type, off: cantCall(fm.id, p.id) }));
+  chips(host, 'Play', items, pl.id, id => set({ play: id }), {
+    disabled: readonly, blurb: pl.blurb + (items.some(it => it.off) ? ` From ${fm.name} there's no back behind the line: no runs, no play-action fake and no RB Screen.` : ''),
+    groups: [{ name: 'Runs', items: items.filter(p => p.type === 'run') }, { name: 'Passes', items: items.filter(p => p.type === 'pass') }],
   });
+}
+
+// A call the board can't make, a formation with no back and a play that needs one (see cantCall() in js/sim.js), put
+// right: the play becomes Smash, or (keep: 'play', when the play was picked from the playbook) the formation becomes
+// Gun Trips. The words for the caption, or '' when there was nothing to put right.
+function callable(keep) {
+  const { formation, play } = state.off, no = cantCall(formation, play), fm = byId(FORMATIONS, formation);
+  if (!no) return '';
+  state.off.hot = {};
+  if (keep === 'play') { state.off.formation = 'trips'; state.off.motion = 'none'; return `${fm.name} has no back for it, so it's from Gun Trips.`; }
+  state.off.play = 'smash';
+  return `${fm.name}: ${no.charAt(0).toLowerCase()}${no.slice(1, -1)}, so the play is Smash.`;
 }
 
 // "21 personnel: two backs, one tight end.", from the two digits.
@@ -1517,7 +1539,7 @@ function boardWords(P) {
   };
   const sides = side(strong) === side(-strong) ? `${side(strong)} each side` : `${side(strong)} ${lr(strong)}, ${side(-strong)} ${lr(-strong)}`;
   const backs = P.players.filter(p => p.cls === 'rb' || p.cls === 'fb').length;
-  const backfield = fm.under ? `the quarterback under center, ${many(backs, 'back', 'backs')} behind him` : `the quarterback in the shotgun, ${many(backs, 'back', 'backs')} beside him`;
+  const backfield = fm.under ? `the quarterback under center, ${many(backs, 'back', 'backs')} behind him` : !backs ? 'the quarterback in the shotgun, nobody in the backfield' : `the quarterback in the shotgun, ${many(backs, 'back', 'backs')} ${fm.players.some(([, x, , c]) => c === 'rb' && !x) ? 'behind' : 'beside'} him`;
   const high = P.box.high, deep = high >= 2 ? `${COUNT[high]} safeties deep` : high === 1 ? 'one safety deep' : 'nobody deep';
   const depth = y => (y < 2.5 ? 'pressed' : y < 6 ? 'about 5 yards off' : '7 yards or more off'); // as the corners' read says
   const cbs = P.players.filter(p => p.label === 'CB').map(p => depth(p.y));
@@ -1812,6 +1834,7 @@ function fromLink() {
   const [, side, formation, playId, flip, front, coverage, pressure, seed, disguise, motion, code = '', sit = '1and10'] = m;
   if ((motion && !MOTIONS.includes(motion)) || !okSit(sit)) return 'unknown';
   if (!FORMATIONS.some(f => f.id === formation) || !PLAYS.some(p => p.id === playId) || !FRONTS.some(f => f.id === front) || !COVERAGES.some(c => c.id === coverage)) return 'unknown';
+  if (cantCall(formation, playId)) return 'unknown'; // (a run from Empty: no link the board makes has one)
   const given = [...code.matchAll(/([A-Z]+)([a-z]+)/g)], hot = okHot(Object.fromEntries(given.map(([, who, r]) => [who, r])), formation, playId);
   if (given.map(g => g[0]).join('') !== code || Object.keys(hot).length !== given.length) return 'unknown';
   Object.assign(state, { side, sit, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
@@ -1924,7 +1947,7 @@ async function runChart() {
   if (state.side === 'D' && hidden()) base.motion = 'none'; // his motion is part of his hidden play
   const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
-    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others')
+    : PLAYS.filter(p => !cantCall(base.formation, p.id)).map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others'; from Empty, no runs)
   const sit = situation();
   chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
   $('chartHint').textContent = chartHint();
@@ -2047,8 +2070,8 @@ function playbook() {
   // A row can end with what it shows on the board, [kind, id, name]: its name then has a button beside it (see showPart()).
   const showing = (a, [kind, id, name]) => `<dt class="shows"><span>${esc(a)}</span><button type="button" class="show" data-show="${kind}:${esc(id)}" aria-label="Show on the board: ${esc(name)}">Show on the board</button></dt>`;
   const dl = rows => `<dl>${rows.map(([a, b, show]) => `${show ? showing(a, show) : `<dt>${esc(a)}</dt>`}<dd>${esc(b)}</dd>`).join('')}</dl>`;
-  const pos = keys => keys.map(k => [`${k.replace(/34|slot/, '')} · ${POSITIONS[k][0]}`, POSITIONS[k][1]]);
-  sec('Offense positions', false, dl(pos(['QB', 'RB', 'FB', 'X', 'Z', 'H', 'Y', 'U', 'LT', 'LG', 'C', 'RG', 'RT'])));
+  const pos = keys => keys.map(k => [`${k.replace(/34|slot|wide/, '')} · ${POSITIONS[k][0]}`, POSITIONS[k][1]]);
+  sec('Offense positions', false, dl(pos(['QB', 'RB', 'RBwide', 'FB', 'X', 'Z', 'H', 'Y', 'U', 'LT', 'LG', 'C', 'RG', 'RT'])));
   sec('Defense positions', false, dl(pos(['DE', 'DT', 'NT', 'S', 'M', 'W', 'J', 'CB', 'NB', 'FS', 'SS'])));
   sec('Formations and personnel', false, `<p>${esc(PERSONNEL)}</p><p>Personnel is the defense's first read: two backs or two tight ends lean run, four receivers lean pass.</p>` + dl(FORMATIONS.map(f => [`${f.name} · ${f.personnel}`, f.blurb, ['formation', f.id, f.name]])));
   sec('Fronts and techniques', false, `<p>Technique numbers tell a defensive lineman where to line up against the offensive line. Gaps between the blockers are lettered from the center out: A between the center and a guard, B between guard and tackle, C outside the tackle, D outside the tight end.</p>`
@@ -2179,13 +2202,14 @@ function showPart(kind, id) {
   const was = byId(FORMATIONS, state.off.formation).personnel;
   if (k === 'off' && state.off[kind] !== id) state.off.hot = {}; // the play as drawn
   state[k][kind] = id;
+  const fixed = k === 'off' ? callable(kind === 'play' ? 'play' : '') : '';
   let subbed = false;
   if (his()) {
     if (kind === 'coverage') state.def.disguise = false;
     if (kind === 'coverage' || kind === 'play') { state.seen = state.book = true; state.ask = null; }
-  } else if (kind === 'formation' && state.auto && state.side === 'O' && thing.personnel !== was) { rollTheirs(); subbed = true; }
+  } else if (k === 'off' && state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was) { rollTheirs(); subbed = true; }
   afterChange();
-  setCaption(`From the playbook: ${thing.name}.${subbed ? ' New personnel: they\'ve substituted.' : ''}`);
+  setCaption(`From the playbook: ${thing.name}.${fixed ? ` ${fixed}` : ''}${subbed ? ' New personnel: they\'ve substituted.' : ''}`);
   toSnap();
   // The board is near the top of the page, but out of sight from the playbook, even where it stays at the top of a
   // phone: it stays at the top only as far down as the calls go.

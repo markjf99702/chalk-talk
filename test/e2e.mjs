@@ -425,8 +425,8 @@ for (const side of ['O', 'D']) {
   await p.goto(base);
   const seen = await p.evaluate(() => {
     const { board, state, simulate, lineUp } = window.chalkTalk, ctx = board.ctx, on = [];
-    for (const formation of ['iform', 'single', 'pistol', 'ace', 'doubles', 'trips']) for (const front of ['over', 'under', '34', 'nickel']) for (const coverage of ['c1', 'c3']) for (const side of ['O', 'D']) {
-      const play = simulate({ formation, play: 'power', flip: false, front, coverage, pressure: 'four' }, 3);
+    for (const formation of ['iform', 'single', 'pistol', 'ace', 'doubles', 'trips', 'empty']) for (const front of ['over', 'under', '34', 'nickel']) for (const coverage of ['c1', 'c3']) for (const side of ['O', 'D']) {
+      const play = simulate({ formation, play: formation === 'empty' ? 'smash' : 'power', flip: false, front, coverage, pressure: 'four' }, 3);
       board.setPlay(play); board.t = 0; board.flip = side === 'D'; board.render();
       const r = board.radius(), fs = board.labelSize();
       ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
@@ -2414,6 +2414,43 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Empty: nobody in the backfield, so the plays that need a back are greyed out, each saying why, and the Play row says
+// so. Picking Empty with one of them called makes the play Smash, and the board says so; showing a run from the
+// playbook while in Empty puts it in Gun Trips. The split-out back's card says what he is. A link to a run from Empty,
+// which the board never makes, is one this version doesn't have.
+{
+  const p = await phone();
+  const row = () => p.evaluate(() => {
+    const pick = [...document.querySelectorAll('#mineBody .pick')].find(x => x.querySelector('.pick-label').textContent === 'Play');
+    return { off: [...pick.querySelectorAll('.chip:disabled')].map(b => [b.textContent, b.title]), on: pick.querySelector('[aria-checked="true"]').textContent, blurb: pick.querySelector('.blurb').textContent };
+  });
+  await p.getByRole('radio', { name: 'Inside Zone' }).click();
+  await p.getByRole('radio', { name: /^Empty/ }).click();
+  let now = await row();
+  assert.equal(now.on, 'Smash', 'Empty with a run called plays Smash');
+  assert.equal(await p.textContent('#caption'), 'Empty: no back to hand it to, so the play is Smash. New personnel: they\'ve substituted.');
+  assert.deepEqual(now.off, [['Inside Zone', 'No back to hand it to.'], ['Outside Zone', 'No back to hand it to.'], ['Power', 'No back to hand it to.'], ['Draw', 'No back to hand it to.'],
+    ['Play-Action Shot', 'No back to fake the handoff to.'], ['RB Screen', 'No back behind the line to throw the screen to.']].map(([name, why]) => [`${name}: ${why}`, why]), 'the plays that need a back are greyed out, each with why');
+  assert.match(now.blurb, /From Empty there's no back behind the line: no runs, no play-action fake and no RB Screen\.$/);
+  assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.off.formation, state.off.play]; }), ['empty', 'smash']);
+  // the back, split out: tap his button in Every player's job
+  const card = await p.evaluate(() => {
+    document.querySelector('#jobs summary')?.click();
+    const b = [...document.querySelectorAll('#jobsBody button')].find(x => /^RB\b/.test(x.textContent));
+    b?.click();
+    return document.getElementById('whoPos')?.textContent || '';
+  });
+  assert.match(card, /Running back, split out/, `the split-out back's card: "${card.slice(0, 80)}"`);
+  // a run from the playbook: it's from Gun Trips
+  await p.evaluate(() => document.querySelector('[data-show="play:power"]').click());
+  assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.off.formation, state.off.play]; }), ['trips', 'power']);
+  assert.match(await p.textContent('#caption'), /^From the playbook: Power\. Empty has no back for it, so it's from Gun Trips\./);
+  // a link to a run from Empty
+  await p.goto(`${base}#p=O.empty.iz.0.nickel.c2.four.5.0.none.1and10`);
+  assert.equal(await p.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
+  await p.context().close();
+}
+
 // Show on the board, from the playbook: every formation, front, coverage and play has a button beside its name that
 // puts it in the call, lines it up and brings the board back into view, with Snap ready to press. Your side and "Let
 // the other coach pick" stay as they are. A part of his call becomes his, and it's out (his coverage on the board and
@@ -2764,8 +2801,9 @@ for (const colorScheme of ['light', 'dark']) {
 }
 
 // Calling the defense, the other coach's play leans on his personnel: I-Form runs about 60% of the time, Singleback
-// 55%, Gun Ace 50%, the Pistol 45%, Gun Trips 35 to 40% and Gun Doubles about 25%, and every play stays possible from
-// every formation. The card says
+// 55%, Gun Ace 50%, the Pistol 45%, Gun Trips 35 to 40%, Gun Doubles about 25% and Empty never (no back to hand it
+// to), and every play a formation can run stays possible from it; he lines up in Empty half as often as in each of the
+// others on 1st & 10. The card says
 // what to read before the snap, and so does the playbook. Calling the offense, the card doesn't.
 {
   const p = await phone();
@@ -2776,7 +2814,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap\. .*Read their personnel: two backs or two tight ends lean run, four receivers lean pass\./);
   const picks = await p.evaluate(() => {
     const { state, rollTheirs } = window.chalkTalk, runs = ['iz', 'oz', 'power', 'draw'], seen = {};
-    for (let k = 0; k < 9000; k++) {
+    for (let k = 0; k < 10500; k++) {
       rollTheirs();
       const f = (seen[state.off.formation] ||= { n: 0, run: 0, plays: {} });
       f.n++;
@@ -2785,10 +2823,13 @@ for (const colorScheme of ['light', 'dark']) {
     }
     return Object.fromEntries(Object.entries(seen).map(([f, { n, run, plays }]) => [f, { n, run: run / n, plays: Object.keys(plays).length }]));
   });
-  const { PLAYS } = await import('../js/playbook.js');
-  for (const [f, lo, hi] of [['iform', 0.54, 0.66], ['single', 0.49, 0.61], ['ace', 0.44, 0.56], ['pistol', 0.39, 0.51], ['trips', 0.32, 0.43], ['doubles', 0.2, 0.3]]) {
+  const all = Object.values(picks).reduce((a, f) => a + f.n, 0);
+  assert.ok(Math.abs(picks.empty.n / all - 1 / 13) < 0.015, `Empty on ${(100 * picks.empty.n / all).toFixed(1)}% of his snaps, not about 1 in 13`);
+  const { PLAYS } = await import('../js/playbook.js'), { cantCall } = await import('../js/sim.js');
+  for (const [f, lo, hi] of [['iform', 0.54, 0.66], ['single', 0.49, 0.61], ['ace', 0.44, 0.56], ['pistol', 0.39, 0.51], ['trips', 0.32, 0.43], ['doubles', 0.2, 0.3], ['empty', 0, 0]]) {
     assert.ok(picks[f].run >= lo && picks[f].run <= hi, `${f} runs ${(picks[f].run * 100).toFixed(1)}% of the time (${picks[f].n} picks), not ${lo * 100}-${hi * 100}%`);
-    assert.equal(picks[f].plays, PLAYS.length, `${f}: only ${picks[f].plays} of the ${PLAYS.length} plays came up`);
+    const can = PLAYS.filter(pl => !cantCall(f, pl.id)).length;
+    assert.equal(picks[f].plays, can, `${f}: only ${picks[f].plays} of the ${can} plays it can run came up`);
   }
   await p.context().close();
 }

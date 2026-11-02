@@ -1,7 +1,7 @@
 // Unit tests for the simulator:  node --test test/sim.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simulate, prepare, name, hotRoutes } from '../js/sim.js';
+import { simulate, prepare, name, hotRoutes, cantCall } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -13,6 +13,7 @@ const ended = r => r.events.some(e => ENDINGS.has(e.kind));
 test('every call against every defense runs to a finish', () => {
   let seed = 1;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
     const r = simulate(call, seed++);
     const what = JSON.stringify(call);
@@ -46,6 +47,7 @@ test('every call against every defense runs to a finish', () => {
 test('while the play is live nobody stands on the quarterback after the throw, and only the ball carrier leaves the field', () => {
   let seed = 271828;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
     const r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -71,6 +73,7 @@ test('a ball carrier in a pile is squeezed out of it, not thrown clear in one fr
   // of a yard or more in a twentieth of a second (from this seed, Gun Trips Power into a nickel Cover 2 blitz).
   let seed = 1;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip };
     const r = simulate(call, seed++);
     const hand = r.events.find(e => e.kind === 'hand');
@@ -107,7 +110,7 @@ test('the same seed replays the same play', () => {
 
 test('formations are legal: seven on the line, eleven a side, nobody offside', () => {
   for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) {
-    const S = prepare({ formation: fm.id, play: 'iz', front: fr.id, coverage: cv.id, pressure: 'four' }, 3);
+    const S = prepare({ formation: fm.id, play: cantCall(fm.id, 'iz') ? 'smash' : 'iz', front: fr.id, coverage: cv.id, pressure: 'four' }, 3);
     assert.equal(S.O.length, 11); assert.equal(S.D.length, 11);
     assert.equal(S.O.filter(p => p.y > -1).length, 7, `${fm.id}: players on the line`);
     for (const d of S.D) assert.ok(d.y >= 0.6, `${fm.id} vs ${fr.id} ${cv.id}: ${d.label} is offside`);
@@ -140,8 +143,36 @@ test('the Pistol puts the back straight behind a quarterback 4 yards back, and G
   assert.ok(sacks / n < 0.15, `the Pistol's screen is a sack ${sacks} times in ${n}`);
 });
 
+test('Empty: the back splits out as a fifth receiver, only the five linemen block, and nothing needs a back behind the line', () => {
+  for (const flip of [false, true]) for (const pl of PLAYS) {
+    const call = { formation: 'empty', play: pl.id, front: 'nickel', coverage: 'c1', pressure: 'blitz', flip };
+    const no = cantCall('empty', pl.id);
+    // No back to hand it to, to fake to, or to throw the screen to.
+    assert.equal(!!no, pl.type === 'run' || pl.drop === 'pa' || pl.drop === 'screen', `${pl.id}: "${no}"`);
+    if (no) { assert.throws(() => prepare(call, 1), /Empty/); continue; }
+    const S = prepare(call, 1), rb = S.O.find(p => p.label === 'RB');
+    assert.equal(S.RB, undefined, 'nobody in the backfield');
+    assert.equal(rb.info, 'RBwide');
+    assert.ok(rb.key && /^[SW][12]$/.test(rb.key), `the back is counted as a receiver, ${rb.key}`);
+    assert.deepEqual([S.strongList.length, S.weakList.length], [3, 2], 'three receivers on one side, two on the other');
+    assert.deepEqual(hotRoutes(pl, rb), HOT.receiver, 'he can be given a receiver\'s routes');
+    assert.equal(rb.job.kind, 'route', `${pl.id}: he runs a route`);
+    assert.ok(!['check', 'swing', 'wheel', 'bflat', 'screen'].includes(rb.job.route), `${pl.id}: a receiver's route, not ${rb.job.route}`);
+    assert.deepEqual(S.protection.map(p => p.cls), ['ol', 'ol', 'ol', 'ol', 'ol'], `${pl.id}: the five linemen protect`);
+  }
+  // Every other formation has a back, and can call every play.
+  for (const fm of FORMATIONS.filter(f => f.id !== 'empty')) for (const pl of PLAYS) assert.equal(cantCall(fm.id, pl.id), '', `${fm.id} ${pl.id}`);
+  // Five blockers against six rushers in Cover 0: one comes free, and the ball comes out hot.
+  let hot = 0, n = 0;
+  for (const pl of PLAYS.filter(p => !cantCall('empty', p.id))) for (const front of ['over', 'nickel']) for (let k = 0; k < 8; k++) {
+    const r = simulate({ formation: 'empty', play: pl.id, front, coverage: 'c0', pressure: 'blitz', flip: k % 2 === 1 }, 900 + n++);
+    if (r.events.some(e => e.kind === 'throw' && /, hot, with /.test(e.text))) hot++;
+  }
+  assert.ok(hot / n > 0.5, `${hot} hot throws in ${n} dropbacks from Empty against Cover 0`);
+});
+
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
-  for (const fm of FORMATIONS) for (const flip of [false, true]) for (const front of ['over', '34']) {
+  for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'power'))) for (const flip of [false, true]) for (const front of ['over', '34']) {
     const S = prepare({ formation: fm.id, play: 'power', front, coverage: 'c3', pressure: 'four', flip }, 7);
     const what = `${fm.id} vs ${front}, strong side ${flip ? 'left' : 'right'}`;
     const line = S.OL.slice().sort((a, b) => a.x - b.x).map(o => o.label);
@@ -186,7 +217,7 @@ test('man coverage lines up on its men, and an edge man on the tight end stays o
 
 test('on the screen the linemen let the rushers go, and in man coverage the back\'s man comes after them', () => {
   let seed = 300, thrown = 0, caught = 0;
-  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+  for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'screen'))) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
     const call = { formation: fm.id, play: 'screen', front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
     const S = prepare(call, seed), r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -210,6 +241,7 @@ test('on the screen the linemen let the rushers go, and in man coverage the back
 test('the rush read tells the truth: only blitzers are drawn as blitzers, and only rushers nobody blocked came unblocked', () => {
   let seed = 500, came = 0;
   for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const pl of PLAYS.filter(p => p.type === 'pass')) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
     const r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -233,6 +265,7 @@ test('the rush read tells the truth: only blitzers are drawn as blitzers, and on
 
 test('pass protection picks up every rusher it has the men for: a rusher goes free only when they outnumber the blockers', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.id !== 'screen')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip }, 5);
     const what = `${fm.id} ${pl.id} vs ${fr.id} ${cv.id} ${pressure}${flip ? ', strong side left' : ''}`;
     const rushers = S.D.filter(d => d.job.kind === 'rush');
@@ -248,6 +281,7 @@ test('pass protection picks up every rusher it has the men for: a rusher goes fr
 test('the words match the board: zones by strong and weak side, a run in every defender\'s card, and plain play-by-play', () => {
   let seed = 314000;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
     const S = prepare(call, seed), r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -285,6 +319,7 @@ test('the words match the board: zones by strong and weak side, a run in every d
 test('a run names the hole: one line, when the ball carrier gets to the line after the handoff', () => {
   let seed = 104729, named = 0;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip };
     const r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -309,6 +344,7 @@ test('the play-by-play names the run at the handoff, and the blitzers right afte
   let seed = 271000, blitzes = 0;
   const RUN = { zone: /^Handoff to the running back, aiming just outside the guard\.$/, reach: /^Handoff to the running back, heading for the edge\.$/, draw: /^A late handoff to the running back, under the rush\.$/ };
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
     const S = prepare(call, seed), r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -335,6 +371,7 @@ test('the play-by-play names the run at the handoff, and the blitzers right afte
 test('every line of the play-by-play that names a man says which man, for the board to point at', () => {
   let seed = 4000;
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const r = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 }, seed++);
     for (const e of r.events) {
       if (e.text === 'It lands out of bounds. Incomplete.') continue; // names nobody
@@ -345,6 +382,7 @@ test('every line of the play-by-play that names a man says which man, for the bo
 
 test('run blocking: the men on the line first, linebackers next, and never a safety', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run' && p.scheme !== 'draw')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip }, 11);
     const what = `${fm.id} ${pl.id} vs ${fr.id} ${cv.id} ${pressure}${flip ? ', strong side left' : ''}`;
     const blockers = S.O.filter(o => o.job.kind === 'block');
@@ -379,6 +417,7 @@ test('run blocking: the men on the line first, linebackers next, and never a saf
 test('on a run a rusher doesn\'t walk through anybody: a lineman bumps any rusher who runs into him', () => {
   let seed = 2024;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip };
     const S = prepare(call, seed), r = simulate(call, seed++);
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
@@ -400,6 +439,7 @@ test('on a run the ball carrier runs into a rusher held in a block, not through 
   // held defender within reach of the ball carrier can reach out of the block and tackle him.
   let seed = 4242;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip };
     const S = prepare(call, seed), r = simulate(call, seed++);
     const hand = r.events.find(e => e.kind === 'hand');
@@ -423,7 +463,7 @@ test('on Power the pullers get to their men: the kick-out lands on the end, and 
   // the kick-out had his man by the time the back got to the line in 125 and the pulling guard ahead of a fullback in 29
   // of 72. Now it's 221 and 57.
   let seed = 1, kick = 0, kickN = 0, pull = 0, pullN = 0;
-  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (const flip of [false, true]) {
+  for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'power'))) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (const flip of [false, true]) {
     const call = { formation: fm.id, play: 'power', front: fr.id, coverage: cv.id, pressure, flip };
     const S = prepare(call, seed), r = simulate(call, seed++);
     const hole = r.events.find(e => e.kind === 'hole'), until = (hole ? hole.t : r.result.t) + 1e-9;
@@ -448,6 +488,7 @@ test('the box count sees a safety rolled down, and counts every man who blocks o
 
 test('a back\'s flat route and check-down end past the line, and Flood sends one back to the flat', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip }, 5);
     const backs = S.O.filter(p => p.job.kind === 'route' && (p.job.route === 'bflat' || p.job.route === 'check'));
     for (const b of backs) {
@@ -461,6 +502,7 @@ test('a back\'s flat route and check-down end past the line, and Flood sends one
 
 test('the drawn-up play numbers the quarterback\'s reads on their routes, in the order his card lists them, and only on a pass', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const P = simulate({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c1', pressure, flip: pressure === 'blitz' }, 11);
     const numbered = P.overlay.filter(o => o.read !== undefined);
     if (pl.type === 'run') { assert.equal(numbered.length, 0, `${fm.id} ${pl.id}: a run has read numbers`); continue; }
@@ -552,7 +594,7 @@ test('a draw against zone coverage is stopped short some of the time: pass rushe
   // 384 draws against Cover 2, 3 and 4. When no rusher came off his block for the back, 85% gained 4 yards or more
   // (the NFL's 2023 designed runs: 43%, nflverse play-by-play); now 73%.
   let seed = 1, n = 0, won = 0;
-  for (const coverage of ['c2', 'c3', 'c4']) for (let k = 0; k < 2; k++) for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+  for (const coverage of ['c2', 'c3', 'c4']) for (let k = 0; k < 2; k++) for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'draw'))) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
     const r = simulate({ formation: fm.id, play: 'draw', front: fr.id, coverage, pressure, flip }, seed++).result;
     n++; if (Math.round(r.yards) >= 4) won++;
   }
@@ -572,6 +614,7 @@ test('with a rusher closing in and nobody open, the quarterback throws it away, 
   seed = 1;
   let n = 0;
   for (let k = 0; k < 2; k++) for (const fm of FORMATIONS) for (const play of ['verts', 'smash', 'mesh', 'pa']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, play)) continue;
     const r = simulate({ formation: fm.id, play, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 }, seed++);
     if (r.result.kind !== 'throwaway') continue;
     n++;
@@ -589,6 +632,7 @@ test('with a blitzer coming unblocked the quarterback throws hot, before he gets
   // blocked.
   let seed = 1, n = 0, hotN = 0;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.drop !== 'screen')) for (const fr of FRONTS) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const r = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: 'c0', pressure: 'blitz', flip }, seed++);
     n++;
     const t = r.events.find(e => e.kind === 'throw' && /, hot, with /.test(e.text));
@@ -605,6 +649,7 @@ test('Cover 0 looks like Cover 0: the extra blitzer walks up over his gap, and n
   // The man left over after the man-to-man matchups used to stand 7.8 yards deep in the middle, where a quarterback
   // counting safeties would take him for one.
   for (const fm of FORMATIONS) for (const pl of PLAYS) for (const fr of FRONTS) for (const flip of [false, true]) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: 'c0', pressure: 'blitz', flip }, 7);
     const what = `${fm.id} ${pl.id} ${fr.id}${flip ? ' flipped' : ''}`;
     for (const d of S.D) assert.ok(d.y0 <= 6, `${what}: the ${d.label} stands ${d.y0.toFixed(1)} yards deep`);
@@ -642,6 +687,7 @@ test('NFL timing: on five-step and play-action drops he starts reading later, an
   let seed = 1, quick = 0, quickN = 0;
   const READ = /, (his first read|read \d|after nothing else came open)/;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 };
     const r = simulate(call, seed), S = prepare(call, seed); seed++;
     const t = r.events.find(e => e.kind === 'throw');
@@ -738,6 +784,7 @@ test('motion: the board plays the time before the snap, and every call with it r
   // nobody jumping. A play without motion starts at the snap.
   let seed = 61;
   for (const fm of FORMATIONS.filter(f => f.motion)) for (const pl of PLAYS) for (const cv of COVERAGES) for (const motion of ['across', 'jet']) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const call = { formation: fm.id, play: pl.id, front: FRONTS[seed % 4].id, coverage: cv.id, pressure: seed % 3 ? 'four' : 'blitz', flip: seed % 2 === 0, motion };
     const r = simulate(call, seed++), what = `${JSON.stringify(call)} seed ${seed - 1}`, F = r.frames;
     assert.ok(KINDS.has(r.result.kind), `${what}: result ${r.result.kind}`);
@@ -850,7 +897,7 @@ test('hot routes: a receiver or a back given another route runs it, keeps his pl
   let seed = 1;
   const thrown = new Set();
   for (const fm of FORMATIONS) {
-    for (const pl of PLAYS.filter(p => p.type === 'pass')) {
+    for (const pl of PLAYS.filter(p => p.type === 'pass' && !cantCall(fm.id, p.id))) {
       const S = prepare({ ...base, formation: fm.id, play: pl.id }, 1);
       for (const man of S.O) {
         for (const route of hotRoutes(pl, man)) {
@@ -872,6 +919,7 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
   // 10.2-14.6. (NFL 2023 regular season: 5.2, from nflverse play-by-play.)
   let seed = 31, n = 0, yac = 0;
   for (const fm of FORMATIONS) for (const play of ['verts', 'smash', 'mesh', 'pa']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
+    if (cantCall(fm.id, play)) continue;
     const r = simulate({ formation: fm.id, play, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 0 }, seed++);
     if (r.result.kind !== 'catch') continue;
     const at = caughtAt(r);
@@ -884,20 +932,20 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
 test('the drills\' notes say what the board shows', () => {
   // Each drill ends with a line in DRILLS (js/playbook.js) on what does best against its call; this holds the board to
   // it. The offense drills face their coverage from the front the drill sets (nickel against 10 and 11 personnel, the
-  // 4-3 Over otherwise), every play from every formation, 25 snaps each (100 a play); the run drill is I-Form's four
+  // 4-3 Over otherwise), every play from every formation that can run it, 25 snaps each; the run drill is I-Form's
   // runs, 50 snaps each, against the two calls its note names. From 240 snaps a play and three start seeds (1, 100000,
-  // 7777777): against Cover 2, Four Verticals 23.2-25.5 yards a play and Play-Action Shot 19.7-22.9, the next 13.3;
-  // Slant-Flat 75-80% and the Draw 72-75% succeed, the next 63%. Against Cover 3, Four Verticals 11.8-13.1 yards and
-  // Play-Action Shot 10.4-11.2 (from the six formations with the Pistol and Gun Ace), the next 8.1; the Draw 72-78% and Slant-Flat 68-73%, the next 65%. Against Cover 0, the RB Screen 66-69%, Smash 59-62%
-  // and Slant-Flat 54-57%, the next 45%, and the Draw 1-3%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz
-  // stops 80-82% for 2.3-3.2 yards a run, and in Cover 0 82-85% for 5.6-6.9. At this test's size four of five start
-  // seeds (11, 222, 3333, 5; not 44444, where the Draw came out third against Cover 2) hold every line.
+  // 7777777), with the seven formations: against Cover 2, Four Verticals 21.8-22.5 yards a play and Play-Action Shot
+  // 17.3-20.4, the next 13.9; Slant-Flat 78-80% succeed, the next 74%. Against Cover 3, Four Verticals 11.6-13.3 yards
+  // and Play-Action Shot 10.0-11.3, the next 8.9; the Draw 68-74% and Slant-Flat 65-75%, the next 66% (a tie with Smash
+  // for second at 100000). Against Cover 0, the RB Screen 59-70%, then Smash, Slant-Flat and Play-Action Shot 46-55%,
+  // the next 46%, and the Draw 3-5%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz stops 80-82% for
+  // 2.3-3.2 yards a run, and in Cover 0 82-85% for 5.6-6.9.
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
   const by = (coverage, pressure) => Object.fromEntries(PLAYS.map(pl => {
     let n = 0, ok = 0, y = 0;
-    for (const fm of FORMATIONS) for (let k = 0; k < 25; k++) {
+    for (const fm of FORMATIONS.filter(f => !cantCall(f.id, pl.id))) for (let k = 0; k < 25; k++) {
       const r = simulate({ formation: fm.id, play: pl.id, flip: k % 2 === 1, front: front(fm), coverage, pressure }, seed++).result;
       n++; y += r.yards; if (won(r)) ok++;
     }
@@ -908,12 +956,14 @@ test('the drills\' notes say what the board shows', () => {
   const drill = id => DRILLS.find(d => d.id === id);
   const c2 = by(drill('c2').coverage, drill('c2').pressure);
   assert.deepEqual(top(c2, 'avg', 2), ['pa', 'verts'], `Cover 2, yards a play: ${say(c2, 'avg')}`);
-  assert.deepEqual(top(c2, 'rate', 2), ['draw', 'slants'], `Cover 2, success: ${say(c2, 'rate')}`);
+  assert.deepEqual(top(c2, 'rate', 1), ['slants'], `Cover 2, success: ${say(c2, 'rate')}`);
+  assert.ok(c2.slants.rate > 0.72 && c2.slants.rate < 0.88, `"about four times in five": ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
   assert.deepEqual(top(c3, 'avg', 2), ['pa', 'verts'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
   assert.deepEqual(top(c3, 'rate', 2), ['draw', 'slants'], `Cover 3, success: ${say(c3, 'rate')}`);
   const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
-  assert.deepEqual(top(c0, 'rate', 3), ['screen', 'slants', 'smash'], `Cover 0, success: ${say(c0, 'rate')}`);
+  assert.deepEqual(top(c0, 'rate', 1), ['screen'], `Cover 0, success: ${say(c0, 'rate')}`);
+  for (const id of ['smash', 'slants', 'pa']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.62, `"about half the time each": ${say(c0, 'rate')}`);
   assert.equal(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate)[0][0], 'draw', `Cover 0, success: ${say(c0, 'rate')}`);
   const runs = PLAYS.filter(p => p.type === 'run').map(p => p.id);
   const stop = (front, coverage, pressure) => {
@@ -945,7 +995,9 @@ test('over many snaps the numbers look like football', () => {
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
   for (let k = 0; k < 2100; k++) {
     const pl = pick(PLAYS);
-    const r = simulate({ formation: pick(FORMATIONS).id, play: pl.id, front: pick(FRONTS).id, coverage: pick(COVERAGES).id, pressure: k % 4 ? 'four' : 'blitz' }, seed).result;
+    let fm = pick(FORMATIONS);
+    while (cantCall(fm.id, pl.id)) fm = pick(FORMATIONS); // (a run from Empty: another formation)
+    const r = simulate({ formation: fm.id, play: pl.id, front: pick(FRONTS).id, coverage: pick(COVERAGES).id, pressure: k % 4 ? 'four' : 'blitz' }, seed).result;
     if (pl.type === 'run') { run.n++; run.y += r.yards; }
     else { pass.n++; if (r.kind === 'sack') pass.sack++; else pass.att++; if (r.kind === 'catch') pass.comp++; if (r.kind === 'int') pass.int++; }
   }
@@ -997,6 +1049,7 @@ test('the README\'s matchups', () => {
   assert.ok(crossers.c1 > crossers.c3, `a throw to Mesh's crossers gains ${crossers.c1.toFixed(1)} yards against Cover 1, ${crossers.c3.toFixed(1)} against Cover 3`);
   const box = { 0: [0, 0], 2: [0, 0] };
   for (const pl of PLAYS.filter(p => p.type === 'run')) for (const cv of COVERAGES) for (const fm of FORMATIONS) for (const fr of FRONTS) for (let k = 0; k < 3; k++) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const P = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: k % 4 ? 'four' : 'blitz', flip: k % 2 === 1 }, seed++);
     const b = box[P.box.box - P.box.blockers];
     if (b) { b[0]++; if (won(P.result)) b[1]++; }

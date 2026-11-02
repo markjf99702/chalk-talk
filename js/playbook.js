@@ -48,6 +48,14 @@ export const FORMATIONS = [
     players: [['X', -18, -0.6, 'wr'], ...LINE, ['Y', 6.2, -1.4, 'te'], ['H', 11, -1.4, 'wr'], ['Z', 18, -0.6, 'wr'],
       ['QB', 0, -5, 'qb'], ['RB', -1.6, -5.2, 'rb']],
   },
+  {
+    // The back lines up as a receiver: he's one, as a wide receiver is, with a back's legs (the fifth item: the body
+    // the simulator gives him).
+    id: 'empty', name: 'Empty', personnel: '10', under: false,
+    blurb: 'Shotgun with nobody left beside the quarterback: the back splits out into the slot, and there are five receivers, three on one side and two on the other. Only the five linemen are left to block, so a blitz of six can\'t all be picked up, and there\'s no back to hand it to.',
+    players: [['X', -18, -0.6, 'wr'], ['RB', -10, -1.4, 'wr', 'rb'], ...LINE, ['Y', 6.5, -1.4, 'wr'], ['H', 11, -1.4, 'wr'], ['Z', 18, -0.6, 'wr'],
+      ['QB', 0, -5, 'qb']],
+  },
 ];
 
 // Routes, in [out, up] yards from where the receiver lines up. "Out" is toward his own sideline.
@@ -249,6 +257,7 @@ export const TECHNIQUES = [
 export const POSITIONS = {
   QB: ['Quarterback', 'Takes the snap and runs the offense: hands off, throws, or keeps it himself. Reads the defense before and after the snap.'],
   RB: ['Running back', 'The main ball carrier. Also picks up blitzers and catches passes out of the backfield.'],
+  RBwide: ['Running back, split out', 'With nobody left in the backfield (Empty), the back lines up in the slot as a fifth receiver and runs a receiver\'s routes.'],
   FB: ['Fullback', 'A blocking back who lines up in front of the tailback and leads him through the hole.'],
   X: ['Split end (X)', 'A wide receiver on the line of scrimmage, usually on the side away from the tight end. Being on the line, he can be jammed right at the snap.'],
   Z: ['Flanker (Z)', 'A wide receiver who lines up a step off the line, usually on the tight end\'s side. Being off the line, he is allowed to go in motion.'],
@@ -331,7 +340,7 @@ export const DRILLS = [
   {
     id: 'c2', name: 'Beat Cover 2', side: 'O', coverage: 'c2', pressure: 'four',
     brief: 'They play Cover 2 and rush four, every snap.',
-    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Slant-Flat and the Draw get there most often.',
+    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Slant-Flat gets there most often, about four times in five.',
   },
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
@@ -341,7 +350,7 @@ export const DRILLS = [
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
     brief: 'They blitz, every snap. Count who\'s coming and who\'s left to cover.',
-    note: 'Against an all-out blitz, the RB Screen, Smash and Slant-Flat succeed most often here: the screen lets the rushers run past the back, and the other two get the ball out hot, before the rush arrives. The Draw runs straight into it.',
+    note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw runs straight into it.',
   },
   {
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',

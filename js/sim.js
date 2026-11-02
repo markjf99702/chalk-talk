@@ -57,8 +57,8 @@ function assign(a, b, cost, skip = () => 3) {
   return out;
 }
 
-function mk(S, team, label, cls, x, y) {
-  const [top, acc, str] = BODY[cls];
+function mk(S, team, label, cls, x, y, body = cls) {
+  const [top, acc, str] = BODY[body];
   const R = S.R;
   const p = {
     i: S.P.length, team, label, cls, info: label, x, y, x0: x, y0: y, vx: 0, vy: 0, tx: x, ty: y, ts: 0,
@@ -86,8 +86,11 @@ export function prepare(call, seed = 1) {
     disguise: !!call.disguise && (cov.id === 'c1' || cov.id === 'c3'), // see the end of buildDefense()
     ball: { x: 0, y: -0.3, z: 0.3, state: 'snap', holder: -1 }, carrier: null, handT: Infinity, throwT: Infinity,
   };
-  for (const [label, x, y, cls] of fm.players) mk(S, 'O', label, cls, (mo && label === fm.motion.who ? fm.motion.to : x) * f, y);
+  const no = cantCall(fm.id, play.id);
+  if (no) throw new Error(`${fm.name}, ${play.name}: ${no}`);
+  for (const [label, x, y, cls, body] of fm.players) mk(S, 'O', label, cls, (mo && label === fm.motion.who ? fm.motion.to : x) * f, y, body);
   for (const p of S.O) if (p.label === 'Y' && p.cls === 'wr') p.info = 'Yslot';
+  for (const p of S.O) if (p.label === 'RB' && p.cls === 'wr') p.info = 'RBwide'; // (Empty's back, split out)
   S.QB = S.O.find(p => p.cls === 'qb');
   S.RB = S.O.find(p => p.cls === 'rb');
   S.FB = S.O.find(p => p.cls === 'fb');
@@ -478,6 +481,17 @@ function assignOffense(S) {
   S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
   for (const pl of hot) if (pl.job.kind === 'route' && !S.reads.includes(pl)) S.reads.push(pl);
   S.hold = { quick: 2.4, five: 4.1, pa: 4.4, screen: 2.6 }[play.drop];
+}
+
+// A call the board can't make, and why, in the words the page shows ('' for one it can): with nobody in the backfield
+// (Empty) there's no back to hand the ball to, to fake a handoff to, or to throw the screen to.
+export function cantCall(formation, play) {
+  const fm = byId(FORMATIONS, formation), pl = byId(PLAYS, play);
+  if (fm.players.some(([, , , cls]) => cls === 'rb' || cls === 'fb')) return '';
+  if (pl.type === 'run') return 'No back to hand it to.';
+  if (pl.drop === 'pa') return 'No back to fake the handoff to.';
+  if (pl.drop === 'screen') return 'No back behind the line to throw the screen to.';
+  return '';
 }
 
 // The routes a man can be given before the snap instead of his own (HOT in js/playbook.js), on this play: none on a run,
