@@ -116,8 +116,10 @@ function keptPlay() {
 
 const call = () => ({ ...state.off, ...state.def });
 // The other coach's call is hidden from the board, the chart and the player cards until the snap, and while you're asked
-// what he played, until you've answered. Once it's out, it stays out until he picks again.
-const hidden = () => state.auto && ((state.phase === 'pre' && !state.seen) || asking());
+// what he played, until you've answered. Once it's out, it stays out until he picks again. With a man in motion the
+// snap comes after Snap is pressed: his call waits for the ball (atSnap, see out()).
+let atSnap = false;
+const hidden = () => state.auto && ((state.phase === 'pre' && !state.seen) || atSnap || asking());
 // Whether the question "What did they play?" is waiting for an answer.
 const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.ask.guess;
 
@@ -176,7 +178,7 @@ function lineUp(keep = false) {
   board.setPlay(state.play);
   board.mark = endMark(state.play.result);
   state.t = board.t = board.start(); // the snap, or before it with a man in motion
-  board.waitSnap = false;
+  board.waitSnap = atSnap = false;
   board.selected = -1;
   board.spot = -1;
   board.spotAll = null;
@@ -233,12 +235,10 @@ function play() {
   // out once you have (see answer()). For a replay the status line is cleared, so that its end is said again.
   // A call of his that was hidden stays off the board through any motion before the snap, until the ball is snapped.
   if (snapped) board.waitSnap = state.auto && !state.seen;
-  if (snapped && state.auto) {
-    if (!state.seen && state.side === 'O' && state.quiz && !drill) state.ask = { guess: null };
-    else if (state.ask?.guess) state.ask = null; // answered last snap: this one shows his call as usual
-    state.seen = true;
-    say(asking() ? 'What did they play? Name their coverage, in their call.' : `They called: ${theirSummary()}.`);
-  } else if (!snapped) say('');
+  // In words too: with a man in motion before the snap, it comes out when the ball is snapped (see snappedNow()).
+  atSnap = snapped && board.waitSnap && board.start() < 0;
+  if (snapped && state.auto && !atSnap) out();
+  else if (!snapped) say('');
   if (state.phase === 'done' || state.t >= board.duration()) state.t = board.start();
   state.phase = 'playing';
   clearTimeout(whyTimer);
@@ -267,12 +267,35 @@ function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000), again = moment?.until !== undefined;
   last = now;
   state.t = Math.min(again ? moment.until : board.duration(), state.t + dt * (again ? 0.5 : state.speed));
+  snappedNow();
   caption();
   draw();
   syncScrub();
   if (again && state.t >= moment.until) { pause(); return; }
   if (state.t >= board.duration()) { finish({ hold: true }); return; }
   if (state.phase === 'playing') raf = requestAnimationFrame(tick);
+}
+
+// His call comes out: at the snap, which is as Snap is pressed unless a man goes in motion first.
+function out() {
+  atSnap = false;
+  if (!state.seen && state.side === 'O' && state.quiz && !drill) state.ask = { guess: null };
+  else if (state.ask?.guess) state.ask = null; // answered last snap: this one shows his call as usual
+  state.seen = true;
+  say(asking() ? 'What did they play? Name their coverage, in their call.' : `They called: ${theirSummary()}.`);
+}
+// The ball snapped after a man's motion, as the play runs or is scrubbed past it: the call he kept back comes out, in
+// his drawn-up play, his card, the matchup, the jobs, the tapped player's card and the chart.
+function snappedNow() {
+  if (!atSnap || state.t < -1e-6) return;
+  out();
+  syncBoard();
+  syncTheirs();
+  syncJobs();
+  renderMatchup();
+  if (board.selected >= 0) showWho(board.selected);
+  syncChart();
+  keepPlay();
 }
 
 function pause() { state.phase = 'paused'; cancelAnimationFrame(raf); if (moment) delete moment.until; syncTransport(); }
@@ -308,6 +331,7 @@ let whyTimer = 0;
 const HOLD = 1300; // ms
 function finish({ hold = false } = {}) {
   state.phase = 'done';
+  snappedNow();
   whistled = state.play;
   tallyDrill();
   cancelAnimationFrame(raf);
@@ -505,6 +529,7 @@ $('scrub').addEventListener('input', e => {
   const F = state.play.frames;
   state.t = F[Math.max(0, Math.min(F.length - 1, Math.round(+e.target.value)))].t;
   state.phase = state.t >= board.duration() ? 'done' : 'paused';
+  snappedNow();
   if (state.phase === 'done') { whistled = state.play; tallyDrill(); }
   caption(); draw(); syncTransport();
   if (state.phase === 'done') { showResult(); showWhy(); sayResult(); } else $('why').hidden = true;

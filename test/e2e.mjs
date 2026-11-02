@@ -2141,6 +2141,23 @@ for (const colorScheme of ['light', 'dark']) {
     return n / 600;
   });
   assert.ok(share > 0.26 && share < 0.41, `${Math.round(share * 100)}% of his plays have motion`);
+  // His play stays hidden through his motion, in words as on the board, until the ball is snapped: then it's out.
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'doubles', play: 'flood', flip: false, motion: 'jet' }); state.seen = false; lineUp(); });
+  const during = await at(-0.5);
+  assert.ok(during.clock.startsWith('\u2212'), `before the snap: ${during.clock}`);
+  const words = () => p.evaluate(() => ({ matchup: document.getElementById('matchup').textContent, say: document.getElementById('say').textContent, jobs: document.getElementById('jobsHint').textContent, drawn: window.chalkTalk.board.shows('O') }));
+  let said = await words();
+  assert.match(said.matchup, /play hidden/, 'his play is named during his motion');
+  assert.doesNotMatch(said.say, /They called/, 'his play is said during his motion');
+  assert.match(said.jobs, /Their jobs stay hidden until the snap/);
+  assert.equal(said.drawn, false, 'his routes are drawn during his motion');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.seen), false);
+  await at(0.2);
+  said = await words();
+  assert.match(said.matchup, /Gun Doubles · H jet · Flood/, 'his play is out once the ball is snapped');
+  assert.equal(said.say, 'They called: Gun Doubles, strength to your left, the H in jet motion, Flood.');
+  assert.doesNotMatch(said.jobs, /stay hidden/);
+  assert.equal(said.drawn, true, 'his drawn-up play is on the board once the ball is snapped');
   await p.context().close();
 }
 
