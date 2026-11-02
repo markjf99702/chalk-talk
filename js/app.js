@@ -703,7 +703,9 @@ function hideWho() { $('who').hidden = true; }
 // js/sim.js. The row stays with him until Done, a tap on the board, the snap, or a change of call other than his route.
 let routesFor = -1; // the man the row is open for
 const routeName = id => (id === 'block' ? 'block' : ROUTES[id]?.name || id);
-const canRoute = p => (p.team === 'O' && (state.side === 'O' || !state.auto) && state.phase !== 'playing' ? hotRoutes(byId(PLAYS, state.off.play), p) : []);
+// (before the snap, or once the play has been seen to the whistle: not paused part way through it)
+const routeTime = () => state.phase === 'pre' || state.phase === 'done' || (state.phase === 'paused' && whistled === state.play);
+const canRoute = p => (p.team === 'O' && (state.side === 'O' || !state.auto) && routeTime() ? hotRoutes(byId(PLAYS, state.off.play), p) : []);
 function routeChips(p) { $('whoRoutesOpen').hidden = !canRoute(p).length; }
 // Where he is in the quarterback's reads, with the route he has now.
 function readWords(p, now, drawn) {

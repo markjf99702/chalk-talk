@@ -2516,6 +2516,13 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('#whoClose');
   // The chart is your version.
   assert.match(await p.textContent('#chartHint'), /^How often your version of Smash \(the Y on a curl and the H on a slant\) succeeds, gaining 4 yards or more, from Gun Trips /);
+  // Paused part way through the play, his route can't be changed (only before the snap, or once it's over).
+  await p.evaluate(() => { const { state, snap, pause } = window.chalkTalk; snap(); state.t = 1; pause(); });
+  await tap('H');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.phase), 'paused');
+  assert.equal(await p.isVisible('#who'), true, 'tapping the H while paused opened no card');
+  assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route while the play is paused part way');
+  await p.click('#whoClose');
   // Snapped: the result card names your version, and the note says it's about the play as drawn.
   await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
   assert.match(await p.textContent('#resVs'), /^Smash, Y on a curl, H on a slant from Gun Trips against /);
