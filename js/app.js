@@ -1817,6 +1817,11 @@ function nm(P, i, run) {
   return names[p.label] || `the ${p.label}`;
 }
 
+// On a phone or a tablet (a touch screen first) that has a share sheet, the link goes out through it, to Messages,
+// WhatsApp, Mail or wherever the person picks. On a computer, or a phone without one, it's copied, and where it can't
+// be copied it's put up, ready to copy by hand. A sheet that won't open falls back to copying too.
+const SHEET = typeof navigator.share === 'function' && matchMedia('(pointer: coarse)').matches;
+if (SHEET) $('share').textContent = 'Share this play';
 const SHARE_LABEL = $('share').textContent;
 let shareTimer = 0;
 function resetShare() {
@@ -1831,6 +1836,14 @@ $('share').addEventListener('click', async () => {
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
   resetShare();
+  if (SHEET) {
+    try {
+      await navigator.share({ title: document.title, url });
+      return;
+    } catch (e) {
+      if (e?.name === 'AbortError') return; // the sheet closed without sharing: nothing to say
+    }
+  }
   try {
     await navigator.clipboard.writeText(url);
     $('share').textContent = 'Link copied';

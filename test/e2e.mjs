@@ -334,6 +334,7 @@ await page.click('#snap');
 await page.waitForSelector('#result:not([hidden]):not(.stale)', { timeout: 15000 });
 const head = await page.textContent('#resHead');
 await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+assert.equal(await page.textContent('#share'), 'Copy link to this play', 'a phone with no share sheet copies the link');
 await page.click('#share');
 await page.waitForFunction(() => document.getElementById('share').textContent === 'Link copied' || !document.getElementById('shareUrl').hidden);
 const link = await page.evaluate(async () => { const box = document.getElementById('shareUrl'); return box.hidden ? navigator.clipboard.readText() : box.value; });
@@ -375,6 +376,52 @@ assert.doesNotMatch(await page2.textContent('#theirsHint'), /That link/, 'the wo
 await page2.getByRole('radio', { name: 'Cover 2' }).click();
 assert.equal(await page2.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), true, 'opening a link turned off "Let the other coach pick" for good');
 await page2.close();
+
+// On a phone with a share sheet, the button is "Share this play" and opens it with the link. Closing the sheet without
+// sharing says nothing; a sheet that won't open copies the link instead. A computer copies it, share sheet or not.
+// (Chromium here has no share sheet: each page gets a stand-in that keeps what it was given, and ends the way `sheet`
+// says: shared, or with the name of the error a real one gives.)
+{
+  const sheet = () => Object.defineProperty(Navigator.prototype, 'share', {
+    configurable: true,
+    value: async data => { (window.shared ||= []).push(data); if (window.sheet) throw new DOMException('no', window.sheet); },
+  });
+  const open = async options => {
+    const c = await browser.newContext(options);
+    await c.addInitScript(sheet);
+    await c.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const p = await c.newPage();
+    p.on('pageerror', e => problems.push(e.message));
+    await p.goto(base + '#p=O.trips.smash.0.nickel.c2.four.262');
+    await p.waitForSelector('#result:not([hidden])', { timeout: 15000 });
+    return p;
+  };
+  const p = await open({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  assert.equal(await p.textContent('#share'), 'Share this play', 'a phone with a share sheet says share, not copy');
+  await p.click('#share');
+  const sent = await p.evaluate(() => window.shared);
+  assert.equal(sent.length, 1, 'the share sheet never opened');
+  assert.equal(sent[0].title, 'Chalk Talk');
+  assert.ok(sent[0].url.startsWith(`${base}#p=O.trips.smash.0.nickel.c2.four.262.`), `the share sheet got ${sent[0].url}`);
+  const quiet = () => p.evaluate(() => ({ button: document.getElementById('share').textContent, msg: document.getElementById('shareMsg').textContent, box: !document.getElementById('shareUrl').hidden }));
+  assert.deepEqual(await quiet(), { button: 'Share this play', msg: '', box: false }, 'sharing put something up');
+  await p.evaluate(() => { window.sheet = 'AbortError'; });
+  await p.click('#share');
+  assert.equal(await p.evaluate(() => window.shared.length), 2);
+  assert.deepEqual(await quiet(), { button: 'Share this play', msg: '', box: false }, 'closing the share sheet put something up');
+  await p.evaluate(() => { window.sheet = 'NotAllowedError'; });
+  await p.click('#share');
+  await p.waitForFunction(() => document.getElementById('share').textContent === 'Link copied', null, { timeout: 5000 })
+    .catch(() => assert.fail('a share sheet that wouldn\'t open didn\'t copy the link instead'));
+  assert.equal(await p.evaluate(() => navigator.clipboard.readText()), sent[0].url, 'it copied another link');
+  await p.context().close();
+  const q = await open({ viewport: { width: 1280, height: 800 } });
+  assert.equal(await q.textContent('#share'), 'Copy link to this play', 'a computer with a share sheet still copies');
+  await q.click('#share');
+  await q.waitForFunction(() => document.getElementById('share').textContent === 'Link copied', null, { timeout: 5000 });
+  assert.equal(await q.evaluate(() => window.shared), undefined, 'a computer opened the share sheet');
+  await q.context().close();
+}
 
 // The words on the board sit over the deep field, where nobody is for most of the play, not on the backfield: at the top
 // when you call the offense, and at the bottom when you call the defense and the board is turned around. And there's
