@@ -1455,8 +1455,19 @@ function coachNote(P) {
   // How the call does in general, then how this snap went, so a snap that goes the other way doesn't read as the note
   // being wrong.
   const lead = pl.type === 'pass' ? `How ${pl.name} does against ${cv.name}:` : `How ${pl.name} works:`;
-  const note = (pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd) + (mask ? ` ${DISGUISE_NOTES[pl.type === 'run' ? 'run' : cv.id]}` : '');
+  const note = (pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd) + (mask ? ` ${DISGUISE_NOTES[pl.type === 'run' ? 'run' : cv.id]}` : '') + motionNote(P);
   return { lead, note, now: thisTime(P), reads };
+}
+
+// With motion the note is about the play, and the play was run from the count once he'd gone: said, so the note isn't
+// read as being about the formation as it lined up.
+function motionNote(P) {
+  if (!P.motion || byId(PLAYS, P.call.play).type !== 'pass') return '';
+  const who = P.players[P.motion.who], word = n => ['no', 'one', 'two', 'three', 'four'][n];
+  const to = byId(FORMATIONS, P.call.formation).motion.to * (P.call.flip ? -1 : 1); // where he's counted (a jet man is still crossing)
+  const n = sd => P.players.filter(p => p.team === 'O' && (p.cls === 'wr' || p.cls === 'te') && Math.sign(p === who ? to : p.x) === sd).length;
+  const a = n(1), b = n(-1);
+  return ` Here the ${who.label} went in motion first, and the play was run from where the receivers stood then: ${a === b ? `${word(a)} each side` : `${word(Math.max(a, b))} on one side and ${word(Math.min(a, b))} on the other`}.`;
 }
 
 // What a disguise changes, after the note on the coverage it is: what the board shows over many snaps against the

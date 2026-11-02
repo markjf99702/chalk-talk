@@ -2100,6 +2100,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); });
   assert.match(await p.textContent('#resVs'), /^Smash from Gun Trips, the H in motion across, against Nickel, Cover 1\.$/);
   assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: the nickel back ran with the H. Someone running with a man in motion means man coverage.'));
+  assert.match(await p.textContent('#note'), / Here the H went in motion first, and the play was run from where the receivers stood then: two each side\.$/);
   const first = await p.$eval('#story li button', b => ({ text: b.textContent, label: b.getAttribute('aria-label') }));
   assert.match(first.text, /^\u2212\d\.\ds$/, 'the play-by-play\'s times before the snap');
   assert.match(first.label, /^\d\.\d seconds before the snap: watch it again$/);
