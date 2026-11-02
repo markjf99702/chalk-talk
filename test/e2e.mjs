@@ -2245,16 +2245,22 @@ for (const colorScheme of ['light', 'dark']) {
   await p.goto(base + link.slice(link.indexOf('#')).replace(/\.jet\.1and10$/, '.zoom.1and10'));
   await p.waitForFunction(() => location.hash === '');
   assert.equal(await p.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
-  // Calling the defense, the other coach sends a man in motion about one snap in three.
-  const share = await p.evaluate(() => {
+  // Calling the defense, the other coach sends a man in motion about one snap in three, counting Gun Ace and Empty, which
+  // have nobody to send (and never say they do).
+  const still = (await import('../js/playbook.js')).FORMATIONS.filter(f => !f.motion).map(f => f.id);
+  const share = await p.evaluate(still => {
     const { state, rollTheirs } = window.chalkTalk;
     document.querySelector('[data-side="D"]').click();
     if (!state.auto) document.getElementById('auto').click();
-    let n = 0;
-    for (let k = 0; k < 600; k++) { rollTheirs(); if (state.off.motion !== 'none') n++; }
-    return n / 600;
-  });
-  assert.ok(share > 0.26 && share < 0.41, `${Math.round(share * 100)}% of his plays have motion`);
+    let n = 0, none = 0;
+    for (let k = 0; k < 3000; k++) {
+      rollTheirs();
+      if (state.off.motion !== 'none') { if (still.includes(state.off.formation)) none++; else n++; }
+    }
+    return { share: n / 3000, none };
+  }, still);
+  assert.ok(share.share > 0.29 && share.share < 0.38, `${(share.share * 100).toFixed(1)}% of his plays have motion`);
+  assert.equal(share.none, 0, 'motion called from a formation with nobody to send');
   // His play stays hidden through his motion, in words as on the board, until the ball is snapped: then it's out.
   await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'doubles', play: 'flood', flip: false, motion: 'jet' }); state.seen = false; lineUp(); });
   const during = await at(-0.5);

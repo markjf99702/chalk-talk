@@ -185,8 +185,9 @@ function lean(sit) {
   const was = share(a), now = share(b);
   return { nickel: odds(a.nickel, b.nickel), blitz: odds(a.blitz, b.blitz), run: odds(100 - a.pass, 100 - b.pass), cover: (c, p) => Math.max(0.01, p + now(c) - was(c)), passing: b.pass / a.pass };
 }
-// Calling the defense, his offense puts a man in motion about one snap in three, across or jet alike. (A design
-// choice, so motion comes up as you watch your own defense; not a published statistic.)
+// Calling the defense, his offense puts a man in motion about one snap in three, across or jet alike, counting the
+// formations that have nobody to send. (A design choice, so motion comes up as you watch your own defense; not a
+// published statistic.)
 const MOTION_SHARE = 1 / 3;
 // Calling the offense, about one of his snaps in four is a disguise: he plays Cover 1 or Cover 3 on 54% of them, and
 // disguises 46% of those. (A design choice, so a look can't be trusted every time; not a published statistic.)
@@ -218,14 +219,17 @@ function rollTheirs() {
     } else {
       // Empty, which can only throw, half as often as each of the others on 1st & 10, and more or less often as the NFL's
       // passes went with the down (a design choice, so it comes up without taking over; not a published statistic)
-      state.off.formation = w(FORMATIONS.map(f => [f.id, f.id === 'empty' ? 0.5 * L.passing : 1]));
+      const lineups = FORMATIONS.map(f => [f.id, f.id === 'empty' ? 0.5 * L.passing : 1]);
+      state.off.formation = w(lineups);
       // (only the plays his formation can run: from Empty, no runs, no fake and no screen)
       const can = PLAYS.filter(p => !cantCall(state.off.formation, p.id)), runs = can.filter(p => p.type === 'run').length;
       const run = runs ? L.run(RUN_SHARE[state.off.formation] ?? 0.42) : 0;
       state.off.play = w(can.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (can.length - runs)]));
       state.off.flip = R() < 0.5;
-      const m = R();
-      state.off.motion = m < MOTION_SHARE / 2 ? 'across' : m < MOTION_SHARE ? 'jet' : 'none';
+      // Gun Ace and Empty have nobody to send, so from the others a little more often, to keep it one snap in three
+      const all = lineups.reduce((a, [, p]) => a + p, 0), movers = lineups.filter(([id]) => byId(FORMATIONS, id).motion).reduce((a, [, p]) => a + p, 0);
+      const share = byId(FORMATIONS, state.off.formation).motion ? Math.min(1, MOTION_SHARE * all / movers) : 0, m = R();
+      state.off.motion = m < share / 2 ? 'across' : m < share ? 'jet' : 'none';
       state.off.hot = {};
     }
   }
