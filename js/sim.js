@@ -305,8 +305,9 @@ function buildDefense(S) {
 // back off the line to 2.6 yards behind it (behind a tight end, the tackles and a quarterback under center, in front of
 // one in the shotgun), across, and up to his spot on the other side. Across, he runs over and sets, and the snap comes
 // half a second later; jet, he goes at full speed and the ball is snapped as he gets to the middle, still running: he
-// carries on across behind the line (see jetLead) before he turns up into his route. In man coverage the man who had him runs with him, a step behind and at his own depth (between the line and
-// the linebackers as he crosses the formation); in zone they slide to where they line up against the new formation.
+// carries on across behind the line (his lead, below) before he turns up into his route. In man coverage the man who
+// had him runs with him, a step behind and at his own depth (between the line and the linebackers as he crosses the
+// formation); in zone they slide to where they line up against the new formation.
 // A safety lined up deep who has him runs with him over the top, at his own depth.
 // The teams have already lined up for the snap (see prepare()): this works out the frames before it and, for jet,
 // where everyone is at the snap, still moving. S.from is the same call lined up before the motion.
@@ -347,7 +348,7 @@ function presnap(S, kind) {
     return Math.min(d, L);
   };
   const timeTo = d => { let a = 0, b = 20; for (let k = 0; k < 40; k++) { const m = (a + b) / 2; if (run(m) < d) a = m; else b = m; } return b; };
-  // Jet: the snap as he gets within 3 yards of the middle. Across: once he has stopped, and the half second after it.
+  // Jet: the snap as he gets to half a yard short of the middle. Across: once he has stopped, and the half second after.
   let snapAt;
   if (jet) {
     const x = 0.5, i = pts.findIndex((q, k) => k && q.x * s0 <= x && pts[k - 1].x * s0 > x);
