@@ -3,7 +3,7 @@
 // It is a coaching model, not physics: blocks are pairs that push each other until one wins, coverage is
 // men following receivers or defenders guarding spots, and the quarterback throws where nobody can get to first.
 import { rng } from './rng.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLITZERS } from './playbook.js';
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -83,6 +83,8 @@ export function prepare(call, seed = 1) {
   const S = {
     R, seed, call: { ...call }, fm, play, front, cov, s: f, p: f, P: [], O: [], D: [], t: 0, events: [],
     blitz: call.pressure === 'blitz' || cov.id === 'c0', over: false, endAt: Infinity, result: null,
+    // who blitzes: the one picked, if he can (see blitzerFor()), or else the Mike, as always in Cover 0
+    blitzer: cov.id !== 'c0' && BLITZERS.some(b => b.id === call.blitzer) && !blitzerFor(front.id, cov.id, call.blitzer, call.disguise) ? call.blitzer : 'M',
     disguise: !!call.disguise && (cov.id === 'c1' || cov.id === 'c3'), // see the end of buildDefense()
     ball: { x: 0, y: -0.3, z: 0.3, state: 'snap', holder: -1 }, carrier: null, handT: Infinity, throwT: Infinity,
   };
@@ -166,7 +168,7 @@ function buildDefense(S) {
   // Who rushes.
   const rush = new Set(S.D.filter(d => d.dl));
   if (front.id === '34') rush.add(lab('J'));
-  if (S.blitz) rush.add(lab('M'));
+  if (S.blitz) rush.add(lab(S.blitzer));
   const jobs = new Map();
   const left2 = S.O.filter(p => p.x < 0 && p.num === 2)[0], right2 = S.O.filter(p => p.x > 0 && p.num === 2)[0];
 
@@ -222,7 +224,8 @@ function buildDefense(S) {
   const taken = [];
   for (const d of S.D) if (d.job.kind === 'rush' && d.dl) { d.job.gap = gapOf(d); taken.push(d.job.gap); }
   for (const d of S.D) if (d.job.kind === 'rush' && !d.dl) {
-    if (d.edge) d.job.gap = 6 * Math.sign(d.x);
+    // (a defensive back blitzing from outside the tackles, the nickel back over the slot, comes off the edge)
+    if (d.edge || (d.cls !== 'lb' && Math.abs(d.x) > 4.5 && !d.extra)) d.job.gap = 6 * Math.sign(d.x);
     else {
       const opts = [0.75, -0.75, 2.25, -2.25, 3.9, -3.9].map(g => g * s).filter(g => !taken.some(t => Math.abs(t - g) < 0.5));
       opts.sort((a, b) => Math.abs(a - d.x) - Math.abs(b - d.x));
@@ -481,6 +484,17 @@ function assignOffense(S) {
   S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
   for (const pl of hot) if (pl.job.kind === 'route' && !S.reads.includes(pl)) S.reads.push(pl);
   S.hold = { quick: 2.4, five: 4.1, pa: 4.4, screen: 2.6 }[play.drop];
+}
+
+// Whether a man can be the blitzer, and why not, in the words the page shows ('' when he can): the nickel back is only
+// in the Nickel front, and the strong safety can't come in Cover 2 or Cover 4, where both safeties play deep, or from a
+// disguise, which lines him up deep too.
+export function blitzerFor(front, coverage, who, disguise) {
+  if (who === 'NB' && byId(FRONTS, front).db !== 'nickel') return 'Only the Nickel front has a nickel back.';
+  const cov = byId(COVERAGES, coverage);
+  if (who === 'SS' && cov.shell === 2) return `${cov.name} needs both safeties deep.`;
+  if (who === 'SS' && disguise && (coverage === 'c1' || coverage === 'c3')) return 'Showing two deep, the safety is too far back to blitz.';
+  return '';
 }
 
 // A call the board can't make, and why, in the words the page shows ('' for one it can): with nobody in the backfield

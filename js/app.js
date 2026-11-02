@@ -1,6 +1,6 @@
 // Chalk Talk: the page. Picks the calls, runs the simulator, plays the result back on the board, and explains it.
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS, needed } from './playbook.js';
-import { simulate, prepare, name, hotRoutes, cantCall } from './sim.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, BLITZERS, POSITIONS, PERSONNEL, TECHNIQUES, NOTES, ROUTES, DRILLS, HOT, SITUATIONS, needed } from './playbook.js';
+import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
 
@@ -21,7 +21,7 @@ const RUN_NOTES = {
 const state = {
   side: 'O',
   off: { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} },
-  def: { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false },
+  def: { front: 'nickel', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false },
   sit: '1and10', // the down and distance, for both sides (SITUATIONS in js/playbook.js)
   auto: true,
   labels: true,
@@ -73,7 +73,12 @@ const MOTIONS = ['none', 'across', 'jet'];
 const moving = o => (o.motion === 'across' || o.motion === 'jet') && !!byId(FORMATIONS, o.formation).motion;
 // "the H in motion across", "the H in jet motion", or '' with none.
 const motionWords = o => (!moving(o) ? '' : `the ${byId(FORMATIONS, o.formation).motion.who} in ${o.motion === 'jet' ? 'jet motion' : 'motion across'}`);
-const okDef = d => (d && FRONTS.some(f => f.id === d.front) && COVERAGES.some(c => c.id === d.coverage) ? { front: d.front, coverage: d.coverage, pressure: d.pressure === 'blitz' ? 'blitz' : 'four', disguise: d.disguise === true } : null);
+const okDef = d => (d && FRONTS.some(f => f.id === d.front) && COVERAGES.some(c => c.id === d.coverage) ? { front: d.front, coverage: d.coverage, pressure: d.pressure === 'blitz' ? 'blitz' : 'four', blitzer: BLITZERS.some(b => b.id === d.blitzer) ? d.blitzer : 'M', disguise: d.disguise === true } : null);
+// Who blitzes on a blitz: the one picked if he can, or else the Mike (see blitzerFor() in js/sim.js); a call keeps its
+// pick through a change of front or coverage and back, as it keeps its disguise. Cover 0 sends everyone anyway.
+const blitzer = d => (d.coverage !== 'c0' && !blitzerFor(d.front, d.coverage, d.blitzer, d.disguise) ? d.blitzer || 'M' : 'M');
+// The blitz as the board says it: "blitz" for the Mike's, as it always was, or "Will blitz", "nickel blitz", "safety blitz".
+const blitzWord = d => ({ M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' })[blitzer(d)];
 // Only Cover 1 and Cover 3 disguise, showing two deep and rotating at the snap (see the end of buildDefense() in
 // js/sim.js); a call keeps its disguise through a change to another coverage and back, as it keeps its pressure.
 const DISGUISES = ['c1', 'c3'];
@@ -189,7 +194,7 @@ function rollTheirs() {
   const R = rng(newSeed());
   const w = list => { let x = R() * list.reduce((a, [, p]) => a + p, 0); for (const [v, p] of list) { if ((x -= p) <= 0) return v; } return list[0][0]; };
   const theirs = () => (state.side === 'O'
-    ? [state.def.front, state.def.coverage, state.def.coverage === 'c0' ? 'blitz' : state.def.pressure] // Cover 0 always blitzes; a disguise alone isn't a new call
+    ? [state.def.front, state.def.coverage, state.def.coverage === 'c0' ? 'blitz' : state.def.pressure === 'blitz' ? blitzWord(state.def) : 'four'] // Cover 0 always blitzes; a disguise alone isn't a new call
     : [state.off.formation, state.off.play, state.off.flip]).join();
   const had = theirs(), L = lean(situation());
   for (let tries = 0; tries < 10 && theirs() === had; tries++) {
@@ -202,6 +207,8 @@ function rollTheirs() {
       state.def.front = w(fronts.map(([f, p]) => [f, f === 'nickel' ? more : p * (1 - more) / (1 - nickel)]));
       state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]].map(([c, p]) => [c, L.cover(c, p)]));
       state.def.pressure = R() < L.blitz(0.25) ? 'blitz' : 'four';
+      // who comes, of the ones who can: the Mike most often, then the Will, the nickel back and the safety
+      state.def.blitzer = w([['M', 0.4], ['W', 0.3], ['NB', 0.15], ['SS', 0.15]].filter(([b]) => !blitzerFor(state.def.front, state.def.coverage, b, state.def.disguise)));
       state.def.disguise = DISGUISES.includes(state.def.coverage) && R() < DISGUISE_SHARE;
     } else {
       // Empty, which can only throw, half as often as each of the others on 1st & 10, and more or less often as the NFL's
@@ -947,12 +954,13 @@ function chips(host, label, items, current, pick, opts = {}) {
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(it.id === current));
       b.dataset.key = `${label}:${it.id}`; // the same chip once the choosers are drawn again, for the keyboard's focus
-      // A chip can be greyed out on its own (off: why, which a screen reader says after its name, and a pointer shows).
+      // A chip can be greyed out on its own (off: why, its title, which a pointer shows and a screen reader gives as its
+      // description; the row's words below say it too).
       b.disabled = !!opts.disabled || !!it.off;
       if (it.off) b.title = it.off;
       // The small print a screen reader says in full: "I-Form 21 personnel", not a bare "twenty-one". (The name still
       // starts with the words on the chip, for speech input: WCAG 2.2, 2.5.3 Label in Name.)
-      b.innerHTML = (it.sub ? `${esc(it.name)} <small>${esc(it.sub)}<span class="sr-only"> ${esc(it.subWord)}</span></small>` : esc(it.name)) + (it.off ? `<span class="sr-only">: ${esc(it.off)}</span>` : '');
+      b.innerHTML = it.sub ? `${esc(it.name)} <small>${esc(it.sub)}<span class="sr-only"> ${esc(it.subWord)}</span></small>` : esc(it.name);
       b.addEventListener('click', () => pick(it.id));
       row.append(b);
     }
@@ -1072,6 +1080,14 @@ function defenseChooser(host, readonly) {
   chips(host, 'Pressure', PRESSURES, zero ? 'blitz' : pr.id, id => set({ pressure: id }), {
     disabled: readonly || zero, blurb: zero ? 'Cover 0 sends everyone who isn\'t covering a receiver.' : pr.blurb,
   });
+  // Who blitzes: on a blitz, any of the four who can (see blitzerFor() in js/sim.js); the others are greyed out, saying why.
+  const who = blitzer(state.def), b = byId(BLITZERS, who), waits = zero || pr.id !== 'blitz';
+  chips(host, 'Blitzer', BLITZERS.map(x => ({ id: x.id, name: x.name, off: blitzerFor(fr.id, cv.id, x.id, state.def.disguise) })), who, id => set({ blitzer: id }), {
+    disabled: readonly || waits,
+    blurb: zero ? 'In Cover 0 every man not covering a receiver comes: the Mike and whoever is left over.'
+      : waits ? 'Pick Blitz above, then who comes: the Mike, the Will, the nickel back or the strong safety.'
+        : `${b.words.charAt(0).toUpperCase()}${b.words.slice(1)}. ${who === 'NB' ? 'The slot receiver he leaves is covered by someone else, or by nobody: a quick throw there beats it.' : who === 'SS' ? 'One deep safety is left, and a linebacker or the nickel back covers the man the safety would have.' : 'The man he would have covered is someone else\'s, or a zone has one fewer defender.'}`,
+  });
   // A disguise: Cover 1 or Cover 3 lined up as two deep, rotating at the snap. Off unless it's picked.
   const can = DISGUISES.includes(cv.id), on = can && state.def.disguise;
   chips(host, 'Disguise', [{ id: 'no', name: 'None' }, { id: 'yes', name: 'Show two deep' }], on ? 'yes' : 'no', id => set({ disguise: id === 'yes' }), {
@@ -1166,7 +1182,7 @@ function setSit(id) {
 function theirSummary() {
   if (state.side === 'O') {
     const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage);
-    return `${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ', blitz' : ', rush four'}`;
+    return `${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? `, ${blitzWord(state.def)}` : ', rush four'}`;
   }
   // Where the strength is on the board as you see it: the defense's view is turned around, so their right is your left.
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
@@ -1197,7 +1213,7 @@ function renderMatchup() {
   const dim = what => ` <span class="dim">· ${what} hidden</span>`;
   const mo = moving(state.off) ? ` · ${fm.motion.who} ${state.off.motion === 'jet' ? 'jet' : 'across'}` : '';
   const off = esc(fm.name) + (state.side === 'D' && hidden() ? dim('play') : `${esc(mo)} · ${esc(playShort(state.off))}`);
-  const def = esc(fr.name) + (state.side === 'O' && hidden() ? dim('coverage') : ` · ${esc(cv.name)}${disguised(state.def) ? ' (disguised)' : ''}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ' · Blitz' : ''}`);
+  const def = esc(fr.name) + (state.side === 'O' && hidden() ? dim('coverage') : ` · ${esc(cv.name)}${disguised(state.def) ? ' (disguised)' : ''}${cv.id !== 'c0' && state.def.pressure === 'blitz' ? ` · ${blitzWord(state.def).replace(/^\w/, c => c.toUpperCase())}` : ''}`);
   $('matchup').innerHTML = `${esc(situation().name)} · ${off}  vs  ${def}`;
 }
 
@@ -1349,7 +1365,7 @@ function drillCall() {
   const D = byId(DRILLS, drill.id);
   if (D.side === 'O') {
     const pers = byId(FORMATIONS, state.off.formation).personnel;
-    state.def = { front: pers === '10' || pers === '11' ? 'nickel' : 'over', coverage: D.coverage, pressure: D.pressure, disguise: false };
+    state.def = { front: pers === '10' || pers === '11' ? 'nickel' : 'over', coverage: D.coverage, pressure: D.pressure, blitzer: 'M', disguise: false };
   } else {
     const R = rng(newSeed());
     state.off = { formation: D.formation, play: R.pick(PLAYS.filter(p => p.type === 'run')).id, flip: R() < 0.5, motion: 'none', hot: {} };
@@ -1613,8 +1629,9 @@ function showResult() {
   // (While you're asked what they played, the coverage waits: Cover 0 is said as a blitz, as it is.)
   const blitz = state.def.pressure === 'blitz' || cv.id === 'c0';
   const from = `On ${P.sit.name}, ${playName(state.off)} from ${fm.name}${moving(state.off) ? `, ${motionWords(state.off)},` : ''}`;
-  $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ' with a blitz' : ''}.`
-    : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ' with a blitz' : ''}.${typicalNote()}`;
+  const bw = cv.id === 'c0' ? 'blitz' : blitzWord(state.def);
+  $('resVs').textContent = asking() ? `${from} against ${fr.name}${blitz ? ` with a ${bw}` : ''}.`
+    : `${from} against ${fr.name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : blitz ? ` with a ${bw}` : ''}.${typicalNote()}`;
   // Each line's time is a button that watches that moment again on the board (see replay()).
   const story = $('story');
   story.textContent = '';
@@ -1798,7 +1815,7 @@ function resetShare() {
 }
 $('share').addEventListener('click', async () => {
   const c = call();
-  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off), state.sit].filter(x => x !== '').join('.');
+  const code = [state.side, c.formation, c.play, c.flip ? 1 : 0, c.front, c.coverage, c.pressure === 'blitz' && blitzer(c) !== 'M' ? `blitz${blitzer(c)}` : c.pressure, state.seed, c.disguise ? 1 : 0, moving(c) ? c.motion : 'none', hotCode(state.off), state.sit].filter(x => x !== '').join('.');
   const base = document.documentElement.hasAttribute('data-single') || location.protocol === 'file:' ? SITE : location.href.split('#')[0];
   const url = `${base}#p=${code}`;
   resetShare();
@@ -1817,7 +1834,8 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot.situation):
+// A play link in the address (#p=side.formation.play.flip.front.coverage.pressure.seed.disguise.motion.hot.situation;
+// the pressure is "four", "blitz" for the Mike's, or "blitz" and who for another's: "blitzW", "blitzNB", "blitzSS"):
 // 'ok' once it's set up, 'bad' for one cut short or garbled, 'unknown' for a formation, play, front, coverage, hot route
 // or situation this version doesn't have (the address is cleared either way), '' when there's none. A link from before
 // there were disguises ends at the seed, one from before motion at the disguise, one from before downs at the hot
@@ -1840,7 +1858,8 @@ function fromLink() {
   Object.assign(state, { side, sit, auto: false, linked: true, ask: null, seed: +seed >>> 0 });
   drill = drilled = null;
   state.off = { formation, play: playId, flip: flip === '1', motion: motion || 'none', hot };
-  state.def = { front, coverage, pressure: pressure === 'blitz' ? 'blitz' : 'four', disguise: disguise === '1' };
+  const who = pressure.match(/^blitz(W|NB|SS)?$/);
+  state.def = { front, coverage, pressure: who ? 'blitz' : 'four', blitzer: who?.[1] || 'M', disguise: disguise === '1' };
   linkNote = '';
   return 'ok';
 }
@@ -1913,8 +1932,9 @@ function chartHint() {
   const goal = `on ${sit.name}, ${sit.down > 2 ? `making the first down (${sit.togo} yard${sit.togo === 1 ? '' : 's'})` : `gaining ${n} yards or more`}`;
   if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense ${goal}${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
+  const who = chart ? chart.blitzer : blitzer(state.def), bw = { M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' }[who] || 'blitz';
   const yours = hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
-  return `How often ${yours} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
+  return `How often ${yours} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? `with a ${bw}${who === 'SS' ? ', the Mike\'s in Cover 2 and Cover 4, where both safeties play deep' : ''}` : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
     + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
 }
 // Once a row has its numbers, it can be tapped.
@@ -1923,7 +1943,7 @@ function again() {
   if (!redo) return '';
   const cv = byId(COVERAGES, state.def.coverage);
   const mine = state.side === 'O' ? byId(PLAYS, state.off.play).name
-    : `${byId(FRONTS, state.def.front).name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? ', blitz' : ', rush four'}`;
+    : `${byId(FRONTS, state.def.front).name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? `, ${blitzWord(state.def)}` : ', rush four'}`;
   if (redo.sit) return ` The situation changed. Run it again for ${mine} on ${situation().name}.`;
   return ` ${redo.yours ? 'You changed the call' : 'They changed their call'}. Run it again for ${mine}.`;
 }
@@ -1950,7 +1970,7 @@ async function runChart() {
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
     : PLAYS.filter(p => !cantCall(base.formation, p.id)).map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others'; from Empty, no runs)
   const sit = situation();
-  chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
+  chart = { rows, pressure: base.pressure, blitzer: base.pressure === 'blitz' ? base.blitzer || 'M' : 'M', disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();

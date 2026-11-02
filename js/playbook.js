@@ -241,7 +241,16 @@ export const COVERAGES = [
 
 export const PRESSURES = [
   { id: 'four', name: 'Rush four', blurb: 'Four rushers, seven in coverage.' },
-  { id: 'blitz', name: 'Blitz', blurb: 'The Mike linebacker rushes too: five rushers, one fewer in coverage.' },
+  { id: 'blitz', name: 'Blitz', blurb: 'One more man rushes: five rushers, one fewer in coverage.' },
+];
+
+// Who blitzes, on a blitz (not in Cover 0, which sends everyone not covering a receiver): the Mike unless another is
+// picked. A blitzer lined up outside the tackles comes off the edge. (See blitzerFor() in js/sim.js for when each can.)
+export const BLITZERS = [
+  { id: 'M', name: 'Mike', words: 'the Mike linebacker, from the middle' },
+  { id: 'W', name: 'Will', words: 'the Will linebacker, from the weak side' },
+  { id: 'NB', name: 'Nickel back', words: 'the nickel back, off the edge from over the slot' },
+  { id: 'SS', name: 'Safety', words: 'the strong safety, down from the box' },
 ];
 
 // Technique numbers, in order across the line from the center out (the playbook lists them this way).

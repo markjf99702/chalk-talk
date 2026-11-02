@@ -1,7 +1,7 @@
 // Unit tests for the simulator:  node --test test/sim.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simulate, prepare, name, hotRoutes, cantCall } from '../js/sim.js';
+import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT } from '../js/playbook.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -737,6 +737,34 @@ test('NFL timing: on five-step and play-action drops he starts reading later, an
     assert.ok(past > Math.min(0.9, 0.7 * L), `${JSON.stringify(call)} seed ${seed - 1}: thrown to the ${rcv.label}'s ${rcv.job.route} ${past.toFixed(2)} yards out of his break`);
   }
   assert.ok(quick / quickN < 1.1, `Slant-Flat's throws come out at ${(quick / quickN).toFixed(2)} s on average`);
+});
+
+test('a choice of blitzer: the Mike, the Will, the nickel back or the strong safety, each where he can be', () => {
+  const extra = S => S.D.filter(d => d.job.kind === 'rush' && d.blitzer).map(d => d.label);
+  for (const flip of [false, true]) {
+    const base = { formation: 'trips', play: 'smash', front: 'nickel', coverage: 'c3', pressure: 'blitz', flip };
+    assert.deepEqual(extra(prepare(base, 5)), ['M'], 'the Mike unless another is picked');
+    for (const who of ['M', 'W', 'NB', 'SS']) assert.deepEqual(extra(prepare({ ...base, blitzer: who }, 5)), [who], `${who} blitzes`);
+    const nb = prepare({ ...base, blitzer: 'NB' }, 5);
+    assert.ok(Math.abs(nb.NB.job.gap) >= 6, `the nickel back comes off the edge, at ${nb.NB.job.gap}`);
+    // Where he can't be the one, it's the Mike: no nickel back outside the Nickel front, no safety where both play
+    // deep or from a disguise that lines him up deep.
+    assert.deepEqual(extra(prepare({ ...base, front: 'over', blitzer: 'NB' }, 5)), ['M']);
+    for (const coverage of ['c2', 'c4']) assert.deepEqual(extra(prepare({ ...base, coverage, blitzer: 'SS' }, 5)), ['M'], coverage);
+    assert.deepEqual(extra(prepare({ ...base, disguise: true, blitzer: 'SS' }, 5)), ['M'], 'disguised');
+    assert.deepEqual(extra(prepare({ ...base, pressure: 'four', blitzer: 'W' }, 5)), [], 'rushing four, nobody extra');
+    // Cover 0 sends everyone not covering a receiver, whoever is picked.
+    assert.equal(JSON.stringify(simulate({ ...base, coverage: 'c0', blitzer: 'SS' }, 5).frames.at(-1).xy), JSON.stringify(simulate({ ...base, coverage: 'c0' }, 5).frames.at(-1).xy));
+    // The coverage still adds up: Cover 3 with the safety coming has three deep, three underneath and five rushing.
+    const ss = prepare({ ...base, blitzer: 'SS' }, 5);
+    assert.deepEqual([ss.D.filter(d => d.job.z?.deep).length, ss.D.filter(d => d.job.kind === 'zone' && !d.job.z.deep).length, ss.D.filter(d => d.job.kind === 'rush').length], [3, 3, 5]);
+    const r = simulate({ ...base, blitzer: 'NB' }, 5);
+    assert.equal(r.events.find(e => e.kind === 'blitz').text, 'The nickel back blitzes.');
+  }
+  assert.equal(blitzerFor('over', 'c3', 'NB'), 'Only the Nickel front has a nickel back.');
+  assert.equal(blitzerFor('nickel', 'c4', 'SS'), 'Cover 4 needs both safeties deep.');
+  assert.equal(blitzerFor('nickel', 'c1', 'SS', true), 'Showing two deep, the safety is too far back to blitz.');
+  for (const who of ['M', 'W']) for (const fr of FRONTS) for (const cv of COVERAGES) assert.equal(blitzerFor(fr.id, cv.id, who), '', `${who} ${fr.id} ${cv.id}`);
 });
 
 test('coverages put the right number deep and the right number rushing', () => {

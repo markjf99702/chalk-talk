@@ -1909,7 +1909,7 @@ for (const colorScheme of ['light', 'dark']) {
     theirs: [...document.querySelectorAll('#theirsBody [role="radiogroup"]')].map(g => g.getAttribute('aria-label')),
     newLook: !document.getElementById('theirsLook').hidden,
   }));
-  const OFF = ['Formation', 'Strong side', 'Motion', 'Play'], DEF = ['Front', 'Coverage', 'Pressure', 'Disguise'];
+  const OFF = ['Formation', 'Strong side', 'Motion', 'Play'], DEF = ['Front', 'Coverage', 'Pressure', 'Blitzer', 'Disguise'];
   assert.deepEqual(await cards(), { mine: OFF, theirs: [], newLook: true });
   await p.click('#auto');
   assert.deepEqual(await cards(), { mine: OFF, theirs: DEF, newLook: false }, 'calling both sides');
@@ -2137,7 +2137,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.four\.\d+\.1\.\w+\.1and10$/, `the link is ${link}`);
   await p.goto(base + link.slice(link.indexOf('#')));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
-  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: true });
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c3', pressure: 'four', blitzer: 'M', disguise: true });
   await p.goto(base + link.slice(link.indexOf('#')).replace(/\.1\.\w+\.1and10$/, ''));
   await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
   assert.equal(await p.evaluate(() => window.chalkTalk.state.def.disguise), false, 'a link from before disguises opens without one');
@@ -2308,12 +2308,12 @@ for (const colorScheme of ['light', 'dark']) {
   const D = DRILLS[0];
   assert.deepEqual(await card(), { pressed: ['Beat Cover 2'], hint: false, now: `Beat Cover 2. ${D.brief} On 1st & 10, a snap that gains 4 yards or more counts. Snap 1 of 5. Stop the drill` });
   assert.deepEqual(await his(), { auto: true, side: 'O', switch: false, newLook: false, ask: false }, 'in a drill');
-  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false });
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false });
   assert.equal(await p.textContent('#caption'), 'Drill: Beat Cover 2. Call a play, then Snap.');
   assert.match(await p.textContent('#matchup'), /coverage hidden$/, 'the drill\'s call isn\'t hidden before the first snap');
   // New personnel: he sets his front to it, and keeps the drill's coverage.
   await p.getByRole('radio', { name: 'I-Form' }).click();
-  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'over', coverage: 'c2', pressure: 'four', disguise: false }, 'against two backs');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'over', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false }, 'against two backs');
   await p.getByRole('radio', { name: 'Gun Trips' }).click();
   let ok = 0;
   for (let k = 1; k <= 2; k++) {
@@ -2360,7 +2360,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.getByRole('radio', { name: '3rd & 8' }).click();
   assert.equal(await p.textContent('#caption'), '3rd & 8: the drill starts over.');
   assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 3rd & 8, a snap that makes the first down counts. Snap 1 of 5. Stop the drill`);
-  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false }, 'a new situation changed the drill\'s call');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false }, 'a new situation changed the drill\'s call');
   let firsts = 0;
   for (let k = 1; k <= 3; k++) {
     if (await p.evaluate(() => {
@@ -2436,7 +2436,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal(now.on, 'Smash', 'Empty with a run called plays Smash');
   assert.equal(await p.textContent('#caption'), 'Empty: no back to hand it to, so the play is Smash. New personnel: they\'ve substituted.');
   assert.deepEqual(now.off, [['Inside Zone', 'No back to hand it to.'], ['Outside Zone', 'No back to hand it to.'], ['Power', 'No back to hand it to.'], ['Draw', 'No back to hand it to.'],
-    ['Play-Action Shot', 'No back to fake the handoff to.'], ['RB Screen', 'No back behind the line to throw the screen to.']].map(([name, why]) => [`${name}: ${why}`, why]), 'the plays that need a back are greyed out, each with why');
+    ['Play-Action Shot', 'No back to fake the handoff to.'], ['RB Screen', 'No back behind the line to throw the screen to.']], 'the plays that need a back are greyed out, each with why');
   assert.match(now.blurb, /From Empty there's no back behind the line: no runs, no play-action fake and no RB Screen\.$/);
   assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.off.formation, state.off.play]; }), ['empty', 'smash']);
   // the back, split out: tap his button in Every player's job
@@ -2454,6 +2454,54 @@ for (const colorScheme of ['light', 'dark']) {
   // a link to a run from Empty
   await p.goto(`${base}#p=O.empty.iz.0.nickel.c2.four.5.0.none.1and10`);
   assert.equal(await p.textContent('#theirsHint'), 'That link is for a play this version doesn\'t have.');
+  await p.context().close();
+}
+
+// Who blitzes: a Blitzer row under Pressure, calling the defense. Rushing four it waits, greyed out; on a blitz it's the
+// Mike unless you pick the Will, the nickel back (only from the Nickel front) or the strong safety (only in Cover 1 and
+// Cover 3), each of the others greyed out saying why. The play-by-play names him, the call says whose blitz it is, and
+// a shared link carries him.
+{
+  const p = await phone();
+  await p.click('[data-side="D"]');
+  await p.click('#auto');
+  const row = () => p.evaluate(() => {
+    const pick = [...document.querySelectorAll('#mineBody .pick')].find(x => x.querySelector('.pick-label').textContent === 'Blitzer');
+    return { on: pick.querySelector('[aria-checked="true"]').textContent, off: [...pick.querySelectorAll('.chip:disabled')].map(b => b.title || 'all'), blurb: pick.querySelector('.blurb').textContent };
+  });
+  await p.getByRole('radio', { name: 'Nickel', exact: true }).click();
+  await p.getByRole('radio', { name: 'Cover 2' }).click();
+  await p.getByRole('radio', { name: 'Rush four' }).click();
+  let now = await row();
+  assert.equal(now.off.length, 4, 'rushing four, the Blitzer row waits');
+  assert.match(now.blurb, /^Pick Blitz above, then who comes/);
+  await p.getByRole('radio', { name: 'Blitz', exact: true }).click();
+  now = await row();
+  assert.deepEqual([now.on, now.off], ['Mike', ['Cover 2 needs both safeties deep.']], 'the Mike, and no safety in Cover 2');
+  await p.getByRole('radio', { name: /^Nickel back/ }).click();
+  assert.match((await row()).blurb, /^The nickel back, off the edge from over the slot\./);
+  await p.getByRole('radio', { name: '4-3 Over' }).click();
+  now = await row();
+  assert.deepEqual([now.on, now.off], ['Mike', ['Only the Nickel front has a nickel back.', 'Cover 2 needs both safeties deep.']], 'no nickel back in the 4-3, so the Mike');
+  await p.getByRole('radio', { name: 'Nickel', exact: true }).click();
+  assert.equal((await row()).on, 'Nickel back', 'and the pick comes back with the Nickel front');
+  await p.getByRole('radio', { name: 'Cover 3' }).click();
+  await p.getByRole('radio', { name: /^Safety/ }).click();
+  assert.equal((await row()).on, 'Safety');
+  assert.match(await p.textContent('#matchup'), /Cover 3 · Safety blitz/);
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#story'), /The strong safety blitzes\./);
+  assert.match(await p.textContent('#resVs'), /, Cover 3 with a safety blitz\./);
+  await p.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await p.click('#share');
+  const link = await p.evaluate(() => navigator.clipboard.readText());
+  assert.match(link, /#p=D\.\w+\.\w+\.[01]\.nickel\.c3\.blitzSS\.\d+\./, `the link is ${link}`);
+  await p.goto(base + link.slice(link.indexOf('#')).replace('blitzSS', 'blitzW'));
+  await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
+  assert.deepEqual(await p.evaluate(() => { const d = window.chalkTalk.state.def; return [d.pressure, d.blitzer]; }), ['blitz', 'W'], 'a link with the Will\'s blitz');
+  await p.goto(base + link.slice(link.indexOf('#')).replace('blitzSS', 'blitz'));
+  await p.waitForFunction(() => window.chalkTalk?.state.phase !== 'pre');
+  assert.deepEqual(await p.evaluate(() => { const d = window.chalkTalk.state.def; return [d.pressure, d.blitzer]; }), ['blitz', 'M'], 'a link from before there was a choice is the Mike\'s');
   await p.context().close();
 }
 
@@ -2491,10 +2539,10 @@ for (const colorScheme of ['light', 'dark']) {
     return now();
   };
   // Calling the offense with the other coach picking: his coverage, out, and no disguise; his front and pressure stay.
-  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { front: 'over', coverage: 'c1', pressure: 'blitz', disguise: true }); lineUp(); });
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.def, { front: 'over', coverage: 'c1', pressure: 'blitz', blitzer: 'M', disguise: true }); lineUp(); });
   assert.match(await p.textContent('#matchup'), /coverage hidden/);
   let s = await show('Cover 3');
-  assert.deepEqual({ side: s.side, auto: s.auto, switch: s.switch, def: s.def, inView: s.inView, focus: s.focus }, { side: 'O', auto: true, switch: true, def: { front: 'over', coverage: 'c3', pressure: 'blitz', disguise: false }, inView: true, focus: 'snap' });
+  assert.deepEqual({ side: s.side, auto: s.auto, switch: s.switch, def: s.def, inView: s.inView, focus: s.focus }, { side: 'O', auto: true, switch: true, def: { front: 'over', coverage: 'c3', pressure: 'blitz', blitzer: 'M', disguise: false }, inView: true, focus: 'snap' });
   assert.equal(s.caption, 'From the playbook: Cover 3.');
   assert.match(s.matchup, /vs  4-3 Over · Cover 3 · Blitz$/, 'his coverage from the playbook is hidden on the board');
   assert.equal(s.hint, 'From the playbook: 4-3 Over, Cover 3, blitz. New look gets you a new one.');
@@ -2553,7 +2601,7 @@ for (const colorScheme of ['light', 'dark']) {
   // (all the way: rows go on adding snaps after their first numbers are up, which moves their middle one)
   const first = n => p.waitForFunction(n => document.querySelectorAll('#bars button.bar-row').length === n && document.getElementById('runChart').getAttribute('aria-disabled') !== 'true', n, { timeout: 90000 });
   await p.click('[data-side="O"]');
-  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; state.off.flip = true; Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', disguise: true }); lineUp(); });
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; state.off.flip = true; Object.assign(state.def, { front: 'nickel', coverage: 'c1', pressure: 'blitz', blitzer: 'M', disguise: true }); lineUp(); });
   await p.click('#runChart');
   await first(5);
   assert.match(await p.textContent('#chartHint'), / Tap a row to watch a typical snap of it\.$/);
@@ -2569,7 +2617,7 @@ for (const colorScheme of ['light', 'dark']) {
     const { state } = window.chalkTalk;
     return { auto: state.auto, switch: document.getElementById('auto').checked, off: state.off, def: state.def, seed: state.seed, phase: state.phase, focus: document.activeElement.id };
   });
-  assert.deepEqual(s, { auto: false, switch: false, off: { formation: 'trips', play: 'smash', flip: true, motion: 'none', hot: {} }, def: { front: 'nickel', coverage: 'c3', pressure: 'four', disguise: false }, seed: want.seed, phase: 'playing', focus: 'snap' },
+  assert.deepEqual(s, { auto: false, switch: false, off: { formation: 'trips', play: 'smash', flip: true, motion: 'none', hot: {} }, def: { front: 'nickel', coverage: 'c3', pressure: 'four', blitzer: 'M', disguise: false }, seed: want.seed, phase: 'playing', focus: 'snap' },
     'a typical snap against Cover 3 from the chart (before the snap the chart rushes four with no disguise)');
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).auto), false, 'the switch went off, but wasn\'t saved');
   const done = await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); return state.play.result.yards; });
@@ -3158,11 +3206,11 @@ for (const colorScheme of ['light', 'dark']) {
   });
   await p.click('[data-side="D"]');
   await p.click('#auto');
-  for (const name of ['3-4', 'Cover 4', 'Blitz', 'Gun Doubles', 'Left', 'Jet', 'Mesh']) await p.getByRole('radio', { name }).click();
+  for (const name of ['3-4', 'Cover 4', 'Blitz', 'Will', 'Gun Doubles', 'Left', 'Jet', 'Mesh']) await p.getByRole('radio', { name, exact: !/ /.test(name) && name !== 'Mesh' }).click();
   await p.click('#labels');
   await p.click('[data-speed="0.5"]');
   const want = {
-    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true, motion: 'jet', hot: {} }, def: { front: '34', coverage: 'c4', pressure: 'blitz', disguise: false }, labels: false, speed: 0.5,
+    side: 'D', auto: false, off: { formation: 'doubles', play: 'mesh', flip: true, motion: 'jet', hot: {} }, def: { front: '34', coverage: 'c4', pressure: 'blitz', blitzer: 'W', disguise: false }, labels: false, speed: 0.5,
     shown: { side: 'D', auto: false, labels: 'false', speed: '0.5' },
   };
   assert.deepEqual(await kept(p), want, 'the calls and settings picked');
