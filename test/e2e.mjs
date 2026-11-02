@@ -2101,6 +2101,7 @@ for (const colorScheme of ['light', 'dark']) {
   assert.match(await p.textContent('#resVs'), /^Smash from Gun Trips, the H in motion across, against Nickel, Cover 1\.$/);
   assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: the nickel back ran with the H. Someone running with a man in motion means man coverage.'));
   assert.match(await p.textContent('#note'), / Here the H went in motion first, and the play was run from where the receivers stood then: two each side\.$/);
+  assert.match(await p.textContent('#boardWords'), / Before the snap the H goes in motion across to the left\. /, 'the board in words says where he goes');
   const first = await p.$eval('#story li button', b => ({ text: b.textContent, label: b.getAttribute('aria-label') }));
   assert.match(first.text, /^\u2212\d\.\ds$/, 'the play-by-play\'s times before the snap');
   assert.match(first.label, /^\d\.\d seconds before the snap: watch it again$/);
@@ -2112,6 +2113,8 @@ for (const colorScheme of ['light', 'dark']) {
   await p.getByRole('radio', { name: 'Jet' }).click();
   const jet = await p.evaluate(() => { const { state, board } = window.chalkTalk, i = state.play.motion.who; return { t0: board.start(), x: board.pos(0, i).x, v: (board.pos(0, i).x - board.pos(-0.05, i).x) / 0.05 }; });
   assert.ok(jet.t0 < -1 && jet.t0 > -2.5 && Math.abs(jet.x) < 1 && Math.abs(jet.v) > 7, `jet: ${JSON.stringify(jet)}`);
+  // (at the snap he's still short of the middle, on the side he started from: the words say where he's going)
+  assert.match(await p.textContent('#boardWords'), / Before the snap the H goes in jet motion across to the left\. /, 'the board in words says where the jet man goes');
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).off.motion), 'jet', 'the motion is kept with your call');
   // The link carries it; one from before motion opens without it.
   await p.context().grantPermissions(['clipboard-read', 'clipboard-write']);

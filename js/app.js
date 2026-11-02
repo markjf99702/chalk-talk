@@ -1322,7 +1322,9 @@ function boardWords(P) {
   const cbs = P.players.filter(p => p.label === 'CB').map(p => depth(p.y));
   const corners = cbs.length === 2 && cbs[0] === cbs[1] ? `both corners ${cbs[0]}` : cbs.map((d, k) => `${k ? 'the other' : 'one corner'} ${d}`).join(', ');
   // His motion, where it's yours or both calls are shown: the other coach's is part of his play, hidden until the snap.
-  const m = P.motion && (state.side === 'O' || !state.auto) ? ` Before the snap the ${P.players[P.motion.who].label} goes in ${P.motion.kind === 'jet' ? 'jet motion' : 'motion'} across to the ${lr(Math.sign(P.players[P.motion.who].x) || 1)}.` : '';
+  // (across to the side he didn't line up on: at the snap a jet man is still short of the middle, on his first side)
+  const mover = P.motion && P.players[P.motion.who];
+  const m = P.motion && (state.side === 'O' || !state.auto) ? ` Before the snap the ${mover.label} goes in ${P.motion.kind === 'jet' ? 'jet motion' : 'motion'} across to the ${lr(-Math.sign(lined(mover)) || 1)}.` : '';
   return `${fm.name}, strong ${lr(strong)}: ${sides}; ${backfield}.${m} The defense${P.motion ? ' at the snap' : ''}: ${deep}, ${P.box.box} in the box against ${P.box.blockers} blockers, ${corners}.`;
 }
 
