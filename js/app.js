@@ -207,9 +207,10 @@ function rollTheirs() {
       state.def.front = w(fronts.map(([f, p]) => [f, f === 'nickel' ? more : p * (1 - more) / (1 - nickel)]));
       state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]].map(([c, p]) => [c, L.cover(c, p)]));
       state.def.pressure = R() < L.blitz(0.25) ? 'blitz' : 'four';
-      // who comes, of the ones who can: the Mike most often, then the Will, the nickel back and the safety
-      state.def.blitzer = w([['M', 0.4], ['W', 0.3], ['NB', 0.15], ['SS', 0.15]].filter(([b]) => !blitzerFor(state.def.front, state.def.coverage, b, state.def.disguise)));
       state.def.disguise = DISGUISES.includes(state.def.coverage) && R() < DISGUISE_SHARE;
+      // who comes, of the ones who can with this front, coverage and disguise: the Mike most often, then the Will, the
+      // nickel back and the safety
+      state.def.blitzer = w([['M', 0.4], ['W', 0.3], ['NB', 0.15], ['SS', 0.15]].filter(([b]) => !blitzerFor(state.def.front, state.def.coverage, b, state.def.disguise)));
     } else {
       // Empty, which can only throw, half as often as each of the others on 1st & 10, and more or less often as the NFL's
       // passes went with the down (a design choice, so it comes up without taking over; not a published statistic)
