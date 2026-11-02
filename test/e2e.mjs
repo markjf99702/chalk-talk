@@ -2553,6 +2553,14 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', motion: 'none' }); state.seen = true; lineUp(); });
   await tap('H');
   assert.equal(await p.isVisible('#whoRoutesOpen'), false, 'Change his route for the other coach\'s receiver');
+  // Calling both sides on defense, routes changed on the offense's play are that play's: the chart's other plays are
+  // run as they're drawn, and its hint says so.
+  await p.click('#whoClose');
+  await p.click('#auto');
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', motion: 'none', hot: { H: 'slant' } }); lineUp(); });
+  await p.click('#runChart');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.chart().rows.filter(r => Object.keys(r.call.hot || {}).length).map(r => [r.id, r.call.hot])), [['smash', { H: 'slant' }]], 'the chart ran every play with the H on a slant');
+  assert.match(await p.textContent('#chartHint'), /^How often each play from Gun Trips succeeds against your defense, gaining 4 yards or more: Smash as you changed it \(the H on a slant\), the rest as drawn\. /);
   await c.close();
 }
 

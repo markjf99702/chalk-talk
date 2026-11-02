@@ -1793,7 +1793,9 @@ function chartHint() {
   // the formation, and the motion when it's yours, or his and out (before then his chart's plays have none)
   const off = { ...state.off, motion: chart ? chart.motion : state.side === 'O' || !hidden() ? state.off.motion : 'none' };
   const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
-  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
+  // (calling both sides, with routes changed: those are for that one play, and the rest are run as drawn; see runChart())
+  const changed = hotList(state.off).length ? `: ${byId(PLAYS, state.off.play).name} as you changed it (${hotWords(state.off)}), the rest as drawn` : '';
+  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense, gaining 4 yards or more${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
   const yours = hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
   return `How often ${yours} succeeds, gaining 4 yards or more, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? 'with a blitz' : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
@@ -1829,7 +1831,7 @@ async function runChart() {
   if (state.side === 'D' && hidden()) base.motion = 'none'; // his motion is part of his hidden play
   const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
-    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] }));
+    : PLAYS.map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others')
   chart = { rows, pressure: base.pressure, disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side };
   $('chartHint').textContent = chartHint();
   drawBars();
