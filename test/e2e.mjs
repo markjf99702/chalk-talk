@@ -2329,6 +2329,11 @@ for (const colorScheme of ['light', 'dark']) {
   await p.evaluate(() => { const { state, lineUp, snap, finish } = window.chalkTalk; Object.assign(state.off, { formation: 'iform', play: 'oz' }); Object.assign(state.def, { coverage: 'c1' }); lineUp(); snap(); finish(); });
   assert.match(await p.textContent('#story'), /The strong safety slides over to the side the cornerback left, to keep a run inside there: the bump\./);
   assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: a cornerback ran with the Z. Someone running with a man in motion means man coverage. And the strong safety slid over to the side the cornerback left, to keep a run inside there: the bump.'), (await p.locator('#reads li').allTextContents()).join(' | '));
+  // With the Will blitzing against the Nickel front the strong safety has the back, so the nickel back, on the tight
+  // end, bumps instead, and the play-by-play and the read name him.
+  await p.evaluate(() => { const { state, lineUp, snap, finish } = window.chalkTalk; const keep = { ...state.def }; Object.assign(state.def, { front: 'nickel', pressure: 'blitz', blitzer: 'W' }); lineUp(); snap(); finish(); Object.assign(state.def, keep); });
+  assert.match(await p.textContent('#story'), /The nickel back slides outside the tight end, to keep a run inside on the side the cornerback left: the bump\./);
+  assert.ok((await p.locator('#reads li').allTextContents()).includes('Motion: a cornerback ran with the Z. Someone running with a man in motion means man coverage. And the nickel back slid outside the tight end, to keep a run inside on the side the cornerback left: the bump.'), (await p.locator('#reads li').allTextContents()).join(' | '));
   await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash' }); Object.assign(state.def, { coverage: 'c3' }); lineUp(); });
   // Jet: crossing the middle at full speed at the snap.
   await p.getByRole('radio', { name: 'Jet' }).click();

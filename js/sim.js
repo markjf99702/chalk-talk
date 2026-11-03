@@ -169,7 +169,7 @@ function buildDefense(S) {
     const r2 = S.O.find(p => p.num === 2 && Math.sign(p.x) === s); // the slot on the defense's strong side
     nb = r2 && Math.abs(r2.x) > 6 ? mk(S, 'D', 'NB', 'cb', r2.x - Math.sign(r2.x), 4.5) : mk(S, 'D', 'NB', 'cb', teS ? teS.x + 3 * s : 6.5 * s, 5);
   }
-  S.CB = [cbL, cbR]; S.FS = fs; S.SS = ss; S.NB = nb;
+  S.CB = [cbL, cbR]; S.FS = fs; S.SS = ss; S.NB = nb; S.bumper = null;
   const lab = l => S.D.find(d => d.label === l && !d.dl);
 
   // Who rushes.
@@ -286,13 +286,23 @@ function buildDefense(S) {
   // stands with no receiver outside him) and 6 deep, and on a run holds the edge the way the cornerback would have (see
   // holdEdge()); he plays the short middle from there on a pass, or his man on a blitz. In Cover 0, with nobody deep, he
   // stays on his man, 2 yards outside the tight end and 5 1/2 deep, and comes up to a run as soon as he sees it, from
-  // outside. (Not when he's the one blitzing: he comes off that edge anyway. Nor when his man is someone other than
-  // the tight end on that side, the back or the tight end on the other side: out there he'd leave him open.)
-  if (S.from && cov.man && ss.job.kind !== 'rush') {
+  // outside. When he can't (he's the one blitzing, or his man is someone other than the tight end on that side, the
+  // back or the tight end on the other side, who'd be left open), the man covering that tight end bumps instead, the
+  // nickel back or the Sam: he slides outside him, to the same spot, and does the same, covering the tight end from
+  // there on a pass. (A Sam on the line outside him, in the 4-3 Under or the 3-4, comes off it to that spot too: left
+  // there to hold the edge, he was kicked out wide and Power from I-Form went 15.3 yards a carry, from 0.4.) Only in
+  // Cover 1: in Cover 0 the runs that way didn't break long without it (Outside Zone from I-Form against the Nickel
+  // front, 2.9 yards a carry after the motion), and with the nickel back out there Inside Zone went 17.8, from 3.9.
+  if (S.from && cov.man) {
     const mover = S.O.find(p => p.label === S.fm.motion.who), sd = Math.sign(S.from.P[mover.i].x), te = S.te(sd);
-    if (S.CB.some(cb => cb.job.kind === 'man' && cb.job.r === mover) && (ss.job.kind !== 'man' || ss.job.r === te)) {
-      const [out, deep] = cov.id === 'c0' ? [2, 5.5] : [5, 6];
-      ss.x = (te ? te.x : 3 * sd) + out * sd; ss.y = deep; ss.bump = sd; ss.holds = cov.id === 'c1';
+    if (S.CB.some(cb => cb.job.kind === 'man' && cb.job.r === mover)) {
+      const free = ss.job.kind !== 'rush' && (ss.job.kind !== 'man' || ss.job.r === te);
+      const b = free ? ss : cov.id === 'c1' && te && S.D.find(d => d.job.kind === 'man' && d.job.r === te);
+      if (b) {
+        const [out, deep] = cov.id === 'c0' ? [2, 5.5] : [5, 6];
+        b.x = (te ? te.x : 3 * sd) + out * sd; b.y = deep;
+        b.bump = sd; b.holds = cov.id === 'c1'; S.bumper = b;
+      }
     }
   }
   // A disguise: Cover 1 or Cover 3 lined up as two deep, the way Cover 4 lines up, with both safeties 12.5 yards deep
@@ -435,7 +445,10 @@ function presnap(S, kind) {
   if (man) line(go + (jet ? 0.5 : 0.8), `${cap(defName(S, man))} runs with him: man coverage.`, man);
   else line(go + (jet ? 0.5 : 0.8), S.cov.man ? 'Nobody follows him.' : 'Nobody follows him: zone.', mover);
   // (In a disguise he stays deep, as if it were two deep, and comes down to that side at the snap.)
-  if (S.SS.bump && !S.disguise) line(go + (jet ? 0.8 : 1.3), 'The strong safety slides over to the side the cornerback left, to keep a run inside there: the bump.', S.SS);
+  // (When the strong safety can't, the man on the tight end slides outside him instead: see buildDefense().)
+  const b = S.bumper;
+  if (b === S.SS && !S.disguise) line(go + (jet ? 0.8 : 1.3), 'The strong safety slides over to the side the cornerback left, to keep a run inside there: the bump.', b);
+  else if (b && b !== S.SS) line(go + (jet ? 0.8 : 1.3), `${cap(name(S, b))} slides outside the tight end, to keep a run inside on the side the cornerback left: the bump.`, b);
   if (!jet) {
     const a = count(s1), b = count(-s1);
     line(setAt, `He sets on the other side: ${a === b ? `${r(a)} receivers each side now` : `${r(a)} receivers on his side now, ${r(b)} on the other`}.`, mover);
@@ -732,7 +745,7 @@ export function simulate(call, seed = 1) {
     unblocked: (S.unblocked || []).map(d => d.i), free: (S.freeRushers || []).map(d => d.i), cameFree, protection: S.protection.map(p => p.i),
     players: S.P.map(pl => ({ i: pl.i, team: pl.team, label: pl.label, cls: pl.cls, info: pl.info, x: S.pre[pl.i].x, y: S.pre[pl.i].y })),
     jobs: S.jobText, overlay: S.overlay, drawn: S.drawn || {}, drawnReads: S.drawnReads || [],
-    motion: S.motion ? { kind: S.motion.kind, who: S.motion.who.i, man: S.motion.man ? S.motion.man.i : -1, t0: S.motion.t0, set: S.motion.setAt, bump: S.SS.bump && !S.disguise ? S.SS.i : -1 } : null, // (bump: the safety seen sliding over)
+    motion: S.motion ? { kind: S.motion.kind, who: S.motion.who.i, man: S.motion.man ? S.motion.man.i : -1, t0: S.motion.t0, set: S.motion.setAt, bump: S.bumper && !(S.bumper === S.SS && S.disguise) ? S.bumper.i : -1 } : null, // (bump: the man seen sliding over)
   };
 }
 
@@ -1297,14 +1310,14 @@ function defense(S, d) {
   if (gunRead(S, d)) return rotate(S, d) || bite(S, d);
   // After a catch or a handoff seen: everyone runs to the ball.
   if (c && c.team === 'O' && (S.caught || (c !== S.QB && runLook(S, t - d.lag)) || (c !== S.QB && c.y > -0.5))) {
-    if (j.kind === 'man' && !S.caught && c !== j.r && c.y < 0 && t < 2 && d.cls === 'cb') { cover(S, d); return; }
     if (d.holds && !S.caught && S.play.scheme !== 'draw' && c.y < 0 && t < 2) return holdEdge(S, d, c);
+    if (j.kind === 'man' && !S.caught && c !== j.r && c.y < 0 && t < 2 && d.cls === 'cb' && !d.bump) { cover(S, d); return; }
     return pursue(S, d, c);
   }
   if (ballOut) return breakOnBall(S, d);
   if (j.kind === 'rush') return rush(S, d);
   if (rotate(S, d)) return;
-  if (runLook(S, t - d.lag) && d.cls !== 'cb') return d.holds && S.play.type === 'run' && S.play.scheme !== 'draw' ? holdEdge(S, d, S.RB) : bite(S, d);
+  if (runLook(S, t - d.lag) && (d.cls !== 'cb' || (d.bump && S.play.type === 'run'))) return d.holds && S.play.type === 'run' && S.play.scheme !== 'draw' ? holdEdge(S, d, S.RB) : bite(S, d);
   if (t < 0.12) { d.tx = d.x; d.ty = d.y; d.ts = 0; return; }
   if (j.kind === 'man') return cover(S, d);
   if (j.kind === 'zone') return zone(S, d);
@@ -1387,8 +1400,9 @@ function bite(S, d) {
   // where they lined up (or, after a disguise, the spot they rotated to).
   const rb = S.RB || S.QB;
   const target = S.play.type === 'run' && S.carrier && S.carrier !== S.QB ? S.carrier : rb;
-  if (d.cls === 'lb') { d.tx = target.x + (S.aimX ?? 0) * 0.3; d.ty = Math.max(0.6, d.y0 - 2.5); d.ts = d.top * 0.75; }
-  else if (d.cls === 's') { d.tx = d.x; d.ty = (d.home ? d.home.y : d.y0) - 2.2; d.ts = d.top * 0.5; }
+  // (A man in the bump creeps as a safety does, from outside: see buildDefense().)
+  if (d.cls === 'lb' && !d.bump) { d.tx = target.x + (S.aimX ?? 0) * 0.3; d.ty = Math.max(0.6, d.y0 - 2.5); d.ts = d.top * 0.75; }
+  else if (d.cls === 's' || d.bump) { d.tx = d.x; d.ty = (d.home ? d.home.y : d.y0) - 2.2; d.ts = d.top * 0.5; }
   else { d.tx = target.x; d.ty = target.y; d.ts = d.top; }
   d.want = target;
 }
@@ -1858,7 +1872,12 @@ function rotateLine(S) {
 // What each man is doing on the play, in a sentence, for the card that opens when you tap him.
 function describeJob(S, pl) {
   const text = jobWords(S, pl), m = S.motion;
-  if (m && pl.bump) return `When the cornerback goes across with the ${m.who.label}, he ${S.disguise ? 'comes down at the snap' : 'slides over'} to take the cornerback's place on the ${Math.sign(pl.bump) === S.s ? 'strong' : 'weak'} side, keeping a run inside there: the bump. ${text}`;
+  const bumpSide = pl.bump && (Math.sign(pl.bump) === S.s ? 'strong' : 'weak');
+  if (m && pl.bump && pl === S.SS) return `When the cornerback goes across with the ${m.who.label}, he ${S.disguise ? 'comes down at the snap' : 'slides over'} to take the cornerback's place on the ${bumpSide} side, keeping a run inside there: the bump. ${text}`;
+  if (m && pl.bump) {
+    const ss = S.SS.job, why = ss.kind === 'rush' ? 'the strong safety is blitzing' : `the strong safety has ${name(S, ss.r)}`;
+    return `When the cornerback goes across with the ${m.who.label}, he slides outside the tight end, keeping a run inside on the ${bumpSide} side: the bump, since ${why}. ${text}`;
+  }
   if (!m || (pl !== m.who && pl !== m.man)) return text;
   const side = Math.sign(m.end.x) === S.s ? 'strong' : 'weak';
   if (pl === m.man) return `${text} When the ${m.who.label} goes in motion, he runs with him.`;
@@ -1901,8 +1920,9 @@ function jobWords(S, pl) {
   const run = S.play.type === 'run', draw = run && S.play.scheme === 'draw';
   const onRun = !run ? '' : draw ? ' On this draw he plays it as a pass until he sees the handoff, then comes up to the ball.'
     : j.kind === 'man' && j.r === S.RB ? ' On this run his man has the ball: he runs with him to the line, a step outside him, and meets him there.'
-    : j.kind === 'man' && pl.cls === 'cb' ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
     : pl.holds ? ' On this run he holds the edge, outside the ball carrier, until the ball carrier gets to the line, then comes up.'
+    : j.kind === 'man' && pl.cls === 'cb' && !pl.bump ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
+    : pl.bump ? ' On this run he comes up to the ball as soon as he sees it, from outside.'
     : ' On this run he reads it and comes downhill to the ball.';
   // A disguise: how he lines up, and what he does about it at the snap (see the end of buildDefense()).
   const look = !S.disguise ? '' : pl === S.FS ? ' He lines up deep over half the field, as if it were two deep, and rotates to the middle at the snap: the disguise.'

@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'd1bfa91ca046' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '27757e45db1d' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -951,32 +951,50 @@ test('motion: he runs across and is counted on his new side; in man coverage his
   }
 });
 
-test('the bump: when a cornerback goes across with the man in motion, the strong safety takes his place, and Outside Zone that way does about what it does without the motion', () => {
+test('the bump: when a cornerback goes across with the man in motion, the strong safety takes his place, or the man on the tight end does, and Outside Zone that way does about what it does without the motion', () => {
   // From I-Form and Singleback the Z goes in motion from the tight end's side, and in man coverage the cornerback on
   // him goes too. The strong safety slides over to the side they left, outside the tight end, at the snap (ahead of a
   // jet as well), and the play-by-play says so. In a zone the corner stays, and from the formations whose H goes in
-  // motion it's never a cornerback who has him: no bump. Nor when the strong safety's own man is someone else, the
-  // back or the other tight end: he stays where he can cover him. (Against the Nickel front with a blitz he can have
-  // the back, or with the Will blitzing the far tight end.)
-  let seed = 400, bumps = 0, stays = 0;
+  // motion it's never a cornerback who has him: no bump. When the strong safety can't, because he's blitzing or his
+  // own man is someone else, the back or the other tight end (he stays where he can cover him), the man covering that
+  // tight end bumps instead in Cover 1, the nickel back or the Sam, from outside him. (Against the Nickel front with a
+  // blitz the strong safety can have the back, or with the Will blitzing the far tight end.) Not in Cover 0, where the
+  // runs that way didn't break long without him, and Inside Zone from I-Form against the Nickel front went from 3.9
+  // yards a carry to 17.8 with the nickel back out there.
+  let seed = 400, bumps = 0, stays = 0, others = new Set();
   for (const fm of FORMATIONS.filter(f => f.motion)) for (const coverage of ['c0', 'c1', 'c3']) for (const motion of ['across', 'jet']) for (const flip of [false, true]) for (const fr of FRONTS) {
-    const call = { formation: fm.id, play: seed % 2 ? 'oz' : 'smash', front: fr.id, coverage, pressure: seed % 3 ? 'four' : 'blitz', blitzer: seed % 5 < 2 ? 'W' : 'M', flip, motion }, what = JSON.stringify(call);
+    const call = { formation: fm.id, play: seed % 2 ? 'oz' : 'smash', front: fr.id, coverage, pressure: seed % 3 ? 'four' : 'blitz', blitzer: seed % 5 < 2 ? 'W' : seed % 5 === 2 && coverage !== 'c0' ? 'SS' : 'M', flip, motion }, what = JSON.stringify(call);
     const S = prepare(call, seed), r = simulate(call, seed++), was = prepare({ ...call, motion: 'none' }, seed - 1);
     const mover = was.O.find(p => p.label === fm.motion.who), sd = Math.sign(mover.x), te = S.te(sd);
     const snap = r.frames.find(f => f.t === 0), x = snap.xy[2 * S.SS.i], j = S.SS.job;
     const line = r.events.find(e => e.kind === 'motion' && /the bump\.$/.test(e.text));
-    if (fm.motion.who === 'Z' && coverage !== 'c3' && j.kind !== 'rush' && (j.kind !== 'man' || j.r === te)) {
+    const gone = fm.motion.who === 'Z' && coverage !== 'c3', free = j.kind !== 'rush' && (j.kind !== 'man' || j.r === te);
+    // (In Cover 0 nobody bumps in his place: see below.)
+    const onTe = S.D.find(d => d.job.kind === 'man' && d.job.r === te);
+    if (gone && free) {
       bumps++;
       assert.ok(Math.sign(x) === sd && Math.abs(x) >= Math.abs(te.x) + 1.5, `${what}: the strong safety is at ${x.toFixed(1)} at the snap, the tight end at ${te.x.toFixed(1)}`);
       assert.equal(line?.who, S.SS.i, `${what}: the play-by-play says the strong safety slides over`);
+      assert.match(line.text, /^The strong safety slides over to the side the cornerback left/, what);
       assert.match(S.jobText[S.SS.i], /the bump/, what);
-    } else {
-      assert.ok(!line && !S.SS.bump, `${what}: a bump with no cornerback gone, or by a safety whose man is elsewhere`);
+    } else if (gone && coverage === 'c1') {
+      // The man on the tight end, outside him at the snap, and named.
+      const b = S.D.find(d => d.bump), bx = snap.xy[2 * onTe.i];
+      assert.equal(b, onTe, `${what}: the strong safety can't, so the ${onTe.label}, on the tight end, bumps`);
+      others.add(`${b.label} ${j.kind === 'rush' ? 'SS blitzing' : 'SS on ' + j.r.label}`);
+      assert.ok(Math.sign(bx) === sd && Math.abs(bx) > Math.abs(te.x) + 1, `${what}: the ${b.label} is at ${bx.toFixed(1)} at the snap, the tight end at ${te.x.toFixed(1)}`);
+      assert.equal(line?.who, b.i, `${what}: the play-by-play says who slides over`);
+      assert.match(line.text, /^The (nickel back|Sam) slides outside the tight end, to keep a run inside on the side the cornerback left: the bump\.$/, what);
+      assert.match(S.jobText[b.i], /slides outside the tight end, keeping a run inside on the strong side: the bump, since the strong safety (is blitzing|has the running back|has the tight end \(U\))\./, what);
       // One whose man is the back or the far tight end lines up within reach of him, not out wide on the other side.
-      if (fm.motion.who === 'Z' && j.kind === 'man') { stays++; assert.ok(Math.abs(x - j.r.x) < 6, `${what}: the strong safety has the ${j.r.label} but is at ${x.toFixed(1)} at the snap, ${Math.abs(x - j.r.x).toFixed(1)} yards from him`); }
+      if (j.kind === 'man') { stays++; assert.ok(Math.abs(x - j.r.x) < 6, `${what}: the strong safety has the ${j.r.label} but is at ${x.toFixed(1)} at the snap, ${Math.abs(x - j.r.x).toFixed(1)} yards from him`); }
+    } else {
+      assert.ok(!line && !S.D.some(d => d.bump), `${what}: a bump with no cornerback gone, or in Cover 0 by someone other than the strong safety`);
+      if (gone && j.kind === 'man') { stays++; assert.ok(Math.abs(x - j.r.x) < 6, `${what}: the strong safety has the ${j.r.label} but is at ${x.toFixed(1)} at the snap, ${Math.abs(x - j.r.x).toFixed(1)} yards from him`); }
     }
   }
   assert.ok(bumps >= 16 && stays >= 4, `${bumps} bumps and ${stays} safeties staying with a man elsewhere: the test should see both`);
+  assert.deepEqual([...others].map(o => o.split(' ')[0]).sort().filter((o, k, a) => a.indexOf(o) === k), ['NB', 'S'], `the nickel back and the Sam both bump: ${[...others].join(', ')}`);
   // Outside Zone, every front and pressure: from I-Form and Singleback against Cover 1 and Cover 0, the Z going across
   // first now gains within 4 yards a carry of what it gains without him going. (Before the bump it was 11 to 14 yards
   // more, and 5 more from Singleback against Cover 0: with the corner gone, nobody was left out there and about one run
@@ -995,6 +1013,25 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
     }
     seed += 1000;
     assert.ok(Math.abs(ypc.across - ypc.none) < 4, `Outside Zone from ${formation} against Cover ${coverage[1]}: ${ypc.none.toFixed(1)} yards a carry, ${ypc.across.toFixed(1)} with the Z going across first`);
+  }
+  // And in the two Cover 1 calls where the strong safety can't bump, with the man on the tight end bumping instead:
+  // the Nickel front with the Mike or the Will blitzing (the strong safety has the back, or from Singleback the other
+  // tight end), from I-Form and Singleback, and the strong safety blitzing, from I-Form against every front. With
+  // nobody bumping, the Z going across first took the first from 6.1-6.7 yards a carry to 11.4-12.6, and the second
+  // from 5.4-6.7 to 10.8-13.0, with one run in five or so going 15 yards or more; with the man on the tight end
+  // bumping, 3.6-4.3 and 6.6-8.4 (8-12% going 15 or more, against 4-7% without the motion). That's 320 snaps a group
+  // from four start seeds: 6000 (this one), 1, 100000 and 7777777.
+  for (const [what, calls] of [
+    ['the Nickel front, the Mike or the Will blitzing', ['iform', 'single'].flatMap(formation => ['M', 'W'].map(blitzer => ({ formation, front: 'nickel', blitzer })))],
+    ['the strong safety blitzing, from I-Form', FRONTS.map(fr => ({ formation: 'iform', front: fr.id, blitzer: 'SS' }))],
+  ]) {
+    const ypc = {};
+    for (const motion of ['none', 'across']) {
+      let y = 0, n = 0, s = 6000;
+      for (const c of calls) for (let i = 0; i < 80; i++) { y += simulate({ ...c, play: 'oz', coverage: 'c1', pressure: 'blitz', flip: i % 2 === 1, motion }, s++).result.yards; n++; }
+      ypc[motion] = y / n;
+    }
+    assert.ok(ypc.across - ypc.none < 4, `Outside Zone against Cover 1, ${what}: ${ypc.none.toFixed(1)} yards a carry, ${ypc.across.toFixed(1)} with the Z going across first`);
   }
 });
 
