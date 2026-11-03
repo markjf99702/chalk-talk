@@ -119,7 +119,7 @@ test('the same seed replays the same play', () => {
 // not their words, which can change without the play changing). Keep the old ones: they say when the board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '080a93802fd5' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '825f076d544f' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -452,7 +452,7 @@ test('every line of the play-by-play that names a man says which man, for the bo
   }
 });
 
-test('run blocking: the men on the line first, linebackers next, and never a safety', () => {
+test('run blocking: the men on the line first, linebackers next (or the nickel back, for a tight end), and never a safety', () => {
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'run' && p.scheme !== 'draw')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
     if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
     const S = prepare({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure, flip }, 11);
@@ -463,8 +463,9 @@ test('run blocking: the men on the line first, linebackers next, and never a saf
       const d = b.job.target;
       if (!d) continue;
       assert.notEqual(d.cls, 's', `${what}: the ${b.label} is sent at the ${d.label}, a safety (${lines()})`);
-      // (The kick-out is for the end man, whoever he is: a linebacker or a nickel back off the ball outside the end.)
-      if (d.y0 >= 2 && b.job.scheme !== 'kick') assert.equal(d.cls, 'lb', `${what}: the ${b.label} climbs to the ${d.label}, who isn't a linebacker (${lines()})`);
+      // (The kick-out is for the end man, whoever he is: a linebacker or a nickel back off the ball outside the end. And a
+      // tight end with nobody else takes the nickel back near him, who has come on for a linebacker.)
+      if (d.y0 >= 2 && b.job.scheme !== 'kick' && !(b.cls === 'te' && d === S.NB)) assert.equal(d.cls, 'lb', `${what}: the ${b.label} climbs to the ${d.label}, who isn't a linebacker (${lines()})`);
       assert.equal(blockers.filter(o => o.job.target === d).length, 1, `${what}: two men have the ${d.label} (${lines()})`);
     }
     // Nobody leaves a man lined up on him, or in the gap he's stepping to, to climb to a linebacker.
@@ -978,7 +979,7 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
   // Outside Zone, every front and pressure: from I-Form and Singleback against Cover 1 and Cover 0, the Z going across
   // first now gains within 4 yards a carry of what it gains without him going. (Before the bump it was 11 to 14 yards
   // more, and 5 more from Singleback against Cover 0: with the corner gone, nobody was left out there and about one run
-  // in five went the distance. Over 1,152 snaps a cell it comes within 0.1-1.6 yards, and 0.8-2.8 since a back past
+  // in five went the distance. Over 1,152 snaps a cell it comes within 0.1-1.6 yards, and 0.4-2.8 since a back past
   // the line is run down from behind more often, which takes more off the runs without the motion.)
   seed = 1234;
   for (const [formation, coverage, k] of [['iform', 'c1', 20], ['single', 'c1', 20], ['iform', 'c0', 40], ['single', 'c0', 40]]) {
@@ -1077,6 +1078,23 @@ test('from the shotgun the linebackers and safeties read the handoff before they
   const all = Object.values(rate).reduce((a, [n, ok]) => [a[0] + n, a[1] + ok], [0, 0]);
   assert.ok(all[1] / all[0] > 0.22, `from the shotgun against Nickel, runs succeed ${say}`);
   for (const [n, ok] of Object.values(rate)) assert.ok(ok / n > 0.12, `from the shotgun against Nickel, runs succeed ${say}`);
+});
+
+test('a tight end with nobody to block takes the nickel back near him: Gun Trips\' Y, rather than the slot from outside', () => {
+  // In Gun Trips against the Nickel front in a zone, the nickel back stands between the tight end (the Y, off the line)
+  // and the slot. The Y had nobody, and the slot was sent 4 yards inside to block him and seldom got there. Now the Y
+  // takes him. Inside Zone from Gun Trips and Gun Ace against Nickel succeeded 22% of the time here; now 38%.
+  for (const play of ['iz', 'oz', 'power']) for (const coverage of ['c2', 'c3', 'c4']) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const S = prepare({ formation: 'trips', play, front: 'nickel', coverage, pressure, flip }, 3), what = `${play} against ${coverage} ${pressure}${flip ? ', flipped' : ''}`;
+    const Y = S.O.find(p => p.label === 'Y'), H = S.O.find(p => p.label === 'H');
+    assert.equal(Y.job.target, S.NB, `${what}: the Y blocks ${Y.job.target?.label ?? 'nobody'}`);
+    assert.notEqual(H.job.target, S.NB, `${what}: the slot is sent at the nickel back too`);
+  }
+  let seed = 7100, n = 0, ok = 0;
+  for (const formation of ['trips', 'ace']) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (let k = 0; k < 12; k++) {
+    n++; if (simulate({ formation, play: 'iz', front: 'nickel', coverage: cv.id, pressure, flip: k % 2 === 1 }, seed++).result.yards >= 4) ok++;
+  }
+  assert.ok(ok / n > 0.28, `Inside Zone from Gun Trips and Gun Ace against Nickel succeeds ${Math.round(100 * ok / n)}% of the time`);
 });
 
 test('a back through the line is run down from behind: not every run that gets 10 yards goes the distance', () => {
@@ -1187,7 +1205,7 @@ test('over many snaps the numbers look like football', () => {
   // about three times in four, and nudges the rate up. Since the defense reads a shotgun handoff before it goes after the
   // back, and a back past the line is run down from behind (version 2), it gives 3.88-4.89 yards a carry (the shotgun
   // read alone gave 5.05-6.61: a back who got past the linebackers nearly always went the distance), and the passes as
-  // before. This one gives 65.3%, 1.6% and 4.89.
+  // before; with a tight end taking the nickel back near him, 4.00-4.99. This one gives 65.3%, 1.6% and 4.99.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1215,8 +1233,9 @@ test('the README\'s matchups', () => {
   // Flood 8.9-9.5 against Cover 3 and 4.8-8.5 against Cover 1 and 2 (its lead over Cover 1 is 0.4-1.5 yards, down from
   // at least 1.7 before those formations: from Gun Ace and the Pistol it does worst against Cover 3), a throw to Mesh's
   // crossers 10.9-12.2 yards against Cover 1 and 4.4-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
-  // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read and the run-down
-  // from behind (version 2), 48-51% and 25-28%. A change to the balance that undoes one of these
+  // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read, the run-down
+  // from behind and a tight end on the nickel back (version 2), 51-52% and 25-28%. A change to the balance that undoes
+  // one of these
   // has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;

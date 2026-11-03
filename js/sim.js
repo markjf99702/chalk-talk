@@ -666,6 +666,14 @@ function assignRun(S) {
   const idle = blockers.filter(b => !b.job.target && lean[b.job.scheme] !== undefined), loose = onLine.filter(d => !blockers.some(b => b.job.target === d));
   const p3 = assign(idle, loose, (b, d) => (Math.abs(d.x - b.x) <= 2 ? Math.abs(d.x - b.x) : Infinity), () => 5);
   idle.forEach((b, k) => { if (p3[k] >= 0) b.job.target = loose[p3[k]]; });
+  // A tight end with nobody at either level takes the nickel back, when he's near him: in Gun Trips the Y, off the line
+  // inside the slot, rather than the slot receiver coming 4 yards inside to try. The slot then blocks whoever is free
+  // near him (see stalk()).
+  const nb = S.NB;
+  if (nb && Math.abs(nb.x) < 9 && nb.y < 8.5 && nb !== kicked && !blockers.some(b => b.job.target === nb)) {
+    const te = blockers.find(b => b.cls === 'te' && !b.job.target && lean[b.job.scheme] !== undefined && Math.abs(nb.x - b.x) < 3);
+    if (te) { te.job.target = nb; for (const w of wrs) if (w.job.target === nb) w.job.target = null; }
+  }
   const kick = blockers.find(b => b.job.scheme === 'kick');
   if (kick) kick.job.target = emol || null;
   const blocked = new Set(blockers.map(b => b.job.target).filter(Boolean));
