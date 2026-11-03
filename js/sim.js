@@ -9,7 +9,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLI
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
 // sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
 // differently, and says what to set this to.
-export const SIM_VERSION = 1;
+export const SIM_VERSION = 2;
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -1282,6 +1282,7 @@ function defense(S, d) {
   d.want = null;
   const ballOut = S.ball.state === 'air';
   if (j.kind === 'man' && j.r === S.RB && S.play.type === 'run' && S.play.scheme !== 'draw') return scrape(S, d, S.RB);
+  if (gunRead(S, d)) return rotate(S, d) || bite(S, d);
   // After a catch or a handoff seen: everyone runs to the ball.
   if (c && c.team === 'O' && (S.caught || (c !== S.QB && runLook(S, t - d.lag)) || (c !== S.QB && c.y > -0.5))) {
     if (j.kind === 'man' && !S.caught && c !== j.r && c.y < 0 && t < 2 && d.cls === 'cb') { cover(S, d); return; }
@@ -1295,6 +1296,16 @@ function defense(S, d) {
   if (t < 0.12) { d.tx = d.x; d.ty = d.y; d.ts = 0; return; }
   if (j.kind === 'man') return cover(S, d);
   if (j.kind === 'zone') return zone(S, d);
+}
+
+// From the shotgun the back has the ball about a third of a second after the snap, half the time it takes under center,
+// and before the defense has read the play. So until a linebacker or a safety has read it (his lag, counted from the
+// handoff), he keeps coming downhill to his gap (see bite()) rather than going flat out at the back, before the line has
+// got to him. Under center the handoff comes after that read. (Not on the draw, a pass until the handoff, nor for the
+// rushers and the cornerbacks, who play the run as they always do.)
+function gunRead(S, d) {
+  const c = S.carrier, p = S.play;
+  return p.type === 'run' && p.scheme !== 'draw' && !S.fm.under && c === S.RB && c.y < -0.5 && S.t < S.handT + d.lag && d.cls !== 'cb' && d.job.kind !== 'rush';
 }
 
 function pursue(S, d, c) {
@@ -1665,6 +1676,10 @@ function hole(S) {
 
 // ---- tackles, sacks, the end of the play
 
+// How far past the line a back on a run is through the first wave, and is run down from behind as a deep catch is (see
+// contact()).
+const RUNDOWN = 3;
+
 function contact(S) {
   const c = S.carrier, t = S.t, R = S.R;
   if (!c || S.dead) return;
@@ -1688,10 +1703,11 @@ function contact(S) {
     d.tried = t;
     let pt = { dl: 0.82, de: 0.84, lb: 0.88, s: 0.85, cb: 0.81 }[d.cls];
     pt += { qb: 0.08, rb: -0.1, wr: -0.04, te: 0.02, fb: 0.03 }[c.cls] || 0;
-    // From behind is harder, and a dive from behind harder still; but a receiver who caught it deep is run down by
-    // defenders who were running with him, and they get him more often than a back running away from them.
-    const deep = S.caught && S.catchY >= 15;
-    pt += head > 0.3 ? 0.04 : head < -0.4 ? (dd > 1.1 ? (deep ? -0.25 : -0.4) : (deep ? -0.06 : -0.14)) : 0;
+    // From behind is harder, and a dive from behind harder still. But a man the defenders were running with is run down
+    // from behind more often: a receiver who caught it deep, or a back 3 yards past the line, through the first wave and
+    // with the men he got past chasing him (without it, nine in ten runs that got 15 yards went on for 20 or more).
+    const deep = S.caught && S.catchY >= 15, away = !S.caught && S.play.type === 'run' && c.y > RUNDOWN;
+    pt += head > 0.3 ? 0.04 : head < -0.4 ? (dd > 1.1 ? (deep || away ? -0.25 : -0.4) : (deep || away ? -0.06 : -0.14)) : 0;
     if (blocked) pt = 0.14;
     if (S.D.some(o => o !== d && o.eng < 0 && dist(o, c) < 1.6)) pt += 0.12;
     if (R.chance(pt)) {
@@ -1703,12 +1719,15 @@ function contact(S) {
       else ev(S, 'tackle', `${cap(name(S, d))} makes the tackle${blocked ? ', reaching out of a block' : ''}.`, { who: d.i, blocked });
       return finish(S, c === S.QB && S.play.type === 'run' ? 'run' : S.caught ? 'catch' : 'run', d, hit);
     }
-    // A defender who misses is left behind for a moment; one chasing down a deep catch from behind is back in the
-    // chase a step later.
-    d.missUntil = t + (deep && head < -0.4 ? 0.3 : 0.8);
+    // A defender who misses is left behind for a moment; one chasing down a deep catch or a back from behind is back in
+    // the chase a step later (sooner after a back, who keeps running straight on, away from him).
+    d.missUntil = t + (head < -0.4 && deep ? 0.3 : head < -0.4 && away ? 0.15 : 0.8);
     c.vx *= 0.75; c.vy *= 0.75;
     if (qbHeld) { ev(S, 'escape', `${cap(name(S, S.QB, true))} slips out of ${name(S, d)}'s grasp.`, { who: S.QB.i }); S.QB.tx = S.QB.x - (d.x - S.QB.x) * 2; continue; }
-    ev(S, 'miss', `${cap(name(S, c))} breaks a tackle from ${name(S, d)}.`, { who: d.i });
+    // (Run down from behind, the same man can miss him twice in a few steps: the second time isn't put the same way, nor
+    // the third as the second.)
+    const before = S.events.filter(e => e.kind === 'miss' && e.who === d.i).length;
+    ev(S, 'miss', `${cap(name(S, c))} ${before ? `gets away from ${name(S, d)} ${before % 2 ? 'again' : 'once more'}` : `breaks a tackle from ${name(S, d)}`}.`, { who: d.i });
   }
   if (qbHeld && t > 6) throwAway(S, S.QB);
 }

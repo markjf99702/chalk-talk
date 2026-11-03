@@ -445,6 +445,7 @@ await page2.close();
   assert.equal(await opens(here, link.slice(link.indexOf('#')), +link.slice(link.indexOf('#p=') + 3).split('.')[7]), null, 'a link from this version says it isn\'t');
   assert.equal(await opens(here, `#p=O.trips.smash.0.nickel.c2.four.262.0.none.1and10.v${SIM_VERSION + 1}`, 262), newer);
   assert.equal(await opens(here, `#p=O.trips.smash.0.nickel.c2.four.263.0.none.1and10.v${SIM_VERSION}`, 263), null, 'the line stayed for the next link');
+  assert.equal(await opens(here, '#p=O.trips.smash.0.nickel.c2.four.264', 264), SIM_VERSION === 1 ? null : earlier, 'a link from before there were versions is version 1');
   await here.close();
   const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
   await c.route('**/js/sim.js', async route => {
@@ -458,7 +459,7 @@ await page2.close();
   for (const [hash, seed, says] of [
     [`#p=O.trips.smash.0.nickel.c2.four.262.0.none.1and10.v${SIM_VERSION}`, 262, earlier],
     [`#p=O.trips.smash.0.nickel.c2.four.263.0.none.1and10.v${next}`, 263, null],
-    ['#p=O.trips.smash.0.nickel.c2.four.264', 264, SIM_VERSION === 1 ? earlier : null], // from before there were versions: version 1
+    ['#p=O.trips.smash.0.nickel.c2.four.264', 264, earlier], // from before there were versions: version 1, earlier than any served here
     [`#p=O.trips.smash.0.nickel.c2.four.265.0.none.YcurlHslant.3and8.v${SIM_VERSION}`, 265, earlier],
   ]) assert.equal(await opens(p, hash, seed), says, hash);
   assert.equal(await p.evaluate(() => window.chalkTalk.state.sit), '3and8', 'the version field took the situation\'s place');
@@ -658,8 +659,8 @@ for (const side of ['O', 'D']) {
     let a, b;
     for (let seed = 1; seed < 500 && !b; seed++) {
       const r = simulate({ ...state.off, ...state.def }, seed), evs = r.events.filter(e => e.kind !== 'shed');
-      // two lines between 0.2 and 1 second apart, and nothing else until after the first has gone, mid-play
-      const k = evs.findIndex((e, n) => n && e.t - evs[n - 1].t > 0.2 && e.t - evs[n - 1].t < 1 && !(evs[n + 1]?.t < evs[n - 1].t + 2.4) && evs[n - 1].t + 2.4 < r.frames.at(-1).t);
+      // two different lines between 0.2 and 1 second apart, and nothing else until after the first has gone, mid-play
+      const k = evs.findIndex((e, n) => n && e.text !== evs[n - 1].text && e.t - evs[n - 1].t > 0.2 && e.t - evs[n - 1].t < 1 && !(evs[n + 1]?.t < evs[n - 1].t + 2.4) && evs[n - 1].t + 2.4 < r.frames.at(-1).t);
       if (k > 0) { state.seed = seed; [a, b] = [evs[k - 1], evs[k]]; }
     }
     lineUp();

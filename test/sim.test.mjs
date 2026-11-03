@@ -119,7 +119,7 @@ test('the same seed replays the same play', () => {
 // not their words, which can change without the play changing). Keep the old ones: they say when the board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '080a93802fd5' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -978,7 +978,8 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
   // Outside Zone, every front and pressure: from I-Form and Singleback against Cover 1 and Cover 0, the Z going across
   // first now gains within 4 yards a carry of what it gains without him going. (Before the bump it was 11 to 14 yards
   // more, and 5 more from Singleback against Cover 0: with the corner gone, nobody was left out there and about one run
-  // in five went the distance. Over 1,152 snaps a cell it comes within about 2 yards.)
+  // in five went the distance. Over 1,152 snaps a cell it comes within 0.1-1.6 yards, and 0.8-2.8 since a back past
+  // the line is run down from behind more often, which takes more off the runs without the motion.)
   seed = 1234;
   for (const [formation, coverage, k] of [['iform', 'c1', 20], ['single', 'c1', 20], ['iform', 'c0', 40], ['single', 'c0', 40]]) {
     const ypc = {};
@@ -1059,6 +1060,54 @@ test('hot routes: a receiver or a back given another route runs it, keeps his pl
   assert.deepEqual([...HOT.receiver, ...HOT.back].filter(r => r !== 'block' && !thrown.has(r)), [], 'a hot route nobody ever throws to');
 });
 
+test('from the shotgun the linebackers and safeties read the handoff before they go after the back, so runs from it work', () => {
+  // The shotgun handoff comes about a third of a second after the snap, half the time it takes under center. When the
+  // linebackers and safeties went flat out at the back the moment he had it, before the line could get to them, Inside
+  // Zone, Outside Zone and Power from Gun Doubles and Gun Trips against the Nickel front succeeded (gained 4 yards or
+  // more) 7% of the time here, 3-15% a play; from Singleback they succeed 28-33%. Now they come downhill to their gaps
+  // until they've read it (see gunRead() in js/sim.js): 31%, 21-42% a play.
+  let seed = 900;
+  const rate = {};
+  for (const formation of ['doubles', 'trips']) for (const play of ['iz', 'oz', 'power']) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (let k = 0; k < 4; k++) {
+    const r = simulate({ formation, play, front: 'nickel', coverage: cv.id, pressure, flip: k % 2 === 1 }, seed++).result;
+    const a = rate[play] ??= [0, 0];
+    a[0]++; if (r.yards >= 4) a[1]++;
+  }
+  const say = Object.entries(rate).map(([p, [n, ok]]) => `${p} ${Math.round(100 * ok / n)}%`).join(', ');
+  const all = Object.values(rate).reduce((a, [n, ok]) => [a[0] + n, a[1] + ok], [0, 0]);
+  assert.ok(all[1] / all[0] > 0.22, `from the shotgun against Nickel, runs succeed ${say}`);
+  for (const [n, ok] of Object.values(rate)) assert.ok(ok / n > 0.12, `from the shotgun against Nickel, runs succeed ${say}`);
+});
+
+test('a back through the line is run down from behind: not every run that gets 10 yards goes the distance', () => {
+  // Inside Zone, Outside Zone and Power from every formation that has a back, against every front and coverage. Before
+  // a defender chasing a back 3 yards past the line had the odds one chasing a deep catch has (see contact() in
+  // js/sim.js), a run that got 10 yards went on for 35.6-39.0 more on average, from three start seeds (61, 5000, 90000),
+  // and more than half went past 60, where the board stops counting; now 20.9-23.1. (NFL 2023 regular season, designed
+  // runs, from nflverse's play-by-play: 6.8, and 1 in 80 went 60.)
+  let seed = 61;
+  const long = [];
+  for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 2; k++) {
+    if (cantCall(fm.id, play)) continue;
+    const y = simulate({ formation: fm.id, play, front: fr.id, coverage: cv.id, pressure, flip: k === 1 }, seed++).result.yards;
+    if (y >= 10) long.push(y - 10);
+  }
+  const more = long.reduce((a, b) => a + b, 0) / long.length;
+  assert.ok(long.length > 60, `${long.length} runs of 10 yards or more`);
+  assert.ok(more < 29, `${long.length} runs of 10 yards or more went on for ${more.toFixed(1)} more on average`);
+  // A man who misses him twice in a few steps is put another way the second time, not the same line twice.
+  let twice = 0;
+  for (let s = 1; s < 400 && twice < 3; s++) {
+    const r = simulate({ formation: 'iform', play: 'oz', front: 'over', coverage: 'c3', pressure: 'four', flip: s % 2 === 1 }, s);
+    const miss = r.events.filter(e => e.kind === 'miss'), by = miss.filter((e, k) => miss.findIndex(x => x.who === e.who) < k);
+    if (!by.length) continue;
+    twice++;
+    for (const e of by) assert.match(e.text, / (again|once more)\.$/, `seed ${s}: "${e.text}"`);
+    for (let k = 1; k < miss.length; k++) assert.notEqual(miss[k].text, miss[k - 1].text, `seed ${s}: ${miss.map(e => e.text).join(' / ')}`);
+  }
+  assert.ok(twice, 'no run where a man missed the back twice');
+});
+
 test('a deep catch is run down from behind: no long run after every catch 15 yards downfield', () => {
   // 640 snaps of the four plays that throw deep. From four start seeds (31, 1000, 5000, 77777) catches 15+ yards
   // downfield gain 5.9-8.1 yards after the catch on average; before the men chasing a deep catch got him more often,
@@ -1079,13 +1128,14 @@ test('the drills\' notes say what the board shows', () => {
   // Each drill ends with a line in DRILLS (js/playbook.js) on what does best against its call; this holds the board to
   // it. The offense drills face their coverage from the front the drill sets (nickel against 10 and 11 personnel, the
   // 4-3 Over otherwise), every play from every formation that can run it, 25 snaps each; the run drill is I-Form's
-  // runs, 50 snaps each, against the two calls its note names. From 240 snaps a play and three start seeds (1, 100000,
-  // 7777777), with the seven formations and Stick: against Cover 2, Four Verticals 21.8-22.5 yards a play and
-  // Play-Action Shot 17.3-20.4, the next 13.9; Stick 80-82% and Slant-Flat 78-80% succeed, the next 74%. Against Cover
-  // 3, Four Verticals 11.6-13.3 yards and Play-Action Shot 10.0-11.3, the next 8.9; the Draw 68-73% and Slant-Flat
-  // 71-73%, the next 68%. Against Cover 0, the RB Screen 63-67%, then Smash, Slant-Flat and Play-Action Shot 44-53%,
-  // the next 46%, and the Draw 3-4% and Power 3-12%, the next 22%. Against I-Form's runs, the 4-3 Over in Cover 1 with a blitz stops 80-82% for
-  // 2.3-3.2 yards a run, and in Cover 0 82-85% for 5.6-6.9.
+  // runs, 50 snaps each, against the two calls its note names. Run as this test runs them from three start seeds (1,
+  // 100000, 7777777), with the shotgun handoff read and the run-down from behind (version 2): against Cover 2, Four
+  // Verticals 21.2-24.3 yards a play and Play-Action Shot 15.5-19.2, the next 14.7; Stick 82-85% and Slant-Flat 71-83%
+  // succeed, the next 74%. Against Cover 3, Four Verticals 11.8-13.6 yards and Play-Action Shot 9.8-12.2, the next 8.9;
+  // the Draw 71-78% and Slant-Flat 69-73%, the next 66%. Against Cover 0, the RB Screen 65-67%, then Smash, Slant-Flat
+  // and Play-Action Shot 43-61%, the next 46%, and the Draw 3-5% and Power 9-12%, the next 21%. Against I-Form's runs,
+  // the 4-3 Over in Cover 1 with a blitz stops 76-83% for 1.4-2.2 yards a run, and in Cover 0 79-87% for 4.3-8.4 (2.4-3.6
+  // and 5.3-9.8 before the run-down).
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1134,7 +1184,10 @@ test('over many snaps the numbers look like football', () => {
   // a carry and 64.7-68.9% complete before the Pistol, Gun Ace, Empty and Stick (four seeds above the 66% completion
   // bound, mean 66.0%); with them it gives 3.33-4.75 yards a carry, 64.8-67.8% complete (mean 66.4%, nine seeds above
   // 66%), sacks on 3.1-4.7% of dropbacks and interceptions on 1.4-2.4% of throws. Stick is a quick throw that's caught
-  // about three times in four, and nudges the rate up. This one gives 65.3%, 1.6% and 4.30.
+  // about three times in four, and nudges the rate up. Since the defense reads a shotgun handoff before it goes after the
+  // back, and a back past the line is run down from behind (version 2), it gives 3.88-4.89 yards a carry (the shotgun
+  // read alone gave 5.05-6.61: a back who got past the linebackers nearly always went the distance), and the passes as
+  // before. This one gives 65.3%, 1.6% and 4.89.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1162,7 +1215,8 @@ test('the README\'s matchups', () => {
   // Flood 8.9-9.5 against Cover 3 and 4.8-8.5 against Cover 1 and 2 (its lead over Cover 1 is 0.4-1.5 yards, down from
   // at least 1.7 before those formations: from Gun Ace and the Pistol it does worst against Cover 3), a throw to Mesh's
   // crossers 10.9-12.2 yards against Cover 1 and 4.4-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
-  // numbers in the box and 19% with two more defenders than blockers. A change to the balance that undoes one of these
+  // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read and the run-down
+  // from behind (version 2), 48-51% and 25-28%. A change to the balance that undoes one of these
   // has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
