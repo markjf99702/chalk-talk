@@ -113,7 +113,7 @@ export const PLAYS = [
   },
   {
     id: 'counter', name: 'Counter', type: 'run', scheme: 'counter', aim: 3.4,
-    blurb: 'A gap run with a fake in it: the back steps away from the play first, to pull the linebackers that way, then takes the handoff back the other way. The back-side guard pulls and kicks out the end, and the play-side line blocks down. With a tight end on the back side to block the end they leave, the back-side tackle pulls too and turns up through the hole for the linebacker; otherwise he stays home to block that end, and a fullback, if there is one, leads through the hole.',
+    blurb: 'A gap run with a fake in it: the back steps away from the play first, to pull the linebackers that way, then takes the handoff back the other way. The back-side guard pulls and kicks out the end, and the play-side line blocks down. With a tight end on the line on the back side to block the end they leave, the back-side tackle pulls too and turns up through the hole for the linebacker; otherwise he stays home on the back side, and a fullback, if there is one, leads through the hole.',
   },
   {
     id: 'draw', name: 'Draw', type: 'run', scheme: 'draw', aim: 0.4,

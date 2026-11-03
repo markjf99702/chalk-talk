@@ -634,9 +634,11 @@ function assignRun(S) {
   const outside = front7.filter(d => d.x * p > edgeX + 0.2 && d.y < 6).sort((a, b) => hyp(a.x - p * (edgeX + 1.5), a.y - 1.5) - hyp(b.x - p * (edgeX + 1.5), b.y - 1.5));
   const emol = outside[0] || front7.filter(d => d.y < 2 && d.x * p > 2.6).sort((a, b) => b.x * p - a.x * p)[0];
   S.emol = emol;
-  // On Counter the back-side guard always pulls and kicks out the end. With a tight end on the back side to block the
-  // end the pullers leave, the back-side tackle pulls behind the guard and turns up through the hole; otherwise the
-  // tackle stays home and blocks that end himself, and a fullback, if there is one, leads through the hole instead.
+  // On Counter the back-side guard always pulls and kicks out the end. With a tight end on the line on the back side to
+  // block the end the pullers leave, the back-side tackle pulls behind the guard and turns up through the hole;
+  // otherwise the tackle stays home and blocks that end himself (or, from Gun Ace, where the tight end a step off the
+  // line there blocks him, takes anyone coming through the gap the guard leaves), and a fullback, if there is one,
+  // leads through the hole instead.
   const counter = play.scheme === 'counter', backT = S.OL.find(o => o.label === (p > 0 ? 'LT' : 'RT'));
   const filler = counter ? S.te(-p) || backT : null;
   for (const b of blockers) {
@@ -1933,7 +1935,7 @@ function jobWords(S, pl) {
     if (j.kind === 'stalk') return j.target ? `Blocks ${name(S, j.target)} to keep him off the run.` : 'Blocks downfield.';
     if (j.kind === 'block') {
       const tgt = j.target ? name(S, j.target) : 'the first defender to show up';
-      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.`, fill: pl.cls === 'ol' ? `Stays home on the back side and blocks ${tgt}, the end the pulling guard leaves.` : `Blocks ${j.target ? tgt : 'the back-side end'}, the man the pullers leave.` })[j.scheme] || `Blocks ${tgt}.`;
+      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.`, fill: pl.cls === 'ol' ? (j.target ? `Stays home on the back side and blocks ${tgt}, the end the pulling guard leaves.` : 'Stays home on the back side, for anyone coming through the gap the pulling guard leaves.') :`Blocks ${j.target ? tgt : 'the back-side end'}, the man the pullers leave.` })[j.scheme] || `Blocks ${tgt}.`;
     }
     return '';
   }

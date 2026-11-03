@@ -256,6 +256,11 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     assert.equal(job(single, 'U').target?.label, 'DE');
     for (const S of [iform, trips]) assert.deepEqual([job(S, bt).scheme, job(S, bt).target?.label], ['fill', 'DE'], `${S.fm.id}: the tackle stays home on the end`);
     assert.equal(job(iform, 'FB').scheme, 'lead', 'from I-Form the fullback leads through the hole');
+    // From Gun Ace the tight end a step off the line on the back side blocks that end, so the tackle staying home has
+    // nobody of his own, and his card doesn't say he has the end.
+    const ace = prepare(call('ace'), 3), aceT = ace.O.find(o => o.label === bt), aceU = ace.O.find(o => o.label === 'U');
+    assert.deepEqual([aceT.job.scheme, aceT.job.target, Math.sign(aceU.x0), aceU.job.target?.label], ['fill', null, -p, 'DE'], 'from Gun Ace the back-side tight end has the end');
+    assert.equal(ace.jobText[aceT.i], 'Stays home on the back side, for anyone coming through the gap the pulling guard leaves.');
     // The step away, and the linebackers with it.
     const r = simulate(call('single'), 3), at = t => r.frames.find(f => f.t >= t - 1e-9).xy, rb = single.RB.i;
     assert.ok((at(0.25)[2 * rb] - single.RB.x0) * p < -0.12, 'the back jabs away from the play first');
