@@ -112,6 +112,10 @@ export const PLAYS = [
     blurb: 'A gap scheme: the play-side linemen block down, the end gets kicked out, and the back-side guard pulls through the hole for the linebacker. With no fullback to kick out the end, the pulling guard does it himself.',
   },
   {
+    id: 'counter', name: 'Counter', type: 'run', scheme: 'counter', aim: 3.4,
+    blurb: 'A gap run with a fake in it: the back steps away from the play first, to pull the linebackers that way, then takes the handoff back the other way. The back-side guard pulls and kicks out the end, and the play-side line blocks down. With a tight end on the back side to block the end they leave, the back-side tackle pulls too and turns up through the hole for the linebacker; otherwise he stays home to block that end, and a fullback, if there is one, leads through the hole.',
+  },
+  {
     id: 'draw', name: 'Draw', type: 'run', scheme: 'draw', aim: 0.4,
     blurb: 'It looks like a pass. The line sets to pass-block and lets the rushers come up the field, and the quarterback hands it to the back late, underneath them.',
   },
@@ -369,8 +373,8 @@ export const DRILLS = [
   },
   {
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
-    brief: 'They run from I-Form, every snap: any of the four runs, to either side.',
-    note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about four runs in five here. The 4-3 Over in Cover 0 stops about as many, but with nobody deep, the runs that get through go a long way.',
+    brief: 'They run from I-Form, every snap: any of the five runs, to either side.',
+    note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about seven runs in ten here. The 4-3 Over in Cover 0 stops about as many, but with nobody deep, the runs that get through go a long way.',
   },
 ];
 

@@ -2506,7 +2506,7 @@ for (const colorScheme of ['light', 'dark']) {
     stops.push(!worked);
     const off = await p.evaluate(() => window.chalkTalk.state.off);
     assert.equal(off.formation, 'iform');
-    assert.ok(['iz', 'oz', 'power', 'draw'].includes(off.play), `the run drill called ${off.play}`);
+    assert.ok(['iz', 'oz', 'power', 'counter', 'draw'].includes(off.play), `the run drill called ${off.play}`);
     runs.add(`${off.play} ${off.flip}`);
     if (k === 1) {
       assert.match(await p.textContent('#actionsNote'), /^Snap again: the next snap of the drill, a new run\. 2 of 5 snaps so far: [0-2] held under 4 yards\.$/);
@@ -2553,7 +2553,7 @@ for (const colorScheme of ['light', 'dark']) {
   let now = await row();
   assert.equal(now.on, 'Smash', 'Empty with a run called plays Smash');
   assert.equal(await p.textContent('#caption'), 'Empty: no back to hand it to, so the play is Smash. New personnel: they\'ve substituted.');
-  assert.deepEqual(now.off, [['Inside Zone', 'No back to hand it to.'], ['Outside Zone', 'No back to hand it to.'], ['Power', 'No back to hand it to.'], ['Draw', 'No back to hand it to.'],
+  assert.deepEqual(now.off, [['Inside Zone', 'No back to hand it to.'], ['Outside Zone', 'No back to hand it to.'], ['Power', 'No back to hand it to.'], ['Counter', 'No back to hand it to.'], ['Draw', 'No back to hand it to.'],
     ['Play-Action Shot', 'No back to fake the handoff to.'], ['RB Screen', 'No back behind the line to throw the screen to.']], 'the plays that need a back are greyed out, each with why');
   assert.match(now.blurb, /From Empty there's no back behind the line: no runs, no play-action fake and no RB Screen\.$/);
   assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.off.formation, state.off.play]; }), ['empty', 'smash']);
@@ -3017,7 +3017,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.click('[data-side="D"]');
   assert.match(await p.textContent('#theirsHint'), /^Hidden until the snap\. .*Read their personnel: two backs or two tight ends lean run, four receivers lean pass\./);
   const picks = await p.evaluate(() => {
-    const { state, rollTheirs } = window.chalkTalk, runs = ['iz', 'oz', 'power', 'draw'], seen = {};
+    const { state, rollTheirs } = window.chalkTalk, runs = ['iz', 'oz', 'power', 'counter', 'draw'], seen = {};
     for (let k = 0; k < 10500; k++) {
       rollTheirs();
       const f = (seen[state.off.formation] ||= { n: 0, run: 0, plays: {} });
@@ -3048,7 +3048,7 @@ for (const colorScheme of ['light', 'dark']) {
   await p.goto(base);
   assert.match(await p.textContent('#sitBlurb'), / The other coach's calls lean the same way\.$/);
   const roll = (side, sit) => p.evaluate(([side, sit]) => {
-    const { state, rollTheirs } = window.chalkTalk, n = 3000, runs = ['iz', 'oz', 'power', 'draw'], out = { nickel: 0, blitz: 0, c0: 0, c1: 0, pass: 0 };
+    const { state, rollTheirs } = window.chalkTalk, n = 3000, runs = ['iz', 'oz', 'power', 'counter', 'draw'], out = { nickel: 0, blitz: 0, c0: 0, c1: 0, pass: 0 };
     Object.assign(state, { side, sit });
     state.off = { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} };
     for (let k = 0; k < n; k++) {

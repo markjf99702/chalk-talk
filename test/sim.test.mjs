@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '27757e45db1d' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'ec1beed2c2fb' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -242,6 +242,41 @@ test('Stick: the outside man clears out deep, the next one sits at five yards, a
     assert.ok(short / n > 0.7, `${coverage}: the stick or the flat on ${short} of ${n} snaps`);
     assert.ok(comp / att > 0.55 && y / n > 3 && y / n < 9, `${coverage}: ${(100 * comp / att).toFixed(0)}% complete for ${(y / n).toFixed(1)} yards a dropback`);
   }
+});
+
+test('Counter: the back steps away first and the linebackers go with him; the back-side guard kicks out the end, and the tackle pulls behind him when a tight end can take the end they leave', () => {
+  const job = (S, l) => S.O.find(p => p.label === l).job;
+  for (const flip of [false, true]) {
+    const p = flip ? -1 : 1, call = f => ({ formation: f, play: 'counter', front: 'over', coverage: 'c3', pressure: 'four', flip });
+    const [bg, bt] = p > 0 ? ['LG', 'LT'] : ['RG', 'RT'];
+    const single = prepare(call('single'), 3), iform = prepare(call('iform'), 3), trips = prepare(call('trips'), 3);
+    for (const S of [single, iform, trips]) assert.deepEqual([job(S, bg).scheme, job(S, bg).pull], ['kick', true], `${S.fm.id}: the back-side guard pulls and kicks out`);
+    assert.deepEqual([job(single, bt).scheme, job(single, bt).target?.cls], ['pull', 'lb'], 'from Singleback the back-side tackle pulls for a linebacker');
+    assert.equal(job(single, 'U').scheme, 'fill', 'and the back-side tight end takes the end they leave');
+    assert.equal(job(single, 'U').target?.label, 'DE');
+    for (const S of [iform, trips]) assert.deepEqual([job(S, bt).scheme, job(S, bt).target?.label], ['fill', 'DE'], `${S.fm.id}: the tackle stays home on the end`);
+    assert.equal(job(iform, 'FB').scheme, 'lead', 'from I-Form the fullback leads through the hole');
+    // The step away, and the linebackers with it.
+    const r = simulate(call('single'), 3), at = t => r.frames.find(f => f.t >= t - 1e-9).xy, rb = single.RB.i;
+    assert.ok((at(0.25)[2 * rb] - single.RB.x0) * p < -0.12, 'the back jabs away from the play first');
+    const lbs = single.D.filter(d => d.cls === 'lb' && d.job.kind !== 'rush');
+    assert.ok(lbs.every(d => (at(0.6)[2 * d.i] - d.x0) * p < -0.2), 'the linebackers go with him');
+    // But not a linebacker in the bump, holding the edge: the Sam, when the strong safety blitzes after the Z goes across.
+    const bc = { ...call('iform'), coverage: 'c1', pressure: 'blitz', blitzer: 'SS', motion: 'across' };
+    const B = prepare(bc, 5), sam = B.D.find(d => d.bump), xy = simulate(bc, 5).frames.find(f => f.t >= 0.6 - 1e-9).xy;
+    assert.equal(sam?.label, 'S', 'the Sam bumps');
+    assert.ok((xy[2 * sam.i] - sam.x0) * p > -0.2, `the Sam in the bump holds his ground: ${(xy[2 * sam.i] - sam.x0).toFixed(2)} yards`);
+  }
+  // Over many snaps: about 4 yards a carry, about half of them gaining 4, and about one in five losing yards (the coach's
+  // note says so). (Built before the shotgun read and the run-down from behind, it gave 3.1 yards a carry here, 29%
+  // gaining 4 and 25% losing yards; since then, 3.6, 51% and 20%: from the shotgun, where the defense waits to read
+  // the handoff as well as stepping with the fake, it gains 4 yards 44-81% of the time, from 11-39%.)
+  let n = 0, y = 0, ok = 0, lost = 0;
+  for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'counter'))) for (const front of ['over', 'nickel', '34']) for (const coverage of ['c1', 'c2', 'c3']) for (let k = 0; k < 4; k++) {
+    const res = simulate({ formation: fm.id, play: 'counter', front, coverage, pressure: k % 2 ? 'four' : 'blitz', flip: k % 2 === 1 }, 1300 + n++).result;
+    y += res.yards; if (Math.round(res.yards) >= 4) ok++; if (res.yards < 0) lost++;
+  }
+  assert.ok(y / n > 2.5 && y / n < 5.5 && ok / n > 0.35 && ok / n < 0.65 && lost / n > 0.12 && lost / n < 0.3, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
 });
 
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
@@ -423,7 +458,9 @@ test('the play-by-play names the run at the handoff, and the blitzers right afte
     const what = `${JSON.stringify(call)} seed ${seed - 1}`;
     const hand = r.events.find(e => e.kind === 'hand');
     if (hand) {
-      const want = pl.scheme === 'power' ? (S.FB ? /^Handoff to the running back, behind the pulling guard\.$/ : /^Handoff to the running back, inside the pulling guard's kick-out\.$/) : RUN[pl.scheme];
+      const want = pl.scheme === 'power' ? (S.FB ? /^Handoff to the running back, behind the pulling guard\.$/ : /^Handoff to the running back, inside the pulling guard's kick-out\.$/)
+        : pl.scheme === 'counter' ? (S.te(-S.p) ? /^Handoff to the running back, back the other way, behind the pulling guard and tackle\.$/ : S.FB ? /^Handoff to the running back, back the other way, behind the pulling guard and the fullback\.$/ : /^Handoff to the running back, back the other way, behind the pulling guard\.$/)
+          : RUN[pl.scheme];
       assert.match(hand.text, want, `${what}: "${hand.text}"`);
     }
     const men = S.D.filter(d => d.job.kind === 'rush' && d.blitzer).map(d => d.i).sort((a, b) => a - b);
@@ -1214,14 +1251,15 @@ test('the drills\' notes say what the board shows', () => {
   // Each drill ends with a line in DRILLS (js/playbook.js) on what does best against its call; this holds the board to
   // it. The offense drills face their coverage from the front the drill sets (nickel against 10 and 11 personnel, the
   // 4-3 Over otherwise), every play from every formation that can run it, 25 snaps each; the run drill is I-Form's
-  // runs, 50 snaps each, against the two calls its note names. Run as this test runs them from three start seeds (1,
-  // 100000, 7777777), with the shotgun handoff read and the run-down from behind (version 2): against Cover 2, Four
-  // Verticals 21.2-24.3 yards a play and Play-Action Shot 15.5-19.2, the next 14.7; Stick 82-85% and Slant-Flat 71-83%
-  // succeed, the next 74%. Against Cover 3, Four Verticals 11.8-13.6 yards and Play-Action Shot 9.8-12.2, the next 8.9;
-  // the Draw 71-78% and Slant-Flat 69-73%, the next 66%. Against Cover 0, the RB Screen 65-67%, then Smash, Slant-Flat
-  // and Play-Action Shot 43-61%, the next 46%, and the Draw 3-5% and Power 9-12%, the next 21%. Against I-Form's runs,
-  // the 4-3 Over in Cover 1 with a blitz stops 76-83% for 1.4-2.2 yards a run, and in Cover 0 79-87% for 4.3-8.4 (2.4-3.6
-  // and 5.3-9.8 before the run-down).
+  // runs, 50 snaps each, against the two calls its note names. Run as this test runs them from three start seeds (11,
+  // this one, 100000 and 7777777), with Counter (which reshuffles the snaps every later play draws, but changes no
+  // pass): against Cover 2, Four Verticals 22.0-25.3 yards a play and Play-Action Shot 15.3-17.5, the next 14.9; Stick
+  // 78-84% and Slant-Flat 75-79% succeed, the next 77% (Flood). Against Cover 3, Four Verticals 11.2-13.7 yards and
+  // Play-Action Shot 10.0-10.4, the next 9.0; the Draw 69-73% and Slant-Flat 68-71%, the next 71% (Smash, from one
+  // seed). Against Cover 0, the RB Screen 63-71%, then Smash, Slant-Flat and Play-Action Shot 45-54%, the next 46%, and
+  // the Draw 1-5% and Power 9-18%, the next 18-22%. Against I-Form's five runs, the 4-3 Over in Cover 1 with a blitz
+  // stops 68-73% for 2.4-2.7 yards a run, and in Cover 0 73-80% for 5.2-8.0. (Before Counter, 80-82% and 81-84%, from
+  // four start seeds: Counter gets through it two times in three, its fake pulling the linebackers the wrong way.)
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1258,7 +1296,7 @@ test('the drills\' notes say what the board shows', () => {
   };
   const one = stop('over', 'c1', 'blitz'), zero = stop('over', 'c0', 'blitz');
   const both = `Cover 1 and a blitz stops ${Math.round(one.stop * 100)}% for ${one.avg.toFixed(1)} yards a run, Cover 0 ${Math.round(zero.stop * 100)}% for ${zero.avg.toFixed(1)}`;
-  assert.ok(one.stop > 0.72 && one.stop < 0.88, `"about four runs in five": ${both}`);
+  assert.ok(one.stop > 0.62 && one.stop < 0.8, `"about seven runs in ten": ${both}`);
   assert.ok(Math.abs(zero.stop - one.stop) < 0.1 && zero.avg > one.avg + 2, `"about as many, but the runs that get through go a long way": ${both}`);
   const S = prepare({ formation: drill('run').formation, play: 'iz', front: 'over', coverage: 'c1', pressure: 'blitz' }, 5);
   assert.deepEqual([S.box.box, S.box.blockers], [8, 7], '"eight against seven"');
@@ -1273,10 +1311,12 @@ test('over many snaps the numbers look like football', () => {
   // about three times in four, and nudges the rate up. Since the defense reads a shotgun handoff before it goes after the
   // back, and a back past the line is run down from behind (version 2), it gives 3.88-4.89 yards a carry (the shotgun
   // read alone gave 5.05-6.61: a back who got past the linebackers nearly always went the distance), and the passes as
-  // before; with a tight end taking the nickel back near him from the shotgun, 4.00-5.00. This one gives 65.3%, 1.6% and
+  // before; with a tight end taking the nickel back near him from the shotgun, 4.00-5.00. This one gave 65.3%, 1.6% and
   // 5.00. The completion bound is 68%, not 66%: the board sat right on 66% (the twelve seeds' mean is 66.4%), and adding
   // a play reshuffles which snaps the recipe draws, so adding Counter, a run, which changes no pass, took this seed to
-  // 66.9%. About two in three is 66.7%. (Mark's call.)
+  // 66.9%. About two in three is 66.7%. (Mark's call.) With Counter the twelve seeds give 4.04-5.19 yards a carry,
+  // 64.3-70.6% complete (mean 67.5%), sacks on 2.5-5.4% of dropbacks and interceptions on 1.4-2.4% of throws. This one
+  // gives 66.9%, 1.4% and 4.82.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1305,9 +1345,8 @@ test('the README\'s matchups', () => {
   // at least 1.7 before those formations: from Gun Ace and the Pistol it does worst against Cover 3), a throw to Mesh's
   // crossers 10.9-12.2 yards against Cover 1 and 4.4-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
   // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read, the run-down
-  // from behind and a tight end on the nickel back (version 2), 50-52% and 25-28%. A change to the balance that undoes
-  // one of these
-  // has to change the README with it.
+  // from behind and a tight end on the nickel back (version 2), 50-52% and 25-28%; with Counter among the runs, 52-54%
+  // and 26-27%. A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const cell = (play, coverage, each) => {

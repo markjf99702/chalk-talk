@@ -634,13 +634,19 @@ function assignRun(S) {
   const outside = front7.filter(d => d.x * p > edgeX + 0.2 && d.y < 6).sort((a, b) => hyp(a.x - p * (edgeX + 1.5), a.y - 1.5) - hyp(b.x - p * (edgeX + 1.5), b.y - 1.5));
   const emol = outside[0] || front7.filter(d => d.y < 2 && d.x * p > 2.6).sort((a, b) => b.x * p - a.x * p)[0];
   S.emol = emol;
+  // On Counter the back-side guard always pulls and kicks out the end. With a tight end on the back side to block the
+  // end the pullers leave, the back-side tackle pulls behind the guard and turns up through the hole; otherwise the
+  // tackle stays home and blocks that end himself, and a fullback, if there is one, leads through the hole instead.
+  const counter = play.scheme === 'counter', backT = S.OL.find(o => o.label === (p > 0 ? 'LT' : 'RT'));
+  const filler = counter ? S.te(-p) || backT : null;
   for (const b of blockers) {
-    let kind = play.scheme;
+    let kind = counter ? 'power' : play.scheme;
     if (b.cls === 'fb') kind = play.scheme === 'power' ? 'kick' : 'lead';
     // On Power the back-side guard pulls: to lead up through the hole for the linebacker, or, with no fullback to do
     // it (from the gun, or two tight ends on the line), to kick out the end himself.
-    const pull = play.scheme === 'power' && b === backG;
-    if (pull) kind = S.FB ? 'pull' : 'kick';
+    const pull = (play.scheme === 'power' || counter) && b === backG || counter && b === backT && b !== filler;
+    if (pull) kind = counter ? (b === backG ? 'kick' : 'pull') : S.FB ? 'pull' : 'kick';
+    if (b === filler) kind = 'fill';
     b.job = { kind: 'block', scheme: kind, target: null, pull };
   }
   // Two levels, the way a line coach draws it. First the men on the line of scrimmage: each is the lineman's or tight
@@ -673,7 +679,10 @@ function assignRun(S) {
   climb(blockers.filter(b => !b.job.target && lean[b.job.scheme] !== undefined), (b, d) => {
     const side = (d.x - b.x) * p;
     if (b.job.scheme === 'power' ? side > 1.9 : side < -3.5) return Infinity;
-    return Math.abs(d.x - b.x) <= (b.cls === 'te' ? 3 : 4.5) ? Math.abs(d.x - (b.x + p * lean[b.job.scheme] * 0.3)) + Math.max(0, d.y - 2) * 0.25 : Infinity;
+    // (on Counter, with the back-side guard and tackle gone, a lineman with nobody climbs across to the back-side
+    // linebacker, the man who'd otherwise run through the space they left)
+    const far = b.cls === 'te' ? 3 : counter ? 6.5 : 4.5;
+    return Math.abs(d.x - b.x) <= far ? (Math.abs(d.x - (b.x + p * lean[b.job.scheme] * 0.3)) + Math.max(0, d.y - 2) * 0.25) * (counter ? 0.6 : 1) : Infinity;
   });
   // A lineman with nobody left at either level takes a man on the line still free beside him: on a zone with no
   // linebacker on the back side, the backside tackle cuts off the end.
@@ -693,6 +702,8 @@ function assignRun(S) {
   }
   const kick = blockers.find(b => b.job.scheme === 'kick');
   if (kick) kick.job.target = emol || null;
+  // Counter's filler: the last man on the line on the back side, the end the pullers left.
+  if (filler) filler.job.target = box.filter(d => d.y < 2 && d.x * p < -2.6 && d.cls !== 's' && !blockers.some(b => b !== filler && b.job.target === d)).sort((a, b) => a.x * p - b.x * p)[0] || null;
   const blocked = new Set(blockers.map(b => b.job.target).filter(Boolean));
   S.unblocked = box.filter(d => !blocked.has(d));
   if (S.FB && play.scheme !== 'power') S.FB.job.lead = true;
@@ -1180,6 +1191,8 @@ function fake(S, pl) {
   pl.set = { x: pl.x, y: pl.y - 0.5 };
 }
 
+const COUNTER_STEP = 0.2; // seconds the back's step away from the play takes, on Counter
+const COUNTER_READ = 0.9; // and until when the linebackers go with it
 function toMesh(S, pl) {
   // Run plays: get to the mesh with the quarterback, then (once handed the ball) carry.
   const t = S.t, m = S.mesh;
@@ -1188,6 +1201,8 @@ function toMesh(S, pl) {
     pl.tx = S.QB.x + 0.4; pl.ty = S.QB.y + 0.4; pl.ts = 4; return;
   }
   if (S.fm.under && t < 0.08) { pl.tx = pl.x; pl.ty = pl.y; pl.ts = 0; return; }
+  // Counter: first a step away from the play, the fake, then back across to the mesh.
+  if (S.play.scheme === 'counter' && t < COUNTER_STEP) { pl.tx = pl.x0 - S.p * 0.8; pl.ty = pl.y0 + 0.2; pl.ts = pl.top * 0.5; return; }
   // Through the mesh with the quarterback, then on toward the aiming point.
   if (!pl.meshed && hyp(m.x - pl.x, m.y - pl.y) < 0.6) pl.meshed = true;
   if (!pl.meshed && pl.y < m.y - 0.3) { pl.tx = m.x; pl.ty = m.y; pl.ts = pl.top * 0.7; return; }
@@ -1239,8 +1254,11 @@ function runBlock(S, pl) {
     const near = pickUp(S, pl, 1.6, true);
     if (near && near !== tgt) { tgt = near; j.target = near; }
   }
-  if (j.pull && t < 0.55) { // the pulling guard: step back and run along the line
-    pl.tx = pl.x0 + p * 4; pl.ty = -1.8; pl.ts = pl.top * 0.85; return;
+  // The pulling guard: step back and run along the line. (Counter's pulling tackle goes a step deeper, to get round
+  // behind the guard, and turns up sooner, inside the guard's kick-out, for his linebacker.)
+  const wrap = S.play.scheme === 'counter' && j.scheme === 'pull';
+  if (j.pull && t < (wrap ? 0.45 : 0.55)) {
+    pl.tx = pl.x0 + p * 4; pl.ty = wrap ? -2.6 : -1.8; pl.ts = pl.top * 0.85; return;
   }
   if (!tgt) { // nobody yet: a lead blocker goes to the hole, a lineman to his play-side gap, each looking for work
     if (lead) { pl.tx = S.aimX; pl.ty = Math.min(pl.y + 2, 2); pl.ts = pl.top * 0.85; } else { pl.tx = pl.x0 + p * 1.2; pl.ty = Math.min(pl.y + 1.5, 2.5); pl.ts = 2.5; }
@@ -1306,6 +1324,9 @@ function defense(S, d) {
   const t = S.t, j = d.job, c = S.carrier;
   d.want = null;
   const ballOut = S.ball.state === 'air';
+  // Counter: the linebackers take a step with the back's fake the other way before they see where the ball is going.
+  // (Not one in the bump, holding the edge: see holdEdge().)
+  if (S.play.scheme === 'counter' && d.cls === 'lb' && j.kind !== 'rush' && !d.holds && t < COUNTER_READ) { d.tx = d.x0 - S.p * 1.5; d.ty = d.y0 - 0.6; d.ts = d.top * 0.6; d.want = S.RB; return; }
   if (j.kind === 'man' && j.r === S.RB && S.play.type === 'run' && S.play.scheme !== 'draw') return scrape(S, d, S.RB);
   if (gunRead(S, d)) return rotate(S, d) || bite(S, d);
   // After a catch or a handoff seen: everyone runs to the ball.
@@ -1842,12 +1863,16 @@ export const yardText = y => (y >= 0.5 ? `${yardWord(Math.round(y))} downfield` 
 // "a corner route", "an out route"; the check-down and the screen are what they are.
 const routeText = id => { const n = ROUTES[id]?.name; return !n ? 'his route' : id === 'check' || id === 'screen' ? `the ${n}` : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n} route`; };
 
+// Who Counter's back follows: "the pulling guard and tackle", "the pulling guard and the fullback", or "the pulling
+// guard" (see assignRun()).
+const pullers = S => (S.O.some(o => o.job.scheme === 'pull') ? 'the pulling guard and tackle' : S.FB ? 'the pulling guard and the fullback' : 'the pulling guard');
+
 // The handoff, and where the run is headed: "Handoff to the running back, heading for the edge." On Power the back
 // follows the pulling guard up through the hole, or, with no fullback, cuts inside the guard's kick-out block.
 function handoffText(S) {
   const rb = name(S, S.RB);
   if (S.play.scheme === 'draw') return `A late handoff to ${rb}, under the rush.`;
-  const where = { zone: 'aiming just outside the guard', reach: 'heading for the edge', power: S.FB ? 'behind the pulling guard' : 'inside the pulling guard\'s kick-out' }[S.play.scheme];
+  const where = { zone: 'aiming just outside the guard', reach: 'heading for the edge', power: S.FB ? 'behind the pulling guard' : 'inside the pulling guard\'s kick-out', counter: `back the other way, behind ${pullers(S)}` }[S.play.scheme];
   return `Handoff to ${rb}${where ? `, ${where}` : ''}.`;
 }
 
@@ -1893,7 +1918,9 @@ function jobWords(S, pl) {
       const order = (S.reads || []).map((r, k) => `${k + 1}. ${r.label} (${ROUTES[r.job.route].name})`).join(', ');
       return `${drop}${order ? ' His reads: ' + order + '.' : ''}`;
     }
-    if (j.kind === 'carry') return S.play.scheme === 'draw' ? 'Sets up like he is pass-blocking, takes the late handoff, and runs up the middle where the rushers left.' : `Takes the handoff aiming ${S.play.scheme === 'reach' ? 'for the edge' : 'just outside the play-side guard'}, and reads the blocks for a lane.`;
+    if (j.kind === 'carry') return S.play.scheme === 'draw' ? 'Sets up like he is pass-blocking, takes the late handoff, and runs up the middle where the rushers left.'
+      : S.play.scheme === 'counter' ? `Takes a step away from the play to pull the linebackers that way, then the handoff back the other way, behind ${pullers(S)}, and reads the blocks for a lane.`
+        : `Takes the handoff aiming ${S.play.scheme === 'reach' ? 'for the edge' : 'just outside the play-side guard'}, and reads the blocks for a lane.`;
     if (j.kind === 'route' || j.kind === 'fake') {
       const r = ROUTES[j.route];
       if (j.kind === 'fake') return `Fakes taking the handoff, then stays in to ${j.target ? 'block ' + name(S, j.target) : 'pass-block'}.`;
@@ -1906,7 +1933,7 @@ function jobWords(S, pl) {
     if (j.kind === 'stalk') return j.target ? `Blocks ${name(S, j.target)} to keep him off the run.` : 'Blocks downfield.';
     if (j.kind === 'block') {
       const tgt = j.target ? name(S, j.target) : 'the first defender to show up';
-      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.` })[j.scheme] || `Blocks ${tgt}.`;
+      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.`, fill: pl.cls === 'ol' ? `Stays home on the back side and blocks ${tgt}, the end the pulling guard leaves.` : `Blocks ${j.target ? tgt : 'the back-side end'}, the man the pullers leave.` })[j.scheme] || `Blocks ${tgt}.`;
     }
     return '';
   }
@@ -1958,7 +1985,7 @@ function overlay(S) {
       } else if (j.pull) out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: -1.8 }, { x: S.aimX, y: -1.6 }, { x: S.aimX, y: 1.5 }], to: tg ? tg.i : -1 });
       else out.push({ team: 'O', kind: 'block', i: pl.i, to: tg ? tg.i : -1, dir: j.scheme });
     } else if (j.kind === 'pro' || j.kind === 'screenOL' || j.kind === 'fake') out.push({ team: 'O', kind: 'pro', i: pl.i, set: pl.set, to: j.target ? j.target.i : -1, screen: j.kind === 'screenOL' ? j.at : null });
-    else if (j.kind === 'carry') out.push({ team: 'O', kind: 'carry', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: S.mesh.x, y: S.mesh.y + 0.6 }, { x: S.aimX, y: 0.5 }, { x: S.aimX + (S.aimX - S.mesh.x) * 0.25, y: 4 }] });
+    else if (j.kind === 'carry') out.push({ team: 'O', kind: 'carry', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, ...(S.play.scheme === 'counter' ? [{ x: pl.x0 - S.p * 1.2, y: pl.y0 + 0.2 }] : []), { x: S.mesh.x, y: S.mesh.y + 0.6 }, { x: S.aimX, y: 0.5 }, { x: S.aimX + (S.aimX - S.mesh.x) * 0.25, y: 4 }] });
     else if (j.kind === 'qb') out.push({ team: 'O', kind: 'qb', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, ...(pl.path || [])] });
   }
   for (const d of S.D) {
