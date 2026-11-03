@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'ec1beed2c2fb' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'fcf8cbfc952f' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -349,6 +349,27 @@ test('on the screen the linemen let the rushers go, and in man coverage the back
   // The rushers coming free are the point of the screen, not pressure on the throw: it's lofted over them to the back,
   // who is there on purpose, and three in four or more are caught (about seven in ten, when they hurried it).
   assert.ok(caught / thrown >= 0.75, `${caught} of ${thrown} screens caught`);
+});
+
+test('on the screen against the 3-4, the end let through doesn\'t get to the quarterback before the throw', () => {
+  // The 3-4's end on the screen side lines up tight, on the tackle, and the line lets him go, so from the shotgun he
+  // reached the quarterback at about 1.7 seconds, before the drop was over: a sack on about one screen in three. Once
+  // the back has slipped out and turned, a rusher about to reach him gets the ball thrown, not a sack.
+  let n = 0, sacks = 0, early = 0;
+  for (const formation of ['pistol', 'ace', 'doubles', 'trips']) for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (let k = 0; k < 6; k++) {
+    const call = { formation, play: 'screen', front: '34', coverage, pressure: 'four', flip: k % 2 === 1 };
+    const S = prepare(call, 1300 + n), r = simulate(call, 1300 + n++);
+    if (r.result.kind === 'sack') sacks++;
+    const thr = r.events.find(e => e.kind === 'throw');
+    if (!thr) continue;
+    assert.equal(thr.who, S.RB.i, `${JSON.stringify(call)}: the screen goes to the back`);
+    // (thrown before the drop is over, to the back already out of his block and turned)
+    const f = r.frames.find(f => f.t >= thr.t - 1e-9), rb = S.RB;
+    assert.ok(thr.t >= rb.job.delay && Math.hypot(f.xy[2 * rb.i] - rb.x0, f.xy[2 * rb.i + 1] - rb.y0) > 2, `${JSON.stringify(call)}: thrown at ${thr.t} with the back still at his block`);
+    if (thr.t < 1.75) early++;
+  }
+  assert.ok(sacks / n < 0.05, `the screen against the 3-4 is a sack ${sacks} times in ${n}`);
+  assert.ok(early > 0, 'thrown before the drop is over when a rusher is about to get there');
 });
 
 test('the rush read tells the truth: only blitzers are drawn as blitzers, and only rushers nobody blocked came unblocked', () => {

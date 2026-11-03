@@ -1007,13 +1007,17 @@ function qb(S, pl) {
   // A rusher coming with nobody to block him: the hot throw, quick, before he gets there. (Not on the screen, which
   // lets the rushers come on purpose.)
   if (play.drop !== 'screen' && t > 0.4) { const b = unblocked(S); if (b && dist(b, pl) < 8 && hot(S, b)) return; }
-  if (t < S.readAt) {
-    if (rd < 1.5 && t > 0.5) hurry(S, pl, false);
+  // The screen: he waits for the back to get out behind the rush, then lofts it to him. A rusher about to reach him
+  // doesn't wait for the drop to finish: once the back has slipped out and turned, the ball goes. (An end lined up
+  // tight, as the 3-4's are, gets to him before the drop is over.)
+  if (S.play.drop === 'screen') {
+    const rb = S.RB, turned = rb.job.kind === 'route' && rb.wp >= rb.path.length - 1;
+    if (turned && rd < 3 || t >= S.readAt && rb.job.kind === 'route' && (turned || t > 2.2 || rd < 2)) { const w = windowFor(S, rb); throwTo(S, rb, w.P, w.tf, '', { how: 'screen' }); }
+    else if (t < S.readAt && rd < 1.5 && t > 0.5) hurry(S, pl, false);
     return;
   }
-  if (S.play.drop === 'screen') {
-    const rb = S.RB;
-    if (rb.job.kind === 'route' && (rb.wp >= rb.path.length - 1 || t > 2.2 || rd < 2)) { const w = windowFor(S, rb); throwTo(S, rb, w.P, w.tf, '', { how: 'screen' }); }
+  if (t < S.readAt) {
+    if (rd < 1.5 && t > 0.5) hurry(S, pl, false);
     return;
   }
   // The progression: look at each read in turn. Wait for a route to make its cut, give it a beat, then move on.
