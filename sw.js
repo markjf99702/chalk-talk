@@ -8,7 +8,7 @@
 // it, so a signal that drops partway through loading a new release can't leave it half old and half new. FILES is a
 // fingerprint of every file in SHELL: change any of them and test/e2e.mjs fails until FILES is changed to match (it says
 // what to), which changes this file, so the browser installs it and makes the new copy.
-const FILES = '6b12ee2e'; // test/e2e.mjs checks this
+const FILES = '0f28182e'; // test/e2e.mjs checks this
 const CACHE = `chalk-talk-v2-${FILES}`; // one copy per release
 const SHELL = [
   './', 'index.html', 'icon.svg', 'manifest.webmanifest', 'css/app.css',
