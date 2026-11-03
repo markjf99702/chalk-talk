@@ -155,7 +155,7 @@ function keptPlay() {
   } catch { return null; }
 }
 
-const call = () => ({ ...state.off, ...state.def });
+const call = () => ({ ...state.off, ...state.def, sit: state.sit }); // (the situation too: a defense expecting a run plays it sooner)
 // The other coach's call is hidden from the board, the chart and the player cards until the snap, and while you're asked
 // what he played, until you've answered. Once it's out, it stays out until he picks again. With a man in motion the
 // snap comes after Snap is pressed: his call waits for the ball (atSnap, see out()).
@@ -1719,10 +1719,15 @@ function coachNote(P) {
   // On inside zone the line works to the play side; when that leaves the back-side end alone, the note says who he is.
   const backEnd = pl.id === 'iz' && P.unblocked.some(i => P.players[i].label === 'DE' && P.players[i].x * playSide(P) < 0)
     ? ' The back-side end was left unblocked: the line works to the play side, so he\'s the man a cutback has to beat.' : '';
+  // A handoff from the shotgun on a short third or fourth down, when the defense expects a run (see gunRead() in
+  // js/sim.js). (NFL 2023 regular season, from nflverse's play-by-play: backs' runs on third or fourth and 2 or less made
+  // it 62% of the time from the shotgun, 383 runs, and 71% from under center, 396.)
+  const gunShort = pl.type === 'run' && pl.scheme !== 'draw' && !byId(FORMATIONS, state.off.formation).under && P.sit.down >= 3 && P.sit.togo <= 2
+    ? ' From the shotgun on a short third or fourth down, the defense is expecting a run. The handoff comes with the back still five yards behind the line, before the blocks are made, so the defense sees him get the ball in time to meet him at the line. NFL backs made it less often from the shotgun on those downs than from under center.' : '';
   // How the call does in general, then how this snap went, so a snap that goes the other way doesn't read as the note
   // being wrong.
   const lead = pl.type === 'pass' ? `How ${pl.name} does against ${cv.name}:` : `How ${pl.name} works:`;
-  const note = (pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd) + (mask ? ` ${DISGUISE_NOTES[pl.type === 'run' ? 'run' : cv.id]}` : '') + motionNote(P) + hotNote(P);
+  const note = (pl.type === 'pass' ? NOTES[pl.id][cv.id] : RUN_NOTES[pl.id] + backEnd + gunShort) + (mask ? ` ${DISGUISE_NOTES[pl.type === 'run' ? 'run' : cv.id]}` : '') + motionNote(P) + hotNote(P);
   return { lead, note, now: thisTime(P), reads };
 }
 
@@ -2160,7 +2165,8 @@ function playbook() {
     ['Motion', 'A receiver off the line running across the formation before the snap. The defense has to answer it, and how it does gives the coverage away: in man coverage the man covering him runs with him (and if he\'s a cornerback, a safety slides over to the side he left: see The bump); in zone the defenders only slide over. Once he sets he\'s counted on his new side, so three receivers to one side can become two and two.'],
     ['The bump', 'When a cornerback runs across the formation with a man in motion, the side he left has nobody out wide to keep a run from getting round the end: a run there could go the distance. So a safety slides over and takes his place, a few yards outside the tight end. Here it\'s the strong safety, in Cover 1 and Cover 0: in Cover 1 he holds the edge, outside the ball carrier, until the run gets to the line, the way the cornerback would have; in Cover 0 he stays on his man, the tight end, from outside him. (Not when his man is the back or the other tight end: he stays where he can cover him.)'],
     ['Jet motion', 'Motion at full speed, with the ball snapped as he crosses the formation. A man covering him has to run with him flat out. On a run he keeps going, out to the flat, and takes his defender with him.'],
-    ['Shotgun', 'The quarterback lines up about five yards behind the center and takes a short snap through the air, instead of under center with his hands on the ball. He sees the defense from there, and needs only a short drop to throw.'],
+    // (The NFL numbers: nflverse's 2023 play-by-play, regular season, designed runs by backs; see gunRead() in js/sim.js.)
+    ['Shotgun', 'The quarterback lines up about five yards behind the center and takes a short snap through the air, instead of under center with his hands on the ball. He sees the defense from there, and needs only a short drop to throw. Runs from it do about as well as runs from under center on most downs. On a short third or fourth down, though, when the defense is expecting a run, the handoff comes with the back still five yards behind the line, before the blocks are made, and the defense sees it in time to meet him at the line: in 2023 NFL backs made the first down on 62% of those runs from the shotgun, and 71% from under center.'],
     ['Press', 'A corner lined up a yard or so off the receiver, right in his face, to jam him at the snap and stay on him. Corners press in man coverage.'],
     ['Leverage', 'Which side of a receiver a defender lines up on. With outside leverage he\'s a step outside him, so the receiver\'s easy way is inside; with inside leverage it\'s the other way round.'],
     ['Over the top', 'Deeper than a receiver, between him and the end zone: where a deep safety helps.'],

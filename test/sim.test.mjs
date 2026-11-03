@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS } from '../js/playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS } from '../js/playbook.js';
 import { rng } from '../js/rng.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -114,12 +114,13 @@ test('the same seed replays the same play', () => {
 // simulator the site has now: a link made with another version says its snap may not play out as it did for whoever
 // sent it. So any change to how snaps play out needs a new version. PRINTS keeps a fingerprint of how each version
 // played a fixed set of snaps: every formation, play and coverage, both ways round, with the front, the pressure and
-// blitzer, a disguise, motion and a hot route (a back's too) picked from a fixed seed. It's where every man and the ball
-// was, a twentieth of a second at a time, who was blocking whom, and what happened (the play-by-play and the result, but
-// not their words, which can change without the play changing). Keep the old ones: they say when the board changed.
+// blitzer, a disguise, motion, a hot route (a back's too) and the down picked from a fixed seed. It's where every man
+// and the ball was, a twentieth of a second at a time, who was blocking whom, and what happened (the play-by-play and
+// the result, but not their words, which can change without the play changing). Keep the old ones: they say when the
+// board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '825f076d544f' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '4e1e8962b651' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -131,7 +132,7 @@ function howItPlays() {
     const r = simulate({
       formation: fm.id, play: pl.id, front: R.pick(FRONTS).id, coverage: cv.id, flip,
       pressure: R.chance(0.4) ? 'blitz' : 'four', blitzer: R.pick(BLITZERS).id, disguise: R.chance(0.3),
-      motion: fm.motion ? R.pick(['none', 'across', 'jet']) : 'none', hot,
+      motion: fm.motion ? R.pick(['none', 'across', 'jet']) : 'none', hot, sit: R.pick(SITUATIONS).id,
     }, seed);
     const one = createHash('sha256');
     one.update(JSON.stringify([r.result, r.events.map(({ text, ...e }) => e)]));
@@ -1078,6 +1079,28 @@ test('from the shotgun the linebackers and safeties read the handoff before they
   const all = Object.values(rate).reduce((a, [n, ok]) => [a[0] + n, a[1] + ok], [0, 0]);
   assert.ok(all[1] / all[0] > 0.22, `from the shotgun against Nickel, runs succeed ${say}`);
   for (const [n, ok] of Object.values(rate)) assert.ok(ok / n > 0.12, `from the shotgun against Nickel, runs succeed ${say}`);
+});
+
+test('on a short third or fourth down a handoff from the shotgun makes it less often than one from under center', () => {
+  // A defense expecting a run reads a shotgun handoff sooner (see gunRead() in js/sim.js), in time to meet the back
+  // before the blocks do; under center the handoff comes after the read anyway, so nothing changes there. NFL backs'
+  // runs on third or fourth and 2 or less made it 62% of the time from the shotgun in the 2023 regular season, and 71%
+  // from under center (nflverse play-by-play). Inside Zone, Outside Zone and Power, every front and coverage, on 3rd & 2
+  // and 4th & 1: from the shotgun formations they made it 76% of the time here before (more often than the 65% from
+  // under center), and 57% now; the same snaps on 1st & 10 gain those yards 76% of the time.
+  const made = { gun: [0, 0], under: [0, 0], first: [0, 0] };
+  let seed = 3300;
+  for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'iz'))) for (const play of ['iz', 'oz', 'power']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (const sit of ['3and2', '4and1']) {
+    const call = { formation: fm.id, play, front: fr.id, coverage: cv.id, pressure, flip: seed % 2 === 1 }, togo = SITUATIONS.find(s => s.id === sit).togo;
+    const r = simulate({ ...call, sit }, seed).result, a = made[fm.under ? 'under' : 'gun'];
+    a[0]++; if (r.yards >= togo) a[1]++;
+    if (fm.under) assert.deepEqual(r, simulate(call, seed).result, `${JSON.stringify(call)} seed ${seed}: under center the down changes nothing`);
+    else { made.first[0]++; if (simulate(call, seed).result.yards >= togo) made.first[1]++; }
+    seed++;
+  }
+  const rate = ([n, ok]) => ok / n, say = `from the shotgun ${Math.round(100 * rate(made.gun))}% (the same snaps on 1st & 10 ${Math.round(100 * rate(made.first))}%), from under center ${Math.round(100 * rate(made.under))}%`;
+  assert.ok(rate(made.gun) < rate(made.under) - 0.02, `on 3rd & 2 and 4th & 1, runs make it ${say}`);
+  assert.ok(rate(made.gun) < rate(made.first) - 0.08, `on 3rd & 2 and 4th & 1, runs make it ${say}`);
 });
 
 test('a tight end with nobody to block takes the nickel back near him: Gun Trips\' Y, rather than the slot from outside', () => {

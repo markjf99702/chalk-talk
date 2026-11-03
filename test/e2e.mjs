@@ -2957,6 +2957,17 @@ for (const colorScheme of ['light', 'dark']) {
   await q.getByRole('radio', { name: '2nd & 6' }).click();
   assert.equal(await calls(), both, 'calling both sides, a new situation changed a call');
   assert.equal(await q.textContent('#caption'), '2nd & 6: 6 yards to go.');
+  // The simulator gets the situation too: on a short third or fourth down a defense expecting a run reads a shotgun
+  // handoff sooner, and the coach's note says so after one (not under center, nor on other downs).
+  const gunNote = /From the shotgun on a short third or fourth down, the defense is expecting a run\./;
+  for (const [hash, says] of [[`#p=O.trips.iz.0.nickel.c3.four.270.0.none.3and2.v${SIM_VERSION}`, true], [`#p=O.trips.iz.0.nickel.c3.four.271.0.none.1and10.v${SIM_VERSION}`, false], [`#p=O.single.iz.0.nickel.c3.four.272.0.none.4and1.v${SIM_VERSION}`, false]]) {
+    const seed = +hash.split('.')[7];
+    await q.evaluate(hash => { location.hash = hash; }, hash);
+    await q.waitForFunction(seed => window.chalkTalk.state.seed === seed && window.chalkTalk.state.phase === 'done' && !document.getElementById('note').hidden, seed, { timeout: 15000 })
+      .catch(() => assert.fail(`${hash} didn't play`));
+    assert.equal(await q.evaluate(() => window.chalkTalk.state.play.call.sit), hash.split('.')[10], `${hash}: the simulator didn't get the situation`);
+    assert.equal(gunNote.test(await q.textContent('#note')), says, `${hash}: ${await q.textContent('#note')}`);
+  }
   await c.close();
   // A save from before there were downs opens on 1st & 10.
   const old = await browser.newContext({ viewport: { width: 390, height: 844 } });

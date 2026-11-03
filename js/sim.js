@@ -3,7 +3,7 @@
 // It is a coaching model, not physics: blocks are pairs that push each other until one wins, coverage is
 // men following receivers or defenders guarding spots, and the quarterback throws where nobody can get to first.
 import { rng } from './rng.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLITZERS } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLITZERS, SITUATIONS } from './playbook.js';
 
 // The simulator's version, which every share link carries. A link replays its calls and its roll of the dice through
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
@@ -92,6 +92,7 @@ export function prepare(call, seed = 1) {
     // who blitzes: the one picked, if he can (see blitzerFor()), or else the Mike, as always in Cover 0
     blitzer: cov.id !== 'c0' && BLITZERS.some(b => b.id === call.blitzer) && !blitzerFor(front.id, cov.id, call.blitzer, call.disguise) ? call.blitzer : 'M',
     disguise: !!call.disguise && (cov.id === 'c1' || cov.id === 'c3'), // see the end of buildDefense()
+    short: shortYardage(call.sit), // a short third or fourth down, when the defense expects a run (see gunRead())
     ball: { x: 0, y: -0.3, z: 0.3, state: 'snap', holder: -1 }, carrier: null, handT: Infinity, throwT: Infinity,
   };
   const no = cantCall(fm.id, play.id);
@@ -1310,10 +1311,21 @@ function defense(S, d) {
 // and before the defense has read the play. So until a linebacker or a safety has read it (his lag, counted from the
 // handoff), he keeps coming downhill to his gap (see bite()) rather than going flat out at the back, before the line has
 // got to him. Under center the handoff comes after that read. (Not on the draw, a pass until the handoff, nor for the
-// rushers and the cornerbacks, who play the run as they always do.)
+// rushers and the cornerbacks, who play the run as they always do.) On a short third or fourth down the defense is
+// expecting a run, and reads it in SHORT_READ of the time: from the shotgun, often enough to meet the back before the
+// blocks do. NFL backs' runs on third or fourth and 2 or less made it 62% of the time from the shotgun in the 2023
+// regular season, and 71% from under center; on other downs the shotgun's did a little better (nflverse play-by-play).
+const SHORT_READ = 0.35;
 function gunRead(S, d) {
   const c = S.carrier, p = S.play;
-  return p.type === 'run' && p.scheme !== 'draw' && !S.fm.under && c === S.RB && c.y < -0.5 && S.t < S.handT + d.lag && d.cls !== 'cb' && d.job.kind !== 'rush';
+  return p.type === 'run' && p.scheme !== 'draw' && !S.fm.under && c === S.RB && c.y < -0.5 && S.t < S.handT + d.lag * (S.short ? SHORT_READ : 1) && d.cls !== 'cb' && d.job.kind !== 'rush';
+}
+
+// Third or fourth down with 2 yards or less to go, from the situation in the call (an id in SITUATIONS, js/playbook.js;
+// none is 1st & 10).
+function shortYardage(id) {
+  const s = SITUATIONS.find(x => x.id === id);
+  return !!s && s.down >= 3 && s.togo <= 2;
 }
 
 function pursue(S, d, c) {
