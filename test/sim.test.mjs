@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '4e1e8962b651' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'd1bfa91ca046' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -980,8 +980,9 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
   // Outside Zone, every front and pressure: from I-Form and Singleback against Cover 1 and Cover 0, the Z going across
   // first now gains within 4 yards a carry of what it gains without him going. (Before the bump it was 11 to 14 yards
   // more, and 5 more from Singleback against Cover 0: with the corner gone, nobody was left out there and about one run
-  // in five went the distance. Over 1,152 snaps a cell it comes within 0.1-1.6 yards, and 0.4-2.8 since a back past
-  // the line is run down from behind more often, which takes more off the runs without the motion.)
+  // in five went the distance. Over 1,152 snaps a cell from three start seeds (1234, 50000, 900000) it comes within
+  // 0.1-3.0 yards, and 0.8-3.3 since a back past the line is run down from behind more often, which takes more off the
+  // runs without the motion; the most from Singleback against Cover 0.)
   seed = 1234;
   for (const [formation, coverage, k] of [['iform', 'c1', 20], ['single', 'c1', 20], ['iform', 'c0', 40], ['single', 'c0', 40]]) {
     const ypc = {};
@@ -1086,7 +1087,7 @@ test('on a short third or fourth down a handoff from the shotgun makes it less o
   // before the blocks do; under center the handoff comes after the read anyway, so nothing changes there. NFL backs'
   // runs on third or fourth and 2 or less made it 62% of the time from the shotgun in the 2023 regular season, and 71%
   // from under center (nflverse play-by-play). Inside Zone, Outside Zone and Power, every front and coverage, on 3rd & 2
-  // and 4th & 1: from the shotgun formations they made it 76% of the time here before (more often than the 65% from
+  // and 4th & 1: from the shotgun formations they made it 76% of the time here before (more often than the 64% from
   // under center), and 57% now; the same snaps on 1st & 10 gain those yards 76% of the time.
   const made = { gun: [0, 0], under: [0, 0], first: [0, 0] };
   let seed = 3300;
@@ -1113,6 +1114,13 @@ test('a tight end with nobody to block takes the nickel back near him: Gun Trips
     assert.equal(Y.job.target, S.NB, `${what}: the Y blocks ${Y.job.target?.label ?? 'nobody'}`);
     assert.notEqual(H.job.target, S.NB, `${what}: the slot is sent at the nickel back too`);
   }
+  // Only from the shotgun: under center a tight end with nobody takes whoever comes free, as before. (Sending him at the
+  // nickel back, often the man covering him there, took I-Form's Inside Zone against Cover 0 from 3 to 17 yards a carry
+  // and its Outside Zone against Cover 1 from 54% succeeding to 28%.)
+  for (const fm of FORMATIONS.filter(f => f.under)) for (const play of ['iz', 'oz', 'power']) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (const flip of [false, true]) {
+    const S = prepare({ formation: fm.id, play, front: 'nickel', coverage: cv.id, pressure, flip }, 3);
+    for (const te of S.O.filter(p => p.cls === 'te' && p.job.scheme !== 'kick')) assert.notEqual(te.job.target, S.NB, `${fm.id} ${play} against ${cv.id} ${pressure}${flip ? ', flipped' : ''}: the ${te.label} is sent at the nickel back under center`);
+  }
   let seed = 7100, n = 0, ok = 0;
   for (const formation of ['trips', 'ace']) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (let k = 0; k < 12; k++) {
     n++; if (simulate({ formation, play: 'iz', front: 'nickel', coverage: cv.id, pressure, flip: k % 2 === 1 }, seed++).result.yards >= 4) ok++;
@@ -1124,7 +1132,7 @@ test('a back through the line is run down from behind: not every run that gets 1
   // Inside Zone, Outside Zone and Power from every formation that has a back, against every front and coverage. Before
   // a defender chasing a back 3 yards past the line had the odds one chasing a deep catch has (see contact() in
   // js/sim.js), a run that got 10 yards went on for 35.6-39.0 more on average, from three start seeds (61, 5000, 90000),
-  // and more than half went past 60, where the board stops counting; now 20.9-23.1. (NFL 2023 regular season, designed
+  // and more than half went past 60, where the board stops counting; now 21.5-23.0. (NFL 2023 regular season, designed
   // runs, from nflverse's play-by-play: 6.8, and 1 in 80 went 60.)
   let seed = 61;
   const long = [];
@@ -1228,7 +1236,8 @@ test('over many snaps the numbers look like football', () => {
   // about three times in four, and nudges the rate up. Since the defense reads a shotgun handoff before it goes after the
   // back, and a back past the line is run down from behind (version 2), it gives 3.88-4.89 yards a carry (the shotgun
   // read alone gave 5.05-6.61: a back who got past the linebackers nearly always went the distance), and the passes as
-  // before; with a tight end taking the nickel back near him, 4.00-4.99. This one gives 65.3%, 1.6% and 4.99.
+  // before; with a tight end taking the nickel back near him from the shotgun, 4.00-5.00. This one gives 65.3%, 1.6% and
+  // 5.00.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1257,7 +1266,7 @@ test('the README\'s matchups', () => {
   // at least 1.7 before those formations: from Gun Ace and the Pistol it does worst against Cover 3), a throw to Mesh's
   // crossers 10.9-12.2 yards against Cover 1 and 4.4-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
   // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read, the run-down
-  // from behind and a tight end on the nickel back (version 2), 51-52% and 25-28%. A change to the balance that undoes
+  // from behind and a tight end on the nickel back (version 2), 50-52% and 25-28%. A change to the balance that undoes
   // one of these
   // has to change the README with it.
   let seed = 2718;

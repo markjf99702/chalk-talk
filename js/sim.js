@@ -669,9 +669,12 @@ function assignRun(S) {
   idle.forEach((b, k) => { if (p3[k] >= 0) b.job.target = loose[p3[k]]; });
   // A tight end with nobody at either level takes the nickel back, when he's near him: in Gun Trips the Y, off the line
   // inside the slot, rather than the slot receiver coming 4 yards inside to try. The slot then blocks whoever is free
-  // near him (see stalk()).
+  // near him (see stalk()). Only from the shotgun, where it was needed: under center a tight end with nobody takes
+  // whoever comes free near him (see runBlock()), as before. (There the nickel back is often the man covering him, and
+  // sending him at the nickel back moved those runs a long way both ways: I-Form's Inside Zone against Cover 0 from 3 to
+  // 17 yards a carry, its Outside Zone against Cover 1 from 54% succeeding to 28%.)
   const nb = S.NB;
-  if (nb && Math.abs(nb.x) < 9 && nb.y < 8.5 && nb !== kicked && !blockers.some(b => b.job.target === nb)) {
+  if (nb && !S.fm.under && Math.abs(nb.x) < 9 && nb.y < 8.5 && nb !== kicked && !blockers.some(b => b.job.target === nb)) {
     const te = blockers.find(b => b.cls === 'te' && !b.job.target && lean[b.job.scheme] !== undefined && Math.abs(nb.x - b.x) < 3);
     if (te) { te.job.target = nb; for (const w of wrs) if (w.job.target === nb) w.job.target = null; }
   }
