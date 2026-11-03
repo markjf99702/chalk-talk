@@ -1274,7 +1274,9 @@ test('over many snaps the numbers look like football', () => {
   // back, and a back past the line is run down from behind (version 2), it gives 3.88-4.89 yards a carry (the shotgun
   // read alone gave 5.05-6.61: a back who got past the linebackers nearly always went the distance), and the passes as
   // before; with a tight end taking the nickel back near him from the shotgun, 4.00-5.00. This one gives 65.3%, 1.6% and
-  // 5.00.
+  // 5.00. The completion bound is 68%, not 66%: the board sat right on 66% (the twelve seeds' mean is 66.4%), and adding
+  // a play reshuffles which snaps the recipe draws, so adding Counter, a run, which changes no pass, took this seed to
+  // 66.9%. About two in three is 66.7%. (Mark's call.)
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1288,7 +1290,7 @@ test('over many snaps the numbers look like football', () => {
   }
   const ypc = run.y / run.n, comp = pass.comp / pass.att, sack = pass.sack / pass.n, int = pass.int / pass.att;
   assert.ok(ypc > 3.3 && ypc < 5.3, `yards a carry ${ypc.toFixed(2)}`);
-  assert.ok(comp > 0.52 && comp < 0.66, `completion rate ${comp.toFixed(3)}`);
+  assert.ok(comp > 0.52 && comp < 0.68, `completion rate ${comp.toFixed(3)}`);
   assert.ok(sack > 0.02 && sack < 0.06, `sack rate ${sack.toFixed(3)}`);
   assert.ok(int > 0.01 && int < 0.05, `interception rate ${int.toFixed(3)}`);
 });
