@@ -63,8 +63,10 @@ const and = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${li
 const hotWords = o => and(hotList(o).map(([who, r]) => `the ${who} ${HOT_WORDS[r]}`));
 // The play as the call has it: "Smash", or "Smash, H on a slant". Short, for the line along the top of the board:
 // "Smash (H slant)", or "Smash (3 hot routes)".
-const playName = o => byId(PLAYS, o.play).name + hotList(o).map(([who, r]) => `, ${who} ${HOT_WORDS[r]}`).join('');
-const playShort = o => { const h = hotList(o); return byId(PLAYS, o.play).name + (!h.length ? '' : h.length > 2 ? ` (${h.length} hot routes)` : ` (${h.map(([who, r]) => `${who} ${r === 'check' ? 'check-down' : r}`).join(', ')})`); };
+// One of your own plays (see mineOf()) goes by its name: "Trips Slant (Smash, H on a slant)", and "Trips Slant".
+const drawnName = o => byId(PLAYS, o.play).name + hotList(o).map(([who, r]) => `, ${who} ${HOT_WORDS[r]}`).join('');
+const playName = o => { const m = mineOf(o); return m ? `${m.name} (${drawnName(o)})` : drawnName(o); };
+const playShort = o => { const m = mineOf(o), h = hotList(o); return m ? m.name : byId(PLAYS, o.play).name + (!h.length ? '' : h.length > 2 ? ` (${h.length} hot routes)` : ` (${h.map(([who, r]) => `${who} ${r === 'check' ? 'check-down' : r}`).join(', ')})`); };
 // The code for them in a shared link: each man's label and his route, run together ("HslantRBblock").
 const hotCode = o => hotList(o).map(([who, r]) => who + r).join('');
 // Motion before the snap (see presnap() in js/sim.js): none, across (he runs over and sets), or jet (at full speed, the
@@ -95,6 +97,123 @@ const covWords = d => `${disguised(d) ? 'disguised ' : ''}${byId(COVERAGES, d.co
 const okSit = id => (SITUATIONS.some(s => s.id === id) ? id : null);
 const situation = () => byId(SITUATIONS, state.sit);
 
+// ---------------------------------------------------------------- your own plays
+
+// A pass play with routes you've changed, from its formation and with its motion, under a name you give it, kept on this
+// device in the same save as your calls: a row of its own, My plays, under the passes. Picking one puts it back in your
+// call, and from there the board, the chart and a shared link take it like any other call (a link carries the routes,
+// not the name). Up to MY_MAX of them, each name up to MY_NAME characters, no two the same.
+const MY_MAX = 12, MY_NAME = 30;
+let myPlays = []; // [{ name, formation, play, motion, hot }]
+let naming = null; // the name being typed for the play in your call, while "Save as my play" is open: { text }
+const motionOf = o => (moving(o) ? o.motion : 'none');
+const tidyName = s => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim().slice(0, MY_NAME).trim() : '');
+// Saved plays this version can run, tidied up (one it can't, or a second with a name already taken, is left out).
+function okMine(list) {
+  const out = [];
+  for (const m of Array.isArray(list) ? list : []) {
+    const name = tidyName(m?.name), o = okOff({ formation: m?.formation, play: m?.play, motion: m?.motion, hot: m?.hot });
+    if (!name || !o || o.play !== m.play || byId(PLAYS, o.play).type !== 'pass' || !hotList(o).length) continue;
+    if (out.length >= MY_MAX || out.some(x => x.name.toLowerCase() === name.toLowerCase())) continue;
+    out.push({ name, formation: o.formation, play: o.play, motion: motionOf(o), hot: o.hot });
+  }
+  return out;
+}
+// The one of your plays a call is, or null: the same formation, play, routes and motion (the strong side either way).
+function mineOf(o) {
+  if (!hotList(o).length) return null;
+  const hot = JSON.stringify(okHot(o.hot, o.formation, o.play));
+  return myPlays.find(m => m.formation === o.formation && m.play === o.play && m.motion === motionOf(o) && JSON.stringify(m.hot) === hot) || null;
+}
+// A name to start from: the play and its changed routes, "Smash, H slant, Y curl".
+const nameFor = o => tidyName(`${byId(PLAYS, o.play).name}, ${hotList(o).map(([who, r]) => `${who} ${r === 'check' ? 'check-down' : r}`).join(', ')}`);
+// Keeps the play in your call as one of yours, under the name typed (or the one it started from); a name that's taken
+// gets a number. The call itself doesn't change.
+function saveMine(text) {
+  const o = state.off, want = tidyName(text) || nameFor(o);
+  let name = want;
+  for (let k = 2; myPlays.some(m => m.name.toLowerCase() === name.toLowerCase()); k++) name = `${want.slice(0, MY_NAME - 3).trim()} ${k}`;
+  myPlays.push({ name, formation: o.formation, play: o.play, motion: motionOf(o), hot: { ...okHot(o.hot, o.formation, o.play) } });
+  naming = null;
+  save();
+  renderChoosers();
+  renderMatchup();
+  syncChart();
+  setCaption(`Saved in My plays: ${name}.`);
+  document.querySelector(`[data-key="${CSS.escape(`Play:my${myPlays.length - 1}`)}"]`)?.focus({ preventScroll: true });
+}
+// One of yours back in your call: its formation, play, routes and motion (your strong side stays). New personnel, and
+// the other coach substitutes, as with any change of formation.
+function pickMine(k) {
+  const m = myPlays[k];
+  if (!m) return;
+  const was = byId(FORMATIONS, state.off.formation).personnel;
+  naming = null;
+  Object.assign(state.off, { formation: m.formation, play: m.play, motion: m.motion, hot: { ...m.hot } });
+  const subbed = state.auto && state.side === 'O' && byId(FORMATIONS, m.formation).personnel !== was;
+  if (subbed) rollTheirs();
+  afterChange();
+  setCaption(`${m.name}: ${byId(PLAYS, m.play).name} from ${byId(FORMATIONS, m.formation).name}, with ${hotWords(m)}.${subbed ? ' New personnel: they\'ve substituted.' : ''}`);
+}
+// Out of My plays. Its routes stay in your call until you change it, so Save as my play keeps it again.
+function deleteMine(m) {
+  myPlays = myPlays.filter(x => x !== m);
+  save();
+  renderChoosers();
+  renderMatchup();
+  syncChart();
+  setCaption(`${m.name} is out of My plays. It's still your call until you change it.`);
+  $('mySave')?.focus({ preventScroll: true });
+}
+// "Save as my play": the name to type, in your call, in sight and ready to type in.
+function startNaming() {
+  naming = { text: nameFor(state.off) };
+  renderChoosers();
+  const box = $('myName');
+  if (!box) return;
+  box.scrollIntoView({ block: 'center', behavior: smooth() });
+  box.focus({ preventScroll: true });
+  box.select();
+}
+// Under the plays: the play in your call as one of yours, with a way to delete it; or, with routes changed, a way to
+// keep it, and the name to type once that's picked.
+function minePart(host) {
+  const o = state.off, mine = mineOf(o);
+  if (!mine && !hotList(o).length) return;
+  const box = document.createElement('div');
+  box.className = 'my-play';
+  const p = document.createElement('p');
+  if (mine) {
+    p.innerHTML = `<b>${esc(mine.name)}</b> is one of your plays, kept on this device.`;
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'ghost'; del.textContent = 'Delete it';
+    del.setAttribute('aria-label', `Delete ${mine.name}`);
+    del.addEventListener('click', () => deleteMine(mine));
+    box.append(p, del);
+  } else if (naming) {
+    const f = document.createElement('form');
+    f.className = 'my-name';
+    f.innerHTML = '<label for="myName">Name your play</label><input id="myName" type="text" autocomplete="off" enterkeyhint="done" spellcheck="false"><button type="submit" class="ghost">Save</button><button type="button" class="ghost" id="myCancel">Cancel</button>';
+    const input = f.querySelector('input');
+    input.maxLength = MY_NAME;
+    input.value = naming.text;
+    input.addEventListener('input', () => { naming.text = input.value; });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); f.querySelector('#myCancel').click(); } });
+    f.addEventListener('submit', e => { e.preventDefault(); saveMine(input.value); });
+    f.querySelector('#myCancel').addEventListener('click', () => { naming = null; renderChoosers(); $('mySave')?.focus({ preventScroll: true }); });
+    box.append(f);
+  } else {
+    const full = myPlays.length >= MY_MAX;
+    p.textContent = full ? `Your version of ${byId(PLAYS, o.play).name}. My plays is full (${MY_MAX}): delete one to keep this one.` : `Your version of ${byId(PLAYS, o.play).name}: ${hotWords(o)}. Keep it, with a name, in My plays.`;
+    const keep = document.createElement('button');
+    keep.type = 'button'; keep.className = 'ghost'; keep.id = 'mySave'; keep.textContent = 'Save as my play';
+    keep.disabled = full;
+    keep.addEventListener('click', startNaming);
+    box.append(p, keep);
+  }
+  host.append(box);
+}
+
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -107,6 +226,7 @@ function load() {
       if (typeof s.labels === 'boolean') state.labels = s.labels;
       if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
       takeQuiz(s);
+      myPlays = okMine(s.plays);
     }
   } catch { /* storage unavailable: start fresh */ }
   ownAuto = state.auto;
@@ -123,7 +243,7 @@ function keepOwn() {
   if (!state.auto || state.side === 'D') own.def = { ...state.def };
 }
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, sit: state.sit, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best })); } catch { /* fine */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, sit: state.sit, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best, plays: myPlays })); } catch { /* fine */ }
 }
 // The question's switch and the streak, from a save (this tab's, or another tab's as it saves).
 const tally = n => (Number.isInteger(n) && n >= 0 ? n : null);
@@ -782,6 +902,7 @@ function openRoutes(i) {
     host.append(b);
   }
   rove(host);
+  $('routesSave').hidden = !hotList(state.off).length || !!mineOf(state.off) || myPlays.length >= MY_MAX;
   $('routes').hidden = false;
   hideWho();
   // in sight: on a phone turned sideways it's under the scrubber, in the stage beside the calls, which scrolls to it
@@ -796,6 +917,8 @@ onButton($('whoRoutesOpen'), () => {
   openRoutes(board.selected);
   $('routeChips').querySelector('[aria-checked="true"]')?.focus({ preventScroll: true });
 });
+// (Save as my play, from the row: the name's typed in your call, which comes into sight)
+$('routesSave').addEventListener('click', () => { closeRoutes(); board.selected = -1; hideWho(); draw(); startNaming(); });
 $('routesDone').addEventListener('click', () => {
   closeRoutes();
   board.selected = -1;
@@ -1033,12 +1156,17 @@ function offenseChooser(host, readonly) {
       disabled: readonly, blurb: motionBlurb(fm, moving(state.off) ? state.off.motion : 'none'),
     });
   }
-  // From Empty the plays that need a back are greyed out, each saying why (see cantCall() in js/sim.js).
+  // From Empty the plays that need a back are greyed out, each saying why (see cantCall() in js/sim.js). Your own plays
+  // are a row of their own, each by its name, with its formation in small print.
   const items = PLAYS.map(p => ({ id: p.id, name: p.name, type: p.type, off: cantCall(fm.id, p.id) }));
-  chips(host, 'Play', items, pl.id, id => set({ play: id }), {
-    disabled: readonly, blurb: pl.blurb + (items.some(it => it.off) ? ` From ${fm.name} there's no back behind the line: no runs, no play-action fake and no RB Screen.` : ''),
-    groups: [{ name: 'Runs', items: items.filter(p => p.type === 'run') }, { name: 'Passes', items: items.filter(p => p.type === 'pass') }],
+  const mine = mineOf(state.off), yours = myPlays.map((m, k) => ({ id: `my${k}`, name: m.name, sub: byId(FORMATIONS, m.formation).name, subWord: '' }));
+  const groups = [{ name: 'Runs', items: items.filter(p => p.type === 'run') }, { name: 'Passes', items: items.filter(p => p.type === 'pass') }];
+  if (yours.length) groups.push({ name: 'My plays', items: yours });
+  chips(host, 'Play', [...items, ...yours], mine ? `my${myPlays.indexOf(mine)}` : pl.id, id => (id.startsWith('my') ? pickMine(+id.slice(2)) : set({ play: id })), {
+    disabled: readonly, blurb: (mine ? `${mine.name}: ${pl.name} with ${hotWords(state.off)}, the rest as drawn. ` : '') + pl.blurb + (items.some(it => it.off) ? ` From ${fm.name} there's no back behind the line: no runs, no play-action fake and no RB Screen.` : ''),
+    groups,
   });
+  if (!readonly) minePart(host);
 }
 
 // A call the board can't make, a formation with no back and a play that needs one (see cantCall() in js/sim.js), put
@@ -1128,6 +1256,7 @@ function afterChange(why = '') {
   const held = wide.matches && !$('result').hidden ? $('mine').getBoundingClientRect().top : null;
   state.linked = false;
   linkNote = '';
+  naming = null; // (a new call: Save as my play starts again from its own name)
   if (drill && state.side === 'D' && state.seen) rollTheirs(); // the run drill: a new run, hidden until the snap
   keepOwn();
   save();
@@ -1747,7 +1876,8 @@ function motionNote(P) {
 function hotNote(P) {
   const o = { ...P.call, hot: okHot(P.call.hot, P.call.formation, P.call.play) };
   if (!hotList(o).length) return '';
-  return ` That's ${byId(PLAYS, o.play).name} as it's drawn; yours had ${hotWords(o)}, so it can go another way. Run it 100 times each to see how your version does against every coverage.`;
+  const m = mineOf(o);
+  return ` That's ${byId(PLAYS, o.play).name} as it's drawn; ${m ? `${m.name} has` : 'yours had'} ${hotWords(o)}, so it can go another way. Run it 100 times each to see how ${m ? 'it does' : 'your version does'} against every coverage.`;
 }
 
 // What a disguise changes, after the note on the coverage it is: what the board shows over many snaps against the
@@ -1975,14 +2105,14 @@ function chartHint() {
   const off = { ...state.off, motion: chart ? chart.motion : state.side === 'O' || !hidden() ? state.off.motion : 'none' };
   const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
   // (calling both sides, with routes changed: those are for that one play, and the rest are run as drawn; see runChart())
-  const changed = hotList(state.off).length ? `: ${byId(PLAYS, state.off.play).name} as you changed it (${hotWords(state.off)}), the rest as drawn` : '';
+  const named = mineOf(state.off), changed = hotList(state.off).length ? `: ${named ? `${named.name}, ` : ''}${byId(PLAYS, state.off.play).name} as you changed it (${hotWords(state.off)}), the rest as drawn` : '';
   // what a success is on this down (see success())
   const sit = chart ? chart.sit : situation(), n = needed(sit);
   const goal = `on ${sit.name}, ${sit.down > 2 ? `making the first down (${sit.togo} yard${sit.togo === 1 ? '' : 's'})` : `gaining ${n} yards or more`}`;
   if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense ${goal}${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
   const who = chart ? chart.blitzer : chartBlitzer(state.def), bw = { M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' }[who] || 'blitz';
-  const yours = hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
+  const yours = named ? `${named.name} (your ${byId(PLAYS, state.off.play).name}: ${hotWords(state.off)})` : hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
   return `How often ${yours} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? `with a ${bw}${who === 'SS' ? ', the Mike\'s in Cover 2 and Cover 4, where both safeties play deep' : ''}` : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
     + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
 }
@@ -1991,7 +2121,7 @@ const tapRow = () => (chart?.rows.some(r => r.avg !== undefined) ? ' Tap a row t
 function again() {
   if (!redo) return '';
   const cv = byId(COVERAGES, state.def.coverage);
-  const mine = state.side === 'O' ? byId(PLAYS, state.off.play).name
+  const mine = state.side === 'O' ? mineOf(state.off)?.name ?? byId(PLAYS, state.off.play).name
     : `${byId(FRONTS, state.def.front).name}, ${covWords(state.def)}${cv.id === 'c0' ? '' : state.def.pressure === 'blitz' ? `, ${blitzWord(state.def)}` : ', rush four'}`;
   if (redo.sit) return ` The situation changed. Run it again for ${mine} on ${situation().name}.`;
   return ` ${redo.yours ? 'You changed the call' : 'They changed their call'}. Run it again for ${mine}.`;
@@ -2440,6 +2570,7 @@ addEventListener('storage', e => {
     if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
     takeQuiz(s);
     $('quiz').checked = state.quiz;
+    if (JSON.stringify(okMine(s.plays)) !== JSON.stringify(myPlays)) { myPlays = okMine(s.plays); renderChoosers(); renderMatchup(); syncChart(); } // kept there: here too
     if (!state.quiz && asking()) reveal(); // turned off there: the question goes here too, and his call is out
     syncTransport();
     draw();

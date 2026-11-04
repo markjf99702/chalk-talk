@@ -2909,6 +2909,96 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Your own plays: once a route is changed, Save as my play (in your call, or in the row of routes under the board) names
+// it and keeps it on this device, in a row of its own, My plays, under the passes. Picking it puts its formation, routes
+// and motion back in your call; the board, the result card and the chart call it by its name; a reload keeps it, another
+// tab's save shows here too, and Delete it takes it out. Saved ones this version can't run are left out.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  const problems = [];
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const tap = label => p.evaluate(label => {
+    const { board, state } = window.chalkTalk;
+    const i = state.play.players.findIndex(q => q.label === label);
+    const r = board.cv.getBoundingClientRect(), q = board.pos(board.t, i);
+    return { x: r.left + board.sx(q.x), y: r.top + board.sy(q.y) };
+  }, label).then(at => p.mouse.click(at.x, at.y));
+  const mine = () => p.evaluate(() => ({
+    chips: [...document.querySelectorAll('#mineBody [data-key^="Play:my"]')].map(b => b.textContent.replace(/\s+/g, ' ').trim() + (b.getAttribute('aria-checked') === 'true' ? '*' : '')),
+    part: document.querySelector('#mineBody .my-play')?.innerText.replace(/\s+/g, ' ').trim() ?? null,
+    saved: JSON.parse(localStorage.getItem('chalk-talk.v1') || '{}').plays ?? [],
+  }));
+  const route = async (label, r) => { await tap(label); await p.click('#whoRoutesOpen'); await p.click(`#routeChips [data-route="${r}"]`); };
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} }); Object.assign(state.def, { front: 'nickel', coverage: 'c2', pressure: 'four', disguise: false }); lineUp(); });
+  assert.deepEqual(await mine(), { chips: [], part: null, saved: [] }, 'before a route is changed');
+  await route('H', 'slant');
+  assert.equal(await p.isVisible('#routesSave'), true, 'no Save as my play in the row of routes');
+  assert.equal((await mine()).part, 'Your version of Smash: the H on a slant. Keep it, with a name, in My plays. Save as my play');
+  // From the row: the name to type, in your call, ready to type in, starting from the play and its routes.
+  await p.click('#routesSave');
+  assert.deepEqual(await p.evaluate(() => [document.getElementById('routes').hidden, document.activeElement.id, document.getElementById('myName').value]), [true, 'myName', 'Smash, H slant']);
+  await p.keyboard.press('Escape');
+  assert.equal((await mine()).part, 'Your version of Smash: the H on a slant. Keep it, with a name, in My plays. Save as my play', 'Escape');
+  assert.equal(await p.evaluate(() => document.activeElement.id), 'mySave');
+  await p.click('#mySave');
+  await p.fill('#myName', '  Trips   Slant ');
+  await p.keyboard.press('Enter');
+  assert.deepEqual(await mine(), { chips: ['Trips Slant Gun Trips*'], part: 'Trips Slant is one of your plays, kept on this device. Delete it', saved: [{ name: 'Trips Slant', formation: 'trips', play: 'smash', motion: 'none', hot: { H: 'slant' } }] });
+  assert.equal(await p.textContent('#caption'), 'Saved in My plays: Trips Slant.');
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · Gun Trips · Trips Slant  vs  Nickel/);
+  assert.match(await p.textContent('#chartHint'), /^How often Trips Slant \(your Smash: the H on a slant\) succeeds on 1st & 10, /);
+  assert.match(await p.textContent('#mineBody'), /Trips Slant: Smash with the H on a slant, the rest as drawn\. The outside receiver runs a hitch/);
+  // Another with a name that's taken gets a number; the routes row has no Save for one that's kept already.
+  await route('H', 'post');
+  await p.click('#routesSave');
+  await p.fill('#myName', 'trips slant');
+  await p.click('#mineBody .my-name button[type="submit"]');
+  assert.deepEqual((await mine()).chips, ['Trips Slant Gun Trips', 'trips slant 2 Gun Trips*']);
+  await route('H', 'post');
+  assert.equal(await p.isVisible('#routesSave'), false, 'Save as my play for a play that\'s kept');
+  await p.click('#routesDone');
+  // Another play is just that play; picking yours puts it all back, from another formation too (and he substitutes).
+  await p.getByRole('radio', { name: 'Flood' }).click();
+  assert.deepEqual([(await mine()).chips, await p.evaluate(() => window.chalkTalk.state.off.hot)], [['Trips Slant Gun Trips', 'trips slant 2 Gun Trips'], {}]);
+  await p.getByRole('radio', { name: 'I-Form' }).click();
+  await p.getByRole('radio', { name: /^Trips Slant/ }).click();
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off), { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: { H: 'slant' } });
+  assert.equal(await p.textContent('#caption'), 'Trips Slant: Smash from Gun Trips, with the H on a slant. New personnel: they\'ve substituted.');
+  assert.equal(await p.evaluate(() => document.querySelector('[data-key="Play:my0"]').getAttribute('aria-checked')), 'true');
+  // Snapped, the result card calls it by its name, and the note says it's about the play as drawn.
+  await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#resVs'), /^On 1st & 10, Trips Slant \(Smash, H on a slant\) from Gun Trips against /);
+  assert.match(await p.textContent('#note'), / That's Smash as it's drawn; Trips Slant has the H on a slant, so it can go another way\. Run it 100 times each to see how it does against every coverage\.$/);
+  // Kept: a reload brings them back, with yours in the call.
+  await p.reload();
+  assert.deepEqual((await mine()).chips, ['Trips Slant Gun Trips*', 'trips slant 2 Gun Trips']);
+  // Another tab's save shows here too.
+  const q = await c.newPage();
+  await q.goto(base);
+  await q.evaluate(() => { const s = JSON.parse(localStorage.getItem('chalk-talk.v1')); s.plays.push({ name: 'Doubles Curl', formation: 'doubles', play: 'verts', motion: 'none', hot: { Y: 'curl' } }); localStorage.setItem('chalk-talk.v1', JSON.stringify(s)); });
+  await until(async () => (await mine()).chips.length === 3, 5000, 'another tab\'s play didn\'t show');
+  assert.deepEqual((await mine()).chips, ['Trips Slant Gun Trips*', 'trips slant 2 Gun Trips', 'Doubles Curl Gun Doubles']);
+  await q.close();
+  // Delete it: out of My plays, still your call, so Save as my play keeps it again.
+  await p.click('#mineBody .my-play button:text-is("Delete it")');
+  assert.deepEqual(await mine(), { chips: ['trips slant 2 Gun Trips', 'Doubles Curl Gun Doubles'], part: 'Your version of Smash: the H on a slant. Keep it, with a name, in My plays. Save as my play', saved: [{ name: 'trips slant 2', formation: 'trips', play: 'smash', motion: 'none', hot: { H: 'post' } }, { name: 'Doubles Curl', formation: 'doubles', play: 'verts', motion: 'none', hot: { Y: 'curl' } }] });
+  assert.equal(await p.textContent('#caption'), 'Trips Slant is out of My plays. It\'s still your call until you change it.');
+  assert.equal(await p.evaluate(() => document.activeElement.id), 'mySave');
+  // What this version can't run is left out: no name, no such formation, a run, no routes changed, a second "Doubles Curl".
+  await p.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('chalk-talk.v1'));
+    s.plays = [{ name: '', formation: 'trips', play: 'smash', hot: { H: 'go' } }, { name: 'Bunch', formation: 'bunch', play: 'smash', hot: { H: 'go' } }, { name: 'Run', formation: 'iform', play: 'iz', hot: { Y: 'go' } }, { name: 'Plain', formation: 'trips', play: 'flood', hot: {} }, { name: 'Doubles Curl', formation: 'doubles', play: 'verts', hot: { Y: 'curl' }, motion: 'jet' }, { name: 'doubles curl', formation: 'trips', play: 'mesh', hot: { Z: 'go' } }, 'junk'];
+    localStorage.setItem('chalk-talk.v1', JSON.stringify(s));
+  });
+  await p.reload();
+  assert.deepEqual((await mine()).chips, ['Doubles Curl Gun Doubles']);
+  assert.deepEqual(problems, [], 'problems with your own plays');
+  await c.close();
+}
+
 // Down and distance: a Situation row above your call, on 1st & 10 to start with, says what the down means. A pick is
 // kept, comes back after a reload, rides in a shared link (one from before there were downs opens on 1st & 10, and one
 // with a situation this version doesn't have says so), and the board's matchup line names it. With the other coach

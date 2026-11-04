@@ -444,6 +444,15 @@ button:disabled { cursor: default; }
 .chip:disabled { opacity: .5; }
 .chip:disabled[aria-checked="true"] { opacity: .8; }
 .blurb { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
+/* your own plays: under the plays, the one in your call kept, or a way to keep it and its name to type (see minePart()) */
+.my-play { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; padding: 9px 12px; border: 1.5px dashed var(--line-strong); border-radius: 12px; }
+.my-play p { flex: 1 1 200px; margin: 0; font-size: 14px; color: var(--muted); }
+.my-play p b { color: var(--ink); font-weight: 600; }
+.my-play .ghost { flex: none; }
+.my-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+.my-name label { width: 100%; font-size: 14px; font-weight: 600; }
+.my-name input { flex: 1 1 100%; min-width: 0; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); font-size: 16px; }
+.my-name input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .theirs-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; }
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
@@ -615,6 +624,7 @@ button.bar-row { width: 100%; margin: -3px 0; padding: 3px 6px; border: 0; borde
 .routes-head span { color: var(--muted); }
 .routes-head .ghost { flex: none; padding: 4px 12px; }
 .routes .chips { margin-top: 8px; gap: 5px; }
+.routes-head .ghost + .ghost { margin-left: -4px; }
 .routes .chip { font-size: 14px; padding: 4px 11px; }
 
 /* ---------------------------------------------------------------- playbook */
