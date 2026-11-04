@@ -659,10 +659,10 @@ function assignRun(S) {
   const emol = outside[0] || front7.filter(d => d.y < 2 && d.x * p > 2.6).sort((a, b) => b.x * p - a.x * p)[0];
   S.emol = emol;
   // On Counter the back-side guard always pulls and kicks out the end. With a tight end on the line on the back side to
-  // block the end the pullers leave, the back-side tackle pulls behind the guard and turns up through the hole;
-  // otherwise the tackle stays home and blocks that end himself (or, from Gun Ace, where the tight end a step off the
-  // line there blocks him, takes anyone coming through the gap the guard leaves), and a fullback, if there is one,
-  // leads through the hole instead.
+  // block the end the pullers leave, the back-side tackle pulls behind the guard and leads up through the hole, for the
+  // first defender to show up in it (see runBlock()); otherwise the tackle stays home and blocks that end himself (or,
+  // from Gun Ace, where the tight end a step off the line there blocks him, takes anyone coming through the gap the
+  // guard leaves), and a fullback, if there is one, leads through the hole instead.
   const counter = play.scheme === 'counter', backT = S.OL.find(o => o.label === (p > 0 ? 'LT' : 'RT'));
   const filler = counter ? S.te(-p) || backT : null;
   for (const b of blockers) {
@@ -674,6 +674,7 @@ function assignRun(S) {
     if (pull) kind = counter ? (b === backG ? 'kick' : 'pull') : S.FB ? 'pull' : 'kick';
     if (b === filler) kind = 'fill';
     b.job = { kind: 'block', scheme: kind, target: null, pull };
+    if (counter && kind === 'pull') b.job.hole = true; // (Counter's pulling tackle: nobody's his before the snap)
   }
   // Two levels, the way a line coach draws it. First the men on the line of scrimmage: each is the lineman's or tight
   // end's he lines up on, or in the gap that blocker is responsible for: on a zone the gap to his play side (an outside
@@ -701,7 +702,8 @@ function assignRun(S) {
     list.forEach((b, k) => { if (pk[k] >= 0) b.job.target = backers[pk[k]]; });
   };
   const atHole = (b, d) => Math.abs(d.x - aimX) * 0.8 + Math.abs(d.y - 4.5) * 0.3;
-  climb(blockers.filter(b => b.job.scheme === 'pull' || b.job.scheme === 'lead'), atHole);
+  // (Not Counter's pulling tackle. Sent at the Mike, who steps the other way with the fake, he never got to the hole.)
+  climb(blockers.filter(b => (b.job.scheme === 'pull' && !b.job.hole) || b.job.scheme === 'lead'), atHole);
   climb(blockers.filter(b => !b.job.target && lean[b.job.scheme] !== undefined), (b, d) => {
     const side = (d.x - b.x) * p;
     if (b.job.scheme === 'power' ? side > 1.9 : side < -3.5) return Infinity;
@@ -1005,6 +1007,19 @@ function pickUp(S, pl, range, near) {
   return best;
 }
 
+// Who Counter's pulling tackle takes, leading through the hole: the free defender nearest it, within HOLE yards of it
+// and not deep in the backfield, that no teammate is on his way to block.
+const HOLE = 3;
+function inHole(S, pl) {
+  let best = null, bd = HOLE;
+  for (const d of S.D) {
+    if (d.eng >= 0 || d.noEngage >= S.t || d.lostTo === pl.i || d.y < -1.5) continue;
+    const dd = hyp(d.x - S.aimX, d.y - 0.5);
+    if (dd < bd && !S.O.some(o => o !== pl && o.eng < 0 && o.job.target === d && d.lostTo !== o.i)) { bd = dd; best = d; }
+  }
+  return best;
+}
+
 function nearestFree(S, pl, range) {
   let best = null, bd = range;
   for (const d of S.D) if (d.eng < 0 && d.noEngage < S.t && d.y > pl.y - 0.5) { const dd = dist(d, pl); if (dd < bd) { bd = dd; best = d; } }
@@ -1227,6 +1242,7 @@ function fake(S, pl) {
 
 const COUNTER_STEP = 0.2; // seconds the back's step away from the play takes, on Counter
 const COUNTER_READ = 0.9; // and until when the linebackers go with it
+const COUNTER_WRAP = 0.45; // and the pulling tackle's step back, to get round behind the guard
 // From the shotgun their step ends at the handoff. The back has the ball sooner there, and then the linebackers wait to
 // see who has it (see gunRead()): with the step going on after the handoff as well, the two delays added up, and
 // Counter from the shotgun gained 4 yards on 47-72% of its snaps, more than any other run from there.
@@ -1285,7 +1301,10 @@ function runBlock(S, pl) {
   // With nobody to block, or once his man is gone (somebody else has him, or he got off this block), he takes whoever
   // comes free near him: never a man a teammate is on his way to.
   const lead = j.scheme === 'lead' || j.scheme === 'pull' || j.scheme === 'kick';
-  if (!tgt && (t > 0.5 || !j.target)) { tgt = pickUp(S, pl, j.target || lead ? 4 : 2.5); if (tgt) j.target = tgt; }
+  // Counter's pulling tackle has nobody until he's round behind the guard. Then the first defender to show up in the
+  // hole is his, and once he's through it, whoever comes free near him.
+  if (j.hole) { if (!tgt && t >= COUNTER_WRAP) { tgt = pl.y > 2 ? pickUp(S, pl, 4) : inHole(S, pl); if (tgt) j.target = tgt; } }
+  else if (!tgt && (t > 0.5 || !j.target)) { tgt = pickUp(S, pl, j.target || lead ? 4 : 2.5); if (tgt) j.target = tgt; }
   // On his way up to a linebacker, he blocks whoever shows up in front of him first. (Not a puller or the man kicking
   // out the end: each has one man, and runs to him.)
   if (tgt && tgt.y0 > 2 && dist(tgt, pl) > 2 && !j.pull && j.scheme !== 'kick') {
@@ -1293,13 +1312,16 @@ function runBlock(S, pl) {
     if (near && near !== tgt) { tgt = near; j.target = near; }
   }
   // The pulling guard: step back and run along the line. (Counter's pulling tackle goes a step deeper, to get round
-  // behind the guard, and turns up sooner, inside the guard's kick-out, for his linebacker.)
+  // behind the guard, then runs along the line to the hole, inside the guard's kick-out, and turns up through it.)
   const wrap = S.play.scheme === 'counter' && j.scheme === 'pull';
-  if (j.pull && t < (wrap ? 0.45 : 0.55)) {
+  if (j.pull && t < (wrap ? COUNTER_WRAP : 0.55)) {
     pl.tx = pl.x0 + p * 4; pl.ty = wrap ? -2.6 : -1.8; pl.ts = pl.top * 0.85; return;
   }
   if (!tgt) { // nobody yet: a lead blocker goes to the hole, a lineman to his play-side gap, each looking for work
-    if (lead) { pl.tx = S.aimX; pl.ty = Math.min(pl.y + 2, 2); pl.ts = pl.top * 0.85; } else { pl.tx = pl.x0 + p * 1.2; pl.ty = Math.min(pl.y + 1.5, 2.5); pl.ts = 2.5; }
+    const hole = S.aimX - p * 0.3;
+    if (j.hole && !j.through) j.through = pl.y > 0 || Math.abs(pl.x - hole) < 1;
+    if (j.hole && !j.through) { pl.tx = hole; pl.ty = -0.6; pl.ts = pl.top * 0.85; }
+    else if (lead) { pl.tx = S.aimX; pl.ty = Math.min(pl.y + 2, 2); pl.ts = pl.top * 0.85; } else { pl.tx = pl.x0 + p * 1.2; pl.ty = Math.min(pl.y + 1.5, 2.5); pl.ts = 2.5; }
     return;
   }
   pl.tx = tgt.x + tgt.vx * 0.2; pl.ty = tgt.y + tgt.vy * 0.2 - 0.3;

@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'b8a0e108782b' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'f4968b8b2d2a' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -281,7 +281,20 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     const [bg, bt] = p > 0 ? ['LG', 'LT'] : ['RG', 'RT'];
     const single = prepare(call('single'), 3), iform = prepare(call('iform'), 3), trips = prepare(call('trips'), 3);
     for (const S of [single, iform, trips]) assert.deepEqual([job(S, bg).scheme, job(S, bg).pull], ['kick', true], `${S.fm.id}: the back-side guard pulls and kicks out`);
-    assert.deepEqual([job(single, bt).scheme, job(single, bt).target?.cls], ['pull', 'lb'], 'from Singleback the back-side tackle pulls for a linebacker');
+    // From Singleback the back-side tackle pulls with no man of his own: he leads through the hole for the first
+    // defender to show up in it. (Sent at the Mike, who steps the other way with the fake, he got past the line 2-4
+    // yards inside the hole, chasing him.) When he gets past the line, it's through the hole.
+    assert.deepEqual([job(single, bt).scheme, job(single, bt).target], ['pull', null], 'from Singleback the back-side tackle pulls, with no man of his own');
+    assert.equal(single.jobText[single.O.find(o => o.label === bt).i], 'Pulls from the back side and leads through the hole for the first defender to show up.');
+    let through = 0;
+    for (const front of ['over', 'under', '34', 'nickel']) for (let s = 1; s <= 6; s++) {
+      const c = { ...call('single'), front, coverage: ['c1', 'c2', 'c3', 'c4'][s % 4] }, T = prepare(c, s), tk = T.O.find(o => o.label === bt);
+      const f = simulate(c, s).frames.find(f => f.xy[2 * tk.i + 1] > 0.5);
+      if (!f) continue;
+      through++;
+      assert.ok((f.xy[2 * tk.i] - T.aimX) * p > -1.5, `Singleback against the ${front}, seed ${s}: the pulling tackle gets past the line ${((T.aimX - f.xy[2 * tk.i]) * p).toFixed(1)} yards inside the hole`);
+    }
+    assert.ok(through >= 3, `the pulling tackle got past the line on ${through} snaps`);
     assert.equal(job(single, 'U').scheme, 'fill', 'and the back-side tight end takes the end they leave');
     assert.equal(job(single, 'U').target?.label, 'DE');
     for (const S of [iform, trips]) assert.deepEqual([job(S, bt).scheme, job(S, bt).target?.label], ['fill', 'DE'], `${S.fm.id}: the tackle stays home on the end`);
@@ -317,21 +330,25 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     assert.equal(sam?.label, 'S', 'the Sam bumps');
     assert.ok((xy[2 * sam.i] - sam.x0) * p > -0.2, `the Sam in the bump holds his ground: ${(xy[2 * sam.i] - sam.x0).toFixed(2)} yards`);
   }
-  // Over many snaps: about 3.5 yards a carry, a bit less than half of them gaining 4, and about one in eight losing
-  // yards (the coach's note says so). (Built before the shotgun read and the run-down from behind, it gave 3.1 yards a
+  // Over many snaps: about 3.5 yards a carry, about half of them gaining 4, and about one in ten losing yards (the
+  // coach's note says so). (Built before the shotgun read and the run-down from behind, it gave 3.1 yards a
   // carry here, 29% gaining 4 and 25% losing yards; since then, 3.6, 51% and 20%: from the shotgun, where the defense
   // waited to read the handoff as well as stepping with the fake, it gained 4 yards 44-81% of the time, from 11-39%.
   // With their step ending at the handoff there, from this seed and 1, 100000 and 7777777: 2.4-3.2 yards a carry,
   // 36-43% gaining 4, 24-27% losing yards. With the back side's end blocked rather than the outside linebacker beyond
-  // him: 3.2-3.8, 44-51% and 10-14%; against the 3-4, 7-10% losing yards, from 49-53%.)
-  let n = 0, y = 0, ok = 0, lost = 0, n34 = 0, lost34 = 0;
+  // him: 3.2-3.8, 44-51% and 10-14%; against the 3-4, 7-10% losing yards, from 49-53%. With Singleback's pulling
+  // tackle leading through the hole rather than chasing the Mike: 3.4-4.0, 48-56% and 7-10%, and from Singleback 44-50%
+  // gaining 4, from 17-25%.)
+  let n = 0, y = 0, ok = 0, lost = 0, n34 = 0, lost34 = 0, n1 = 0, ok1 = 0;
   for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'counter'))) for (const front of ['over', 'nickel', '34']) for (const coverage of ['c1', 'c2', 'c3']) for (let k = 0; k < 4; k++) {
     const res = simulate({ formation: fm.id, play: 'counter', front, coverage, pressure: k % 2 ? 'four' : 'blitz', flip: k % 2 === 1 }, 1300 + n++).result;
     y += res.yards; if (Math.round(res.yards) >= 4) ok++; if (res.yards < 0) lost++;
     if (front === '34') { n34++; if (res.yards < 0) lost34++; }
+    if (fm.id === 'single') { n1++; if (Math.round(res.yards) >= 4) ok1++; }
   }
   assert.ok(y / n > 2.5 && y / n < 5 && ok / n > 0.35 && ok / n < 0.6 && lost / n > 0.06 && lost / n < 0.2, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
   assert.ok(lost34 / n34 < 0.2, `against the 3-4 Counter loses yards ${Math.round(100 * lost34 / n34)}% of the time`);
+  assert.ok(ok1 / n1 > 0.33, `from Singleback Counter gains 4 yards ${Math.round(100 * ok1 / n1)}% of the time`);
 });
 
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
