@@ -366,14 +366,14 @@ export const DRILLS = [
     id: 'c2', name: 'Beat Cover 2', side: 'O', coverage: 'c2', pressure: 'four',
     brief: 'They play Cover 2 and rush four, every snap.',
     note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Stick and Slant-Flat get there most often, about four times in five: quick throws underneath, in front of the corner sitting in the flat or beside him.',
-    long: 'On 3rd & 8 the surest 4 yards don\'t get there: Stick and Flood make the first down one time in five or less. Four Verticals, Slant-Flat, the Play-Action Shot, Smash and Mesh make it about half the time each, with throws into the holes past the sticks or a catch on the run.',
+    long: 'On 3rd & 8 some of the surest 4 yards don\'t get there: Stick and Flood make the first down one time in five or less. Four Verticals, Slant-Flat, the Play-Action Shot, Smash and Mesh make it about half the time each, with throws into the holes past the line to gain or a catch on the run.',
     short: 'On 3rd & 2, Stick, Slant-Flat, Flood and the Draw make it most often, three or four times in five. On 4th & 1, a single yard, the runs come first: Inside Zone, the Draw, Outside Zone and Counter make it most often, about four times in five or better.',
   },
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
     brief: 'They play Cover 3 and rush four, every snap.',
     note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 3 here: four receivers going deep against three deep defenders, and the deep crosser running in behind linebackers who stepped up for the fake. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, Stick gets there most often: the defender between the stick and the flat can\'t take both. Next, about seven times in ten, come the Draw, Slant-Flat and Smash.',
-    long: 'On 3rd & 8 Flood and the Play-Action Shot make the first down most often, about half the time: the sail settles at 12 to 14 yards, past the sticks, and the deep crosser runs in behind the linebackers. Next, about two times in five, come the Draw, Four Verticals and Stick. Slant-Flat, a sure 4 yards on first down, makes 8 about one time in five.',
+    long: 'On 3rd & 8 Flood and the Play-Action Shot make the first down most often, about half the time: the sail settles at 12 to 14 yards, past the line to gain, and the deep crosser runs in behind the linebackers. Next, about two times in five, come the Draw, Four Verticals and Stick. Slant-Flat, a sure 4 yards on first down, makes 8 about one time in five.',
     short: 'On 3rd & 2, Stick, Slant-Flat, the Draw and the RB Screen make it most often, about three times in four. On 4th & 1 the Draw does best, about nine times in ten, with Stick, Inside Zone and the screen about four in five.',
   },
   {
