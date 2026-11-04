@@ -637,10 +637,17 @@ for (const side of ['O', 'D']) {
     state.seed = 2;
     lineUp(); state.t = board.duration(); finish();
     const away = { kind: state.play.result.kind, now: document.getElementById('noteNow').textContent };
-    return { out, seen: [...seen].sort(), away };
+    // On Stick, the man sitting on the stick going with the back to the flat (Gun Doubles against a Cover 3 blitz, seed 2).
+    state.off = { formation: 'doubles', play: 'stick', flip: false };
+    state.def = { front: 'over', coverage: 'c3', pressure: 'blitz' };
+    state.seed = 2;
+    lineUp(); state.t = board.duration(); finish();
+    const stick = document.getElementById('noteNow').textContent;
+    return { out, seen: [...seen].sort(), away, stick };
   });
   assert.deepEqual(bad.out, [], 'the This time line in the coach\'s note');
   assert.deepEqual(bad.away, { kind: 'throwaway', now: 'This time: with his first two reads covered, he threw it away rather than take a sack.' });
+  assert.equal(bad.stick, 'This time: the strong safety left the stick to go with the running back to the flat, so he threw to the Y on the stick route, and it went for 11 yards.');
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
   await p.close();
 }

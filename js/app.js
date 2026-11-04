@@ -1939,6 +1939,7 @@ function thisTime(P) {
     hot: `${t.blitzer >= 0 ? nm(P, t.blitzer) : 'a blitzer'} came unblocked, so he threw hot to ${on}`,
     pressure: `with the rush on him, he threw to ${on}`,
     last: `with none of his reads open, he threw to ${on}`,
+    stick: t.how === 'stick' && `${nm(P, t.key)} left the stick to go with ${him(t.flat)} to the flat, so he threw to ${on}`, // (only then: the others have no key)
     screen: `he threw the screen to ${who}`,
   }[t.how] || `he threw to ${on}`;
   const end = E.findLast(e => e.kind === 'inc' || e.kind === 'pbu' || e.kind === 'int');

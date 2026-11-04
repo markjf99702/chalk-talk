@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '3cdbd3828232' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -257,6 +257,27 @@ test('Stick: the outside man clears out deep, one man sits at five yards, and th
       y += r.yards; if (r.kind === 'throwaway') away++;
     }
     assert.ok(away / n < 0.35 && y / n > 4, `Gun Doubles against Cover 3: thrown away ${away} times in ${n}, ${(y / n).toFixed(1)} yards a dropback`);
+  }
+  // He reads the man sitting on the stick: once he's come off it to the flat, if that man goes with the back to the flat,
+  // the ball goes to the stick, open where he was. Gun Doubles against a Cover 3 blitz, three defenders underneath:
+  // about half the snaps, nine in ten caught. (He didn't look back: the stick was thrown only once nothing else had
+  // come open, as the drop ran out, about 2 1/2 seconds after the snap.) In man coverage the man on the stick stays on
+  // him, so never.
+  for (const coverage of ['c3', 'c1']) {
+    let n = 0, read = 0, comp = 0, t0 = 0;
+    for (const front of FRONTS) for (let k = 0; k < 24; k++) {
+      const r = simulate({ formation: 'doubles', play: 'stick', front: front.id, coverage, pressure: 'blitz', flip: k % 2 === 1 }, 4500 + n++);
+      const t = r.events.find(e => e.kind === 'throw');
+      if (t?.how !== 'stick') continue;
+      read++; t0 += t.t;
+      if (r.result.kind === 'catch') comp++;
+      const f = r.frames.find(f => f.t >= t.t), at = i => [f.xy[2 * i], f.xy[2 * i + 1]], d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+      const [key, st, fl] = [at(t.key), at(t.who), at(t.flat)];
+      assert.ok(d(key, st) > 2 && d(key, fl) < d(key, st), `seed ${4500 + n - 1}: thrown to the stick with the man on it ${d(key, st).toFixed(1)} yards from him and ${d(key, fl).toFixed(1)} from the flat`);
+      assert.match(t.text, /^The quarterback throws to the Y on a stick route, as the .+ leaves him for the flat\.$/);
+    }
+    if (coverage === 'c1') assert.equal(read, 0, 'against Cover 1 the man on the stick left him');
+    else assert.ok(read / n > 0.3 && comp / read > 0.8 && t0 / read < 2.4, `against a Cover 3 blitz the stick read ${read} times in ${n}, ${comp} caught, ${(t0 / read).toFixed(2)} s after the snap`);
   }
   // Over many snaps: short, sure throws, the stick or a flat route nearly every time, against zone and man alike.
   for (const coverage of ['c1', 'c3', 'c4']) {

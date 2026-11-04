@@ -543,6 +543,12 @@ function assignOffense(S) {
   // wasn't one of them is now, after the rest.
   S.reads = play.reads.map(k => S.keys[k]).filter(r => r && r.job.kind === 'route');
   for (const pl of hot) if (pl.job.kind === 'route' && !S.reads.includes(pl)) S.reads.push(pl);
+  // Stick's two reads: a stick route, and after it a flat route on the same side (see stickRead()).
+  S.pair = null;
+  for (let k = 1; k < S.reads.length && !S.pair; k++) {
+    const a = S.reads[k - 1], b = S.reads[k];
+    if (a.job.route === 'stick' && (b.job.route === 'flat' || b.job.route === 'bflat') && Math.sign(a.path.at(-1).x) === Math.sign(b.path.at(-1).x)) S.pair = { stick: a, flat: b, k };
+  }
   S.hold = { quick: 2.4, five: 4.1, pa: 4.4, screen: 2.6 }[play.drop];
 }
 
@@ -1074,6 +1080,7 @@ function qb(S, pl) {
   // The progression: look at each read in turn. Wait for a route to make its cut, give it a beat, then move on.
   if (S.k === undefined) { S.k = 0; S.kAt = t; S.kReady = null; }
   const k = S.k;
+  if (S.pair && k >= S.pair.k && stickRead(S)) return;
   S.look = S.reads[Math.min(k, S.reads.length - 1)] || null;
   if (k < S.reads.length) {
     const r = S.reads[k];
@@ -1096,6 +1103,30 @@ function qb(S, pl) {
     if (t > S.hold) return throwAway(S, pl);
   }
   if (rd < 2.2) hurry(S, pl, rd);
+}
+
+// Stick: once he has come off the stick to the flat beside it, he keeps the man who was sitting on the stick in view
+// (the defender nearest it then, not one deep or rushing). If that man goes with the man in the flat, leaving the stick,
+// and the stick is open behind him, the ball goes there. (Looking at the flat drew him off it, but the quarterback
+// didn't look back: from Gun Doubles against Cover 3 with a blitz, the stick was open behind him on most snaps and
+// thrown only once there was nothing else, at the end of the drop, or not at all.) In man coverage the man on the
+// stick stays on him, so it's the flat or nothing, as before.
+function stickRead(S) {
+  const P = S.pair, { stick, flat } = P;
+  if (!P.sitter) {
+    let best = null, bd = 99;
+    for (const d of S.D) if (d.job.kind !== 'rush' && !d.job.z?.deep) { const dd = dist(d, stick); if (dd < bd) { bd = dd; best = d; } }
+    P.sitter = best;
+  }
+  const d = P.sitter;
+  if (!d || d.job.kind === 'rush' || stick.job.kind !== 'route' || flat.job.kind !== 'route') return false;
+  if (!(dist(d, stick) > 2.2 && dist(d, flat) < dist(d, stick)) || !isReady(S, stick)) return false;
+  const w = windowFor(S, stick);
+  if (w.w <= 0.8 + S.R.normal() * 0.3) return false;
+  // (In two lines over the field at most: with a tight end's name and a cornerback's, without "for the flat".)
+  const said = name(S, stick).split(' ').length + name(S, d).split(' ').length > 7 ? '' : ' for the flat';
+  throwTo(S, stick, w.P, w.tf, `as ${name(S, d)} leaves him${said}`, { how: 'stick', key: d.i, flat: flat.i });
+  return true;
 }
 
 // A rusher nobody is blocking or about to block, on his way in: one the protection had nobody left for, or a man
