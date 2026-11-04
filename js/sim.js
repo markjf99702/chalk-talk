@@ -984,7 +984,15 @@ function pro(S, pl) {
     tgt = best;
   }
   const set = pl.set || { x: pl.x, y: pl.y - 1 };
-  if (tgt) {
+  if (tgt && tgt.addOn && pl.cls !== 'ol') {
+    // A back or a tight end on a man defender who has come after the passer (see cover()): he gets in his way, to the
+    // nearest spot on his line to the quarterback, at least a yard in front of him. (Stepping at him, as a lineman does
+    // on a man rushing at him, a tight end kept in against Cover 0 was run past inside by the man on him.)
+    const lx = QB.x - tgt.x, ly = QB.y - tgt.y, L = hyp(lx, ly) || 1;
+    const u = clamp(((pl.x - tgt.x) * lx + (pl.y - tgt.y) * ly) / (L * L), Math.min(1, 1 / L), 1);
+    pl.tx = clamp(tgt.x + lx * u, set.x - 3.5, set.x + 3.5); pl.ty = Math.min(tgt.y + ly * u, set.y + 1.2); pl.ts = pl.top;
+    pl.want = tgt;
+  } else if (tgt) {
     // step to the spot between him and the quarterback
     const [ux, uy] = unit(QB.x - tgt.x, QB.y - tgt.y);
     pl.tx = clamp(tgt.x + ux * 1.0, set.x - 2.5, set.x + 2.5); pl.ty = Math.min(tgt.y + uy * 1.0, set.y + 1.2); pl.ts = pl.top * 0.75;
@@ -1092,16 +1100,27 @@ function qb(S, pl) {
 
 // A rusher nobody is blocking or about to block, on his way in: one the protection had nobody left for, or a man
 // defender who came after the passer when his man stayed in to block. (One who got off a block is pressure, not a
-// rusher left unblocked.)
+// rusher left unblocked.) A rusher with a blocker set up in his path, between him and the quarterback, who isn't on his
+// way to somebody else, is blocked, however far off he still is: the quarterback sees him picked up. (He used to count
+// only a blocker within 2 1/2 yards of him, so a back kept in, waiting for his man a few yards in front of the
+// quarterback, didn't count, and the ball went out hot.)
 function unblocked(S) {
   let best = null, bd = 99;
   for (const d of S.D) {
     if (d.job.kind !== 'rush' || d.eng >= 0 || d.lostTo >= 0 || !(d.addOn || S.freeRushers.includes(d))) continue;
     if (S.O.some(o => o.eng < 0 && (o.want === d || o.job.target === d) && dist(o, d) < 2.5)) continue;
+    if (S.O.some(o => o.eng < 0 && o.job.kind === 'pro' && (o.want === d || o.job.target === d || !o.want) && inPath(o, d, S.QB))) continue;
     const dd = dist(d, S.QB);
     if (dd < bd) { bd = dd; best = d; }
   }
   return best;
+}
+// Whether o stands in the way of d on his line to the quarterback q: between them, within a yard and a half of it.
+function inPath(o, d, q) {
+  const lx = q.x - d.x, ly = q.y - d.y, L2 = lx * lx + ly * ly;
+  if (L2 < 1e-6) return false;
+  const u = ((o.x - d.x) * lx + (o.y - d.y) * ly) / L2;
+  return u > 0 && u < 1 && hyp(d.x + lx * u - o.x, d.y + ly * u - o.y) < 1.5;
 }
 
 // The hot throw: to the receiver nearest the spot the blitzer left, if he has a step on his man, or else to anyone
@@ -1529,8 +1548,16 @@ function cover(S, d) {
   if (r.job.kind !== 'route' || (r.job.delay && t < r.job.delay)) {
     // His man stayed in to block. In Cover 0 he joins the rush; otherwise he sits underneath and reads.
     // So does the man on a back who blocks for a moment before the screen: he sees a blocker and comes after the passer.
+    // When he comes, the man kept in takes him, his own man, unless he's blocking somebody already. (Left to pick up
+    // whoever came near him, a back kept in stood at his spot while his man went past him: with the back in on Smash
+    // from Gun Trips against Cover 1, the ball went out hot on 24 snaps of 24.)
     const screen = r.job.route === 'screen' && (S.cov.id === 'c0' || S.cov.id === 'c1') && t > 0.6;
-    if (screen || (t > 0.9 && (S.cov.id === 'c0' || r.cls === 'rb' || r.cls === 'fb') && r.job.kind !== 'route')) { d.job = { kind: 'rush', gap: d.x * 0.3 }; d.addOn = true; return rush(S, d); }
+    if (screen || (t > 0.9 && (S.cov.id === 'c0' || r.cls === 'rb' || r.cls === 'fb') && r.job.kind !== 'route')) {
+      d.job = { kind: 'rush', gap: d.x * 0.3 }; d.addOn = true;
+      const busy = r.job.target && r.job.target !== d && (r.job.target.eng < 0 || r.job.target.eng === r.i);
+      if ((r.job.kind === 'pro' || r.job.kind === 'fake') && r.eng < 0 && !busy) r.job.target = d;
+      return rush(S, d);
+    }
     d.tx = at.x * 0.7 + r.x * 0.3; d.ty = at.y; d.ts = d.home ? d.top : 2; return;
   }
   // He sees his man a moment late: where the receiver was, carried forward at the speed he was going then.

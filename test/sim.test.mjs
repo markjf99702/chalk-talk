@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'f4968b8b2d2a' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '3cdbd3828232' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1251,6 +1251,33 @@ test('a tight end can stay in to block, as a back can, and a wide receiver can\'
   assert.equal(JSON.stringify(simulate({ ...call, hot: { H: 'block' } }, 9).result), JSON.stringify(simulate(call, 9).result), 'a wide receiver stayed in');
 });
 
+test('a man kept in to block takes his own man when he comes after the quarterback, and the quarterback sees him picked up', () => {
+  // In man coverage the defender on a back or a tight end who stays in comes after the passer a moment after the snap
+  // (see cover()). The man kept in takes him, unless the protection gave him somebody else, and with him set up in his
+  // path the quarterback counts that rusher as blocked rather than throwing hot. (Nobody had him: with the back kept in
+  // on Smash from Gun Trips against Cover 1, the ball went out hot on 48 snaps of 48, and on the Play-Action Shot from
+  // I-Form and the Pistol, where both backs stay in, on 60 of 96. A tight end kept in against Cover 0 with nobody of his
+  // own blocked his man on 10 snaps of the 96 he came, standing there while he ran by; now on all 96.)
+  let seed = 6100, n = 0, hot = 0;
+  for (const [formation, play, keep] of [['trips', 'smash', { RB: 'block' }], ['iform', 'pa', {}], ['pistol', 'pa', {}]]) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 6; k++) {
+    const r = simulate({ formation, play, front: fr.id, coverage: 'c1', pressure, flip: k % 2 === 1, hot: keep }, seed++);
+    n++;
+    if (r.events.some(e => e.kind === 'throw' && e.how === 'hot')) hot++;
+  }
+  assert.ok(hot / n < 0.05, `against Cover 1 with a man kept in, the ball went out hot on ${hot} of ${n} snaps`);
+  // A tight end kept in against Cover 0 that the protection gave nobody: his man comes across the line, and he takes him.
+  let came = 0, took = 0;
+  for (const [formation, play, label] of [['single', 'smash', 'Y'], ['iform', 'flood', 'Y'], ['pistol', 'smash', 'Y']]) for (const fr of FRONTS) for (let k = 0; k < 8; k++) {
+    const call = { formation, play, front: fr.id, coverage: 'c0', pressure: 'blitz', flip: k % 2 === 1, hot: { [label]: 'block' } };
+    const S = prepare(call, seed), r = simulate(call, seed++);
+    const te = S.P.find(p => p.label === label), man = S.D.find(d => d.job.kind === 'man' && d.job.r === te);
+    if (te.job.target || !r.frames.some(f => f.t <= 3 && f.xy[2 * man.i + 1] < 0)) continue;
+    came++;
+    if (r.frames.some(f => f.t <= 3 && f.eng[te.i] === man.i)) took++;
+  }
+  assert.ok(came >= 48 && took / came > 0.8, `against Cover 0 the tight end kept in blocked his own man on ${took} of the ${came} snaps he came`);
+});
+
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).
 const caughtAt = r => { const f = r.frames.find(f => f.t > r.events.find(e => e.kind === 'throw').t && !f.air && f.c === r.result.carrier); return f.xy[2 * r.result.carrier + 1]; };
 
@@ -1652,7 +1679,10 @@ test('over many snaps the numbers look like football', () => {
   // rather than one in three, 64.8-71.3% (mean 68.2%, six seeds above 68%) and interceptions on 1.0-2.3%; with the
   // screen thrown early only when a rusher is within 2 yards, 65.3-71.6% (mean 68.3%, six above 68%). This one gives
   // 67.7%, 1.0% (13 in 1,248) and 4.82. With the Pistol's linebackers over their own gaps, 4.14-5.06 yards a carry; and
-  // since a tackle a back breaks down the field costs him a step, 3.74-4.58 (this one 4.30), the passes as before.
+  // since a tackle a back breaks down the field costs him a step, 3.74-4.58 (this one 4.30), the passes as before. With
+  // a man kept in to block taking his own man in man coverage, and the quarterback counting a rusher with a blocker set
+  // up in his path as blocked, the twelve give 64.5-71.1% complete (mean 67.7%, down from 68.3%; six above 68%) and sacks
+  // on 2.0-4.1% of dropbacks; this one 67.9% (from 67.7%), 3.5% and 4.36.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
