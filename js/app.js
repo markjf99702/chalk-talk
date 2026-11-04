@@ -1134,7 +1134,8 @@ function offenseChooser(host, readonly) {
   const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
   const set = patch => {
     const was = fm.personnel;
-    if ((patch.formation || state.off.formation) !== state.off.formation || (patch.play || state.off.play) !== state.off.play) patch.hot = {};
+    // (A play picked while one of your own plays is the call is that play as drawn, the one it's built on too.)
+    if ((patch.formation || state.off.formation) !== state.off.formation || (patch.play || state.off.play) !== state.off.play || (patch.play && mineOf(state.off))) patch.hot = {};
     Object.assign(state.off, patch);
     // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
     // or strong side keeps his call, the way an audible at the line does. The board says so until the snap, the way New

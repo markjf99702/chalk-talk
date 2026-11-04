@@ -2974,6 +2974,10 @@ for (const colorScheme of ['light', 'dark']) {
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off), { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: { H: 'slant' } });
   assert.equal(await p.textContent('#caption'), 'Trips Slant: Smash from Gun Trips, with the H on a slant. New personnel: they\'ve substituted.');
   assert.equal(await p.evaluate(() => document.querySelector('[data-key="Play:my0"]').getAttribute('aria-checked')), 'true');
+  // The play it's built on, picked from the passes, is that play as drawn.
+  await p.getByRole('radio', { name: 'Smash', exact: true }).click();
+  assert.deepEqual([await p.evaluate(() => window.chalkTalk.state.off.hot), await p.getAttribute('[data-key="Play:smash"]', 'aria-checked'), await p.getAttribute('[data-key="Play:my0"]', 'aria-checked')], [{}, 'true', 'false'], 'Smash, picked while Trips Slant was the call');
+  await p.getByRole('radio', { name: /^Trips Slant/ }).click();
   // Snapped, the result card calls it by its name, and the note says it's about the play as drawn.
   await p.evaluate(() => { const { state, board, snap, finish } = window.chalkTalk; snap(); state.t = board.duration(); finish(); });
   assert.match(await p.textContent('#resVs'), /^On 1st & 10, Trips Slant \(Smash, H on a slant\) from Gun Trips against /);
