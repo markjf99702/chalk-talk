@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '9ed9fc42a4d7' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'c7f93221f719' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1186,6 +1186,31 @@ test('motion against a disguise: a safety showing deep who has the man in motion
     assert.ok(Math.min(...ys) > 10, `${JSON.stringify(call)} seed ${seed}: the ${r.players[i].label} came down to ${Math.min(...ys).toFixed(1)} yards to run with him`);
   }
   assert.ok(found >= 3, `only ${found} calls where a safety had him`);
+});
+
+test('a tight end can stay in to block, as a back can, and a wide receiver can\'t', () => {
+  // Kept in, he's in the protection with the linemen and the back, he isn't one of the quarterback's reads, and his card
+  // says he pass-blocks. One split out a few yards (the Y in Gun Trips, both in Gun Ace) sets at the end of the line,
+  // where a tight end on the line stands, rather than out where he lined up. From Singleback both can stay in.
+  const smash = PLAYS.find(p => p.id === 'smash');
+  assert.ok(hotRoutes(smash, { cls: 'te' }).includes('block'), 'a tight end can\'t stay in');
+  assert.ok(!hotRoutes(smash, { cls: 'wr' }).includes('block'), 'a wide receiver can stay in');
+  for (const [formation, hot] of [['trips', { Y: 'block' }], ['single', { U: 'block', Y: 'block' }], ['ace', { U: 'block' }], ['iform', { Y: 'block' }], ['pistol', { Y: 'block' }]]) {
+    const call = { formation, play: 'smash', front: 'nickel', coverage: 'c1', pressure: 'blitz', flip: formation === 'ace', hot }, what = JSON.stringify(call);
+    const S = prepare(call, 3), was = prepare({ ...call, hot: {} }, 3);
+    for (const label of Object.keys(hot)) {
+      const te = S.P.find(p => p.label === label);
+      assert.equal(te.job.kind, 'pro', `${what}: the ${label} isn't blocking`);
+      assert.ok(S.protection.includes(te) && !S.reads.includes(te), `${what}: the ${label} isn't in the protection, or is still read`);
+      assert.match(S.jobText[te.i], /^Pass-blocks/, what);
+      assert.ok(Math.abs(te.set.x) <= 4.6 * 1.05 + 1e-9 && Math.sign(te.set.x) === Math.sign(te.x0), `${what}: the ${label} sets at ${te.set.x.toFixed(1)}, lined up at ${te.x0.toFixed(1)}`);
+    }
+    assert.equal(S.protection.length, was.protection.length + Object.keys(hot).length, `${what}: one more blocker for each`);
+    assert.ok(KINDS.has(simulate(call, 3).result.kind), what);
+  }
+  // A wide receiver given it runs his route as drawn.
+  const call = { formation: 'trips', play: 'smash', front: 'nickel', coverage: 'c0', pressure: 'blitz', flip: false };
+  assert.equal(JSON.stringify(simulate({ ...call, hot: { H: 'block' } }, 9).result), JSON.stringify(simulate(call, 9).result), 'a wide receiver stayed in');
 });
 
 // Where the receiver caught it, in yards past the line (the first frame after the throw with the ball in his hands).

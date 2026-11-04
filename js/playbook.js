@@ -89,9 +89,12 @@ export const ROUTES = {
 };
 
 // Hot routes: what a receiver (a wide receiver or a tight end) or a back can be given instead of his route before the
-// snap, on a pass play (see hotRoutes() in js/sim.js). A back can also stay in to block.
+// snap, on a pass play (see hotRoutes() in js/sim.js). A tight end or a back can also stay in to block, the way an
+// offense gives the quarterback one more blocker against a blitz, for one less receiver; a wide receiver can't.
+const RECEIVER = ['go', 'seam', 'post', 'corner', 'out', 'dig', 'slant', 'hitch', 'curl', 'flat', 'drag'];
 export const HOT = {
-  receiver: ['go', 'seam', 'post', 'corner', 'out', 'dig', 'slant', 'hitch', 'curl', 'flat', 'drag'],
+  receiver: RECEIVER,
+  te: [...RECEIVER, 'block'],
   back: ['swing', 'wheel', 'check', 'block'],
 };
 

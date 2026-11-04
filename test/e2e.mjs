@@ -2824,6 +2824,13 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal(await p.isVisible('#routes'), false, 'a tap on the board left the row up');
   await p.click('#whoRoutesOpen');
   assert.match((await row()).who, /^The Y's route\. He isn't one of the quarterback's reads as it's drawn: give him another route and he's read last\.$/);
+  // A tight end has a receiver's routes, and can stay in to block, as a back can (a wide receiver can't: see the H's).
+  assert.deepEqual((await row()).chips, ['sit as called', 'go', 'seam', 'post', 'corner', 'out', 'dig', 'slant', 'hitch', 'curl', 'flat', 'drag', 'block']);
+  await p.click('#routeChips [data-route="block"]');
+  assert.equal((await row()).who, 'The Y\'s route. In to block, he isn\'t one of the quarterback\'s reads.');
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.off.hot), { Y: 'block', H: 'slant' });
+  assert.equal(await p.textContent('#caption'), 'Hot route: the Y in to block.');
+  assert.equal(await reads(), '1. H (slant), 2. Z (hitch), 3. X (dig), 4. RB (check-down).');
   await p.click('#routeChips [data-route="curl"]');
   assert.equal((await row()).who, 'The Y\'s route. The quarterback reads him last.');
   assert.equal(await reads(), '1. H (slant), 2. Z (hitch), 3. X (dig), 4. RB (check-down), 5. Y (curl).');

@@ -570,10 +570,12 @@ export function cantCall(formation, play) {
 
 // The routes a man can be given before the snap instead of his own (HOT in js/playbook.js), on this play: none on a run,
 // or on the RB Screen, which is built round the back's screen with everyone else clearing out; and none for the back on
-// the Play-Action Shot, whose job is the fake.
+// the Play-Action Shot, whose job is the fake. A tight end can stay in to block, as a back can: the protection picks him
+// up the way it does a back who stays in (see passPro()).
 export function hotRoutes(play, pl) {
   if (play.type !== 'pass' || play.drop === 'screen') return [];
-  if (pl.cls === 'wr' || pl.cls === 'te') return HOT.receiver;
+  if (pl.cls === 'te') return HOT.te;
+  if (pl.cls === 'wr') return HOT.receiver;
   if (pl.cls === 'rb' || pl.cls === 'fb') return play.drop === 'pa' && pl.cls === 'rb' ? [] : HOT.back;
   return [];
 }
@@ -609,8 +611,10 @@ function passPro(S) {
     const extra = Math.abs(o.x) > 2 ? 0.9 : Math.abs(o.x) > 1 ? 0.25 : 0;
     o.set = { x: o.x * 1.15, y: o.y - depth - extra };
   }
-  // (A back straight behind the quarterback, in the Pistol, sets to the side his route goes.)
-  for (const b of S.O) if (b.cls !== 'ol' && b.cls !== 'qb') b.set = { x: b.cls === 'te' ? b.x * 1.05 : b.x * 0.6 + Math.sign(b.x || (b.job.kind === 'route' && b.job.out) || S.s) * 1.5, y: Math.min(b.y, -3.2) };
+  // (A back straight behind the quarterback, in the Pistol, sets to the side his route goes. A tight end kept in sets at
+  // the end of the line, where one on the line stands: one split out a few yards, in Gun Ace or Gun Trips, comes in to
+  // it rather than blocking from out there, where the rushers coming off the edge go by inside him.)
+  for (const b of S.O) if (b.cls !== 'ol' && b.cls !== 'qb') b.set = { x: b.cls === 'te' ? Math.sign(b.x) * Math.min(Math.abs(b.x), 4.6) * 1.05 : b.x * 0.6 + Math.sign(b.x || (b.job.kind === 'route' && b.job.out) || S.s) * 1.5, y: Math.min(b.y, -3.2) };
 }
 
 function assignRun(S) {
