@@ -2795,6 +2795,44 @@ for (const colorScheme of ['light', 'dark']) {
   await c.close();
 }
 
+// Calling the defense, your own plays are rows of the chart too, after his formation's plays, each run from its own
+// formation with its routes and its motion. Tapping one plays a typical snap of it, and its row is marked as this call.
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  const errors = [];
+  p.on('pageerror', e => errors.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  await p.goto(base);
+  const mine = [{ name: 'Doubles Curl', formation: 'doubles', play: 'verts', motion: 'none', hot: { Y: 'curl' } }, { name: 'Jet Slant', formation: 'trips', play: 'smash', motion: 'jet', hot: { H: 'slant' } }];
+  await p.evaluate(plays => localStorage.setItem('chalk-talk.v1', JSON.stringify({ side: 'D', plays })), mine);
+  await p.reload();
+  const his = await p.evaluate(() => window.chalkTalk.state.off.formation);
+  const { PLAYS, FORMATIONS } = await import('../js/playbook.js'), { cantCall } = await import('../js/sim.js');
+  const rows = PLAYS.filter(pl => !cantCall(his, pl.id)).length + 2;
+  assert.deepEqual((await p.$$eval('#bars .bar-row.idle', r => r.map(x => x.getAttribute('aria-label')))).slice(-3), [`${PLAYS.filter(pl => !cantCall(his, pl.id)).at(-1).name}: not run yet`, 'Doubles Curl: not run yet', 'Jet Slant: not run yet'], 'your plays in the defense\'s chart before it runs');
+  assert.equal(await p.locator('#bars .bar-row.idle').count(), rows);
+  const fm = FORMATIONS.find(f => f.id === his).name.replace(/[-]/g, '\\$&');
+  assert.match(await p.textContent('#chartHint'), new RegExp(`^How often each play from ${fm}, and each of your own plays from its own formation, succeeds against your defense on 1st & 10, gaining 4 yards or more\\. `));
+  await p.click('#runChart');
+  await p.waitForFunction(n => document.querySelectorAll('#bars button.bar-row').length === n, rows, { timeout: 120000 });
+  const ran = await p.evaluate(() => window.chalkTalk.chart().rows.map(r => ({ id: r.id, my: !!r.my, name: r.name, formation: r.call.formation, play: r.call.play, motion: r.call.motion, hot: r.call.hot })));
+  assert.deepEqual(ran.filter(r => r.my).map(({ id, name, formation, play, motion, hot }) => ({ id, name, formation, play, motion, hot })), [{ id: 'my0', ...mine[0] }, { id: 'my1', ...mine[1] }], 'your plays, each from its own formation, with its routes and motion');
+  assert.ok(ran.filter(r => !r.my).every(r => r.formation === his && JSON.stringify(r.hot) === '{}'), 'his plays from his formation, as drawn');
+  assert.equal(await p.locator('#bars .bar-row.mine').count(), 0, 'a row marked as his call before the snap');
+  assert.match(await p.getAttribute('#bars button[data-row="my1"]', 'aria-label'), /^Jet Slant: \d+% successful, −?\d+\.\d yards a play, over \d+ snaps\. Watch a typical snap of Jet Slant\.$/);
+  await p.click('#bars button[data-row="my1"]');
+  assert.deepEqual(await p.evaluate(() => { const { state } = window.chalkTalk; return [state.side, state.auto, state.off.formation, state.off.play, state.off.motion, state.off.hot]; }), ['D', false, 'trips', 'smash', 'jet', { H: 'slant' }], 'a typical snap of one of your plays');
+  assert.match(await p.textContent('#matchup'), /^1st & 10 · Gun Trips · H jet · Jet Slant  vs  /);
+  assert.deepEqual(await p.$$eval('#bars .bar-row.mine', b => b.map(x => x.querySelector('.bar-name').textContent)), ['Jet Slantthis call'], 'its row isn\'t marked');
+  await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; state.t = board.duration(); finish(); });
+  assert.match(await p.textContent('#resVs'), / A typical snap from the chart: of its \d+ snaps of Jet Slant with the strength on this side, the middle one by yards gained\.$/);
+  assert.match(await p.textContent('#chartHint'), /^How often each play from .+, and each of your own plays from its own formation, succeeds against your defense on 1st & 10, gaining 4 yards or more\. /, 'the chart\'s words after a typical snap of one of yours');
+  assert.doesNotMatch(await p.textContent('#chartHint'), /as you changed it/);
+  assert.deepEqual(errors, [], 'problems with your plays in the defense\'s chart');
+  await c.close();
+}
+
 // Hot routes: on your own pass play, a receiver's or a back's card has "Change his route", which opens a row under the
 // board with each route he can be given (his route as called first) while the card makes way. One picked redraws his
 // line and the play's name, and he keeps his place in the quarterback's reads; a man who had none is read last, and a

@@ -125,6 +125,8 @@ function mineOf(o) {
   const hot = JSON.stringify(okHot(o.hot, o.formation, o.play));
   return myPlays.find(m => m.formation === o.formation && m.play === o.play && m.motion === motionOf(o) && JSON.stringify(m.hot) === hot) || null;
 }
+// Whether two calls are the same play: formation, play, routes and motion (the strong side either way).
+const sameCall = (a, b) => a.formation === b.formation && a.play === b.play && motionOf(a) === motionOf(b) && JSON.stringify(okHot(a.hot, a.formation, a.play)) === JSON.stringify(okHot(b.hot, b.formation, b.play));
 // A name to start from: the play and its changed routes, "Smash, H slant, Y curl", as many of them as fit whole.
 function nameFor(o) {
   let s = byId(PLAYS, o.play).name;
@@ -2090,12 +2092,12 @@ function clearChart() {
   $('runChart').removeAttribute('aria-disabled');
   drawIdle();
 }
-// Before a run, the rows it will fill: every coverage (or every play his formation can run, calling the defense), each
-// with an empty track.
+// Before a run, the rows it will fill: every coverage (or, calling the defense, every play his formation can run and
+// then each of your own plays), each with an empty track.
 function drawIdle() {
   const host = $('bars');
   host.innerHTML = '<div class="bar-head" aria-hidden="true">success · avg yards</div>';
-  for (const r of state.side === 'O' ? COVERAGES : PLAYS.filter(p => !cantCall(state.off.formation, p.id))) {
+  for (const r of state.side === 'O' ? COVERAGES : [...PLAYS.filter(p => !cantCall(state.off.formation, p.id)), ...myPlays]) {
     const row = document.createElement('div');
     row.className = 'bar-row idle';
     row.setAttribute('role', 'listitem');
@@ -2112,18 +2114,20 @@ function drawIdle() {
 // yards a play while its typical snap is an incompletion), so the average is the small number beside each bar.
 function chartHint() {
   // the formation, and the motion when it's yours, or his and out (before then his chart's plays have none)
-  const off = { ...state.off, motion: chart ? chart.motion : state.side === 'O' || !hidden() ? state.off.motion : 'none' };
+  const off = { ...state.off, formation: chart ? chart.formation : state.off.formation, motion: chart ? chart.motion : state.side === 'O' || !hidden() ? state.off.motion : 'none' };
   const fm = `${byId(FORMATIONS, off.formation).name}${moving(off) ? ` with ${motionWords(off)}` : ''}`;
   // (calling both sides, with routes changed: those are for that one play, and the rest are run as drawn; see runChart())
   const named = mineOf(state.off), changed = hotList(state.off).length ? `: ${named ? `${named.name}, ` : ''}${byId(PLAYS, state.off.play).name} as you changed it (${hotWords(state.off)}), the rest as drawn` : '';
+  // calling the defense, your own plays are rows too, each from its own formation, after his (one in the call is its own row)
+  const yours = chart ? chart.rows.filter(r => r.my).length : myPlays.length;
   // what a success is on this down (see success())
   const sit = chart ? chart.sit : situation(), n = needed(sit);
   const goal = `on ${sit.name}, ${sit.down > 2 ? `making the first down (${sit.togo} yard${sit.togo === 1 ? '' : 's'})` : `gaining ${n} yards or more`}`;
-  if (state.side === 'D') return `How often each play from ${fm} succeeds against your defense ${goal}${changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
+  if (state.side === 'D') return `How often each play from ${fm}${yours ? `, and ${yours === 1 ? 'your own play' : 'each of your own plays'} from its own formation,` : ''} succeeds against your defense ${goal}${named ? '' : changed}. Beside each bar, the average yards a play you allow.${tapRow()}${again()}`;
   const pressure = chart ? chart.pressure : hidden() ? 'four' : state.def.pressure, mask = chart ? chart.disguise : !hidden() && state.def.disguise;
   const who = chart ? chart.blitzer : chartBlitzer(state.def), bw = { M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' }[who] || 'blitz';
-  const yours = named ? `${named.name} (your ${byId(PLAYS, state.off.play).name}: ${hotWords(state.off)})` : hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
-  return `How often ${yours} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? `with a ${bw}${who === 'SS' ? ', the Mike\'s in Cover 2 and Cover 4, where both safeties play deep' : ''}` : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
+  const which = named ? `${named.name} (your ${byId(PLAYS, state.off.play).name}: ${hotWords(state.off)})` : hotList(state.off).length ? `your version of ${byId(PLAYS, state.off.play).name} (${hotWords(state.off)})` : 'your play';
+  return `How often ${which} succeeds ${goal}, from ${fm} against a ${byId(FRONTS, state.def.front).name} front ${pressure === 'blitz' ? `with a ${bw}${who === 'SS' ? ', the Mike\'s in Cover 2 and Cover 4, where both safeties play deep' : ''}` : 'rushing four (Cover 0 always blitzes)'}${mask ? ', with Cover 1 and Cover 3 disguised as two deep' : ''}.`
     + ` Beside each bar, the average yards a play.${hidden() ? ` Their real call stays hidden until ${asking() ? 'you name their coverage' : 'the snap'}.` : ''}${tapRow()}${again()}`;
 }
 // Once a row has its numbers, it can be tapped.
@@ -2136,7 +2140,7 @@ function again() {
   if (redo.sit) return ` The situation changed. Run it again for ${mine} on ${situation().name}.`;
   return ` ${redo.yours ? 'You changed the call' : 'They changed their call'}. Run it again for ${mine}.`;
 }
-function syncChart() { $('chartHint').textContent = chartHint(); if (chart) drawBars(); }
+function syncChart() { $('chartHint').textContent = chartHint(); if (chart) drawBars(); else drawIdle(); } // (a play kept or deleted: the defense's rows)
 
 // A snap takes a few milliseconds on a laptop and up to about 90 on a slow phone, so the chart runs about 10 ms' worth
 // at a time and lets the page answer taps and draw in between. While a play is running it waits, so the play gets
@@ -2155,11 +2159,16 @@ async function runChart() {
   const base = call();
   if (state.side === 'O' && hidden()) Object.assign(base, { pressure: 'four', disguise: false });
   if (state.side === 'D' && hidden()) base.motion = 'none'; // his motion is part of his hidden play
+  // Calling the defense, after his formation's plays come your own, each from its own formation with its routes and
+  // its motion. (Routes changed on one play aren't the others'; from Empty, no runs; and one of yours in the call is
+  // its own row, so the playbook's runs as drawn.)
+  const named = state.side === 'D' && mineOf(base);
   const rows = (state.side === 'O'
     ? COVERAGES.map(c => ({ id: c.id, name: c.name, call: { ...base, coverage: c.id } }))
-    : PLAYS.filter(p => !cantCall(base.formation, p.id)).map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play ? base.hot : {} } }))).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] })); // (routes changed on one play aren't the others'; from Empty, no runs)
+    : [...PLAYS.filter(p => !cantCall(base.formation, p.id)).map(p => ({ id: p.id, name: p.name, call: { ...base, play: p.id, hot: p.id === base.play && !named ? base.hot : {} } })),
+      ...myPlays.map((m, k) => ({ id: `my${k}`, name: m.name, my: true, call: { ...base, formation: m.formation, play: m.play, motion: m.motion, hot: { ...m.hot } } }))]).map(r => ({ ...r, n: 0, yds: 0, ok: 0, snaps: [] }));
   const sit = situation();
-  chart = { rows, pressure: base.pressure, blitzer: base.pressure === 'blitz' ? chartBlitzer(base) : 'M', disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
+  chart = { rows, formation: base.formation, pressure: base.pressure, blitzer: base.pressure === 'blitz' ? chartBlitzer(base) : 'M', disguise: !!base.disguise, motion: moving(base) ? base.motion : 'none', side: state.side, sit };
   $('chartHint').textContent = chartHint();
   drawBars();
   let slice = performance.now();
@@ -2196,11 +2205,14 @@ function drawBars() {
   const was = new Map([...host.querySelectorAll('.bar[data-id]')].map(b => [b.dataset.id, b.style.width]));
   const focused = host.contains(document.activeElement) ? document.activeElement.dataset.row : null;
   host.textContent = '';
-  const mineId = hidden() ? null : state.side === 'O' ? state.def.coverage : state.off.play;
+  // (calling the defense: the row that ran the play in the call, with its routes: his, from the formation the chart ran,
+  // whatever his motion, or one of yours)
+  const isMine = r => !hidden() && (state.side === 'O' ? r.id === state.def.coverage : r.my ? sameCall(r.call, state.off)
+    : r.id === state.off.play && state.off.formation === chart.formation && JSON.stringify(r.call.hot || {}) === JSON.stringify(state.off.hot || {}));
   const tag = state.auto ? 'their call' : 'this call';
   host.insertAdjacentHTML('beforeend', '<div class="bar-head" aria-hidden="true">success · avg yards</div>');
   for (const r of chart.rows) {
-    const mine = r.id === mineId;
+    const mine = isMine(r);
     const name = `<span class="bar-name"><span>${esc(r.name)}</span>${mine ? `<em>${tag}</em>` : ''}</span>`;
     const row = document.createElement('div');
     row.setAttribute('role', 'listitem');
