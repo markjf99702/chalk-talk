@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '6a6f5c73aeed' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'f831ea0f50a3' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -217,16 +217,31 @@ test('Empty: the back splits out as a fifth receiver, only the five linemen bloc
   assert.ok(hot / n > 0.5, `${hot} hot throws in ${n} dropbacks from Empty against Cover 0`);
 });
 
-test('Stick: the outside man clears out deep, the next one sits at five yards, and the flat goes under him', () => {
+test('Stick: the outside man clears out deep, one man sits at five yards, and the flat goes outside him', () => {
   const routes = (formation, flip) => { const S = prepare({ formation, play: 'stick', front: 'nickel', coverage: 'c3', pressure: 'four', flip }, 2); return [S, Object.fromEntries(S.O.filter(p => p.job.kind === 'route').map(p => [p.key || p.label, p.job.route]))]; };
   for (const flip of [false, true]) {
     const [T, trips] = routes('trips', flip), [, doubles] = routes('doubles', flip);
     assert.equal(T.play.id, 'stick');
-    assert.deepEqual([trips.S1, trips.S2, trips.S3], ['go', 'stick', 'flat'], 'from three receivers: go, stick, flat');
+    assert.deepEqual([trips.S1, trips.S2, trips.S3], ['go', 'flat', 'stick'], 'from three receivers: go, then the slot to the flat, and the inside man on the stick');
     assert.deepEqual([doubles.S1, doubles.S2, doubles.RB], ['go', 'stick', 'bflat'], 'from two: the back runs the flat');
     assert.equal(T.reads[0].job.route, 'stick', 'the stick is his first read');
-    const st = T.keys.S2, end = st.path.at(-1);
+    assert.equal(T.reads[1].job.route, 'flat', 'and the flat his second');
+    const st = T.reads[0], end = st.path.at(-1);
     assert.ok(end.y - st.y0 > 4 && end.y - st.y0 < 7 && ROUTES.stick.settle, `the stick sits down ${(end.y - st.y0).toFixed(1)} yards up`);
+    // From three receivers the flat starts outside the stick and runs away from it, toward the sideline.
+    const fl = T.reads[1];
+    assert.ok(Math.abs(fl.x0) > Math.abs(st.x0) && Math.abs(fl.path.at(-1).x) > Math.abs(end.x) + 10, `the flat runs from ${fl.x0.toFixed(1)} to ${fl.path.at(-1).x.toFixed(1)}, the stick sits at ${end.x.toFixed(1)}`);
+  }
+  // From Gun Trips, the formation the board starts in, against Cover 3 and Cover 4: the defender sitting on the stick
+  // can't get to the flat as well. (When the inside man ran the flat, it went under him, a yard or two away: a third of
+  // the throws were caught, for under 2 yards a play, and one in twelve was intercepted.)
+  for (const coverage of ['c3', 'c4']) {
+    let n = 0, y = 0, comp = 0, att = 0, int = 0;
+    for (const front of FRONTS) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 6; k++) {
+      const r = simulate({ formation: 'trips', play: 'stick', front: front.id, coverage, pressure, flip: k % 2 === 1 }, 4100 + n++).result;
+      y += r.yards; if (r.kind !== 'sack') att++; if (r.kind === 'catch') comp++; if (r.kind === 'int') int++;
+    }
+    assert.ok(comp / att > 0.65 && y / n > 4.5 && int / att < 0.03, `Gun Trips against ${coverage}: ${(100 * comp / att).toFixed(0)}% complete, ${(y / n).toFixed(1)} yards a dropback, ${int} intercepted in ${att}`);
   }
   // Over many snaps: short, sure throws, the stick or a flat route nearly every time, against zone and man alike.
   for (const coverage of ['c1', 'c3', 'c4']) {
@@ -1302,9 +1317,11 @@ test('the drills\' notes say what the board shows', () => {
   // runs, 50 snaps each, against the two calls its note names. Run as this test runs them from three start seeds (11,
   // this one, 100000 and 7777777), with Counter (which reshuffles the snaps every later play draws, but changes no
   // pass): against Cover 2, Four Verticals 22.0-25.3 yards a play and Play-Action Shot 15.3-17.5, the next 14.9; Stick
-  // 78-84% and Slant-Flat 75-79% succeed, the next 77% (Flood). Against Cover 3, Four Verticals 11.2-13.7 yards and
+  // 77-84% and Slant-Flat 75-79% succeed, the next 77% (Flood). Against Cover 3, Four Verticals 11.2-13.7 yards and
   // Play-Action Shot 10.0-10.4, the next 9.0 (Flood 8.7-10.0 since the Cover 3 curl-flat defender expands to a back in
-  // the flat); the Draw 69-73% and Slant-Flat 68-71%, the next 71% (Smash, from one seed). Against Cover 0, the RB
+  // the flat); the Draw 69-73% and Slant-Flat 68-71%, the next 71% (Smash, from one seed), and since Stick's flat goes
+  // outside the stick from three receivers on a side, Stick 75-78% ahead of them, with the Draw, Slant-Flat and Smash
+  // 65-73%, the next 61% (Counter). Against Cover 0, the RB
   // Screen 63-71%, then Smash, Slant-Flat and Play-Action Shot 45-54%, the next 46%, and the Draw 1-5% and Power 9-18%,
   // the next 18-22%. Against I-Form's five runs, the 4-3 Over in Cover 1 with a blitz stops 68-73% for 2.4-2.7 yards a
   // run, and in Cover 0 73-80% for 5.2-8.0. (Before Counter, 80-82% and 81-84%, from four start seeds: Counter gets
@@ -1329,7 +1346,9 @@ test('the drills\' notes say what the board shows', () => {
   for (const id of ['slants', 'stick']) assert.ok(c2[id].rate > 0.72 && c2[id].rate < 0.88, `"about four times in five": ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
   assert.deepEqual(top(c3, 'avg', 2), ['pa', 'verts'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
-  assert.deepEqual(top(c3, 'rate', 2), ['draw', 'slants'], `Cover 3, success: ${say(c3, 'rate')}`);
+  assert.deepEqual(top(c3, 'rate', 1), ['stick'], `Cover 3, success: ${say(c3, 'rate')}`);
+  assert.deepEqual(top(c3, 'rate', 4), ['draw', 'slants', 'smash', 'stick'], `Cover 3, success: ${say(c3, 'rate')}`);
+  for (const id of ['draw', 'slants', 'smash']) assert.ok(c3[id].rate > 0.62 && c3[id].rate < 0.78, `"about seven times in ten": ${say(c3, 'rate')}`);
   const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
   assert.deepEqual(top(c0, 'rate', 1), ['screen'], `Cover 0, success: ${say(c0, 'rate')}`);
   for (const id of ['smash', 'slants', 'pa']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.62, `"about half the time each": ${say(c0, 'rate')}`);
@@ -1365,7 +1384,11 @@ test('over many snaps the numbers look like football', () => {
   // a play reshuffles which snaps the recipe draws, so adding Counter, a run, which changes no pass, took this seed to
   // 66.9%. About two in three is 66.7%. (Mark's call.) With Counter the twelve seeds give 4.04-5.19 yards a carry,
   // 64.3-70.6% complete (mean 67.5%), sacks on 2.5-5.4% of dropbacks and interceptions on 1.4-2.4% of throws. This one
-  // gives 66.9%, 1.4% and 4.82.
+  // gave 66.9%, 1.4% and 4.82. With the screen thrown before a rusher gets there and the Cover 3 curl-flat defender
+  // expanding to the back in Flood's flat, 64.1-70.0% complete (mean 67.4%), sacks on 1.9-4.0%; with Stick's flat
+  // outside the stick from three receivers on a side, which gets Stick from Gun Trips caught about five times in six
+  // rather than one in three, 64.7-71.2% (mean 68.1%, six seeds above 68%) and interceptions on 1.0-2.3%. This one
+  // gives 67.7%, 1.0% (13 in 1,248) and 4.82.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };

@@ -145,9 +145,11 @@ export const PLAYS = [
     blurb: 'Quick game: the outside receivers run slants, the inside ones run to the flat, and the ball is out in about a second. It beats the blitz.',
   },
   {
-    id: 'stick', name: 'Stick', type: 'pass', drop: 'quick', reads: ['S2', 'S3', 'FB', 'RB', 'W2', 'W1'],
-    routes: r => ({ S1: 'go', S2: 'stick', S3: 'flat', W1: r.W2 ? 'go' : 'slant', W2: 'stick', RB: r.S3 || r.FB ? 'check' : 'bflat', FB: 'bflat', side: 'S' }),
-    blurb: 'Quick game: the outside receiver runs off deep, the next one in runs a stick route, five yards up and sitting down facing the quarterback, and the man inside him runs to the flat under it. The defender between them can\'t take both: if he widens for the flat, the stick is open; if he sits on the stick, the flat is.',
+    // With three receivers on a side the inside one runs the stick and the slot runs to the flat outside him, so the
+    // flat goes away from the man sitting on the stick, not under him; with two, the back runs the flat.
+    id: 'stick', name: 'Stick', type: 'pass', drop: 'quick', reads: ['S3', 'S2', 'FB', 'RB', 'W2', 'W1'],
+    routes: r => ({ S1: 'go', S2: r.S3 ? 'flat' : 'stick', S3: 'stick', W1: r.W2 ? 'go' : 'slant', W2: 'stick', RB: r.S3 || r.FB ? 'check' : 'bflat', FB: 'bflat', side: 'S' }),
+    blurb: 'Quick game: the outside receiver runs off deep, and under him go a stick route, five yards up and sitting down facing the quarterback, and a flat route outside it. With three receivers on a side the inside one runs the stick and the slot runs to the flat; with two, the inside one runs the stick and the back runs to the flat. The defender between them can\'t take both: if he widens for the flat, the stick is open; if he sits on the stick, the flat is.',
   },
   {
     id: 'pa', name: 'Play-Action Shot', type: 'pass', drop: 'pa', reads: ['S1', 'W1', 'S2', 'RB'],
@@ -364,7 +366,7 @@ export const DRILLS = [
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
     brief: 'They play Cover 3 and rush four, every snap.',
-    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 3 here: four receivers going deep against three deep defenders, and the deep crosser running in behind linebackers who stepped up for the fake. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, the Draw and Slant-Flat get there most often.',
+    note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 3 here: four receivers going deep against three deep defenders, and the deep crosser running in behind linebackers who stepped up for the fake. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, Stick gets there most often: the defender between the stick and the flat can\'t take both. Next, about seven times in ten, come the Draw, Slant-Flat and Smash.',
   },
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
@@ -426,7 +428,7 @@ export const NOTES = {
     c0: 'Against an all-out blitz the ball comes out hot, most often to the back in the flat, but the man covering him is waiting there and tackles him short. Stick\'s throws are all short, and Cover 0 has a man on each of them.',
     c1: 'In man coverage the stick turns in at five yards and sits down, with the man chasing him still behind him: an easy completion most of the time, though a short one, with the free safety deep.',
     c2: 'The Cover 2 corner sits in the flat, so the flat route is covered; the stick settles in front of the linebackers and behind the corner, and that\'s where the ball goes most often.',
-    c3: 'The curl-flat defender has to choose: when he sits on the stick, the flat route under it is open, and that\'s where the ball goes most of the time. Cover 3\'s corners bail deep, so there\'s room underneath, for short gains.',
+    c3: 'The curl-flat defender has to choose: when he sits on the stick, the flat route outside him is open, and that\'s where the ball goes most of the time. Cover 3\'s corners bail deep, so there\'s room underneath, for short gains.',
     c4: 'Quarters keeps four deep and three underneath, so the stick and the flat are both open, but short: the safeties come down fast once the ball is caught.',
   },
   screen: {
