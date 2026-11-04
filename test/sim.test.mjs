@@ -338,7 +338,8 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
   // 36-43% gaining 4, 24-27% losing yards. With the back side's end blocked rather than the outside linebacker beyond
   // him: 3.2-3.8, 44-51% and 10-14%; against the 3-4, 7-10% losing yards, from 49-53%. With Singleback's pulling
   // tackle leading through the hole rather than chasing the Mike: 3.4-4.0, 48-56% and 7-10%, and from Singleback 44-50%
-  // gaining 4, from 17-25%.)
+  // gaining 4, from 17-25%. From 424242 and 55555 as well, 7-10% losing yards: held under 15%, so the note's "one time
+  // in ten" can't drift to one in five unseen.)
   let n = 0, y = 0, ok = 0, lost = 0, n34 = 0, lost34 = 0, n1 = 0, ok1 = 0;
   for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'counter'))) for (const front of ['over', 'nickel', '34']) for (const coverage of ['c1', 'c2', 'c3']) for (let k = 0; k < 4; k++) {
     const res = simulate({ formation: fm.id, play: 'counter', front, coverage, pressure: k % 2 ? 'four' : 'blitz', flip: k % 2 === 1 }, 1300 + n++).result;
@@ -346,7 +347,7 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     if (front === '34') { n34++; if (res.yards < 0) lost34++; }
     if (fm.id === 'single') { n1++; if (Math.round(res.yards) >= 4) ok1++; }
   }
-  assert.ok(y / n > 2.5 && y / n < 5 && ok / n > 0.35 && ok / n < 0.6 && lost / n > 0.06 && lost / n < 0.2, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
+  assert.ok(y / n > 2.5 && y / n < 5 && ok / n > 0.35 && ok / n < 0.6 && lost / n > 0.06 && lost / n < 0.15, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
   assert.ok(lost34 / n34 < 0.2, `against the 3-4 Counter loses yards ${Math.round(100 * lost34 / n34)}% of the time`);
   assert.ok(ok1 / n1 > 0.33, `from Singleback Counter gains 4 yards ${Math.round(100 * ok1 / n1)}% of the time`);
 });
@@ -1430,7 +1431,9 @@ test('a back who breaks a tackle past the line loses a step, so getting past the
   // no faster than he is, one who got past the lone deep safety in Cover 1 or Cover 3 nearly always went a long way.
   // Inside Zone, Outside Zone, Power and Counter from every formation that has a back, every front, both pressures:
   // from this test's seeds a run that got 10 yards went on 17.1 more on average against Cover 1 and Cover 3, now 7.6.
-  // (NFL 2023 designed runs: 6.8; nflverse play-by-play.)
+  // (NFL 2023 designed runs: 6.8; nflverse play-by-play.) Since Counter's linebackers stop stepping with the fake at the
+  // handoff from the shotgun, 8.8 here, and 9.6-10.6 from start seeds 1, 100000 and 7777777 (7.7-9.2 before): Counter
+  // from the shotgun against Cover 1 cuts back behind linebackers who've come downhill, and goes a long way more often.
   let seed = 4400;
   const long = [];
   for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (const coverage of ['c1', 'c3']) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 8; k++) {
