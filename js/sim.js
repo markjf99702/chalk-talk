@@ -344,12 +344,13 @@ function buildDefense(S) {
 // one in the shotgun), across, and up to his spot on the other side. Across, he runs over and sets, and the snap comes
 // half a second later; jet, he goes at full speed and the ball is snapped as he gets to the middle, still running: he
 // carries on across behind the line (his lead, below) before he turns up into his route. In man coverage the man who
-// had him runs with him, a step behind and at his own depth (between the line and the linebackers as he crosses the
-// formation); in zone they slide to where they line up against the new formation.
-// A safety lined up deep who has him runs with him over the top, at his own depth.
+// had him runs with him, a step behind: he drops back as he goes, crosses the formation 6 yards deep, behind the
+// linebackers rather than over the top of the linemen and through them, and comes back up to his own depth on him as
+// he gets to his spot (with jet, he's still crossing at the snap); in zone they slide to where they line up against
+// the new formation. A safety lined up deep who has him runs with him over the top, at his own depth.
 // The teams have already lined up for the snap (see prepare()): this works out the frames before it and, for jet,
 // where everyone is at the snap, still moving. S.from is the same call lined up before the motion.
-const MO = { across: 8, settle: 0.3, set: 0.5, lag: 0.25, react: 0.35, cross: -2.6 };
+const MO = { across: 8, settle: 0.3, set: 0.5, lag: 0.25, react: 0.35, cross: -2.6, behind: 6 };
 function presnap(S, kind) {
   const from = S.from, mover = S.O.find(p => p.label === S.fm.motion.who), n = S.P.length;
   const start = { x: from.P[mover.i].x, y: from.P[mover.i].y }, end = { x: mover.x, y: mover.y };
@@ -366,6 +367,9 @@ function presnap(S, kind) {
   const len = [0];
   for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + dist(pts[i], pts[i - 1]));
   const L = len.at(-1);
+  // How far along his path he gets to the end of the line on his side (in), and leaves it on the other (out).
+  const e0 = Math.abs(clear(s0)) + 1e-6, e1 = Math.abs(clear(s1)) + 1e-6;
+  const dIn = len[Math.max(0, pts.findIndex(q => q.x * s0 <= e0))], dOut = len[pts.findLastIndex(q => q.x * s1 <= e1)];
   const along = d => { // the point d yards along the path, and the way it runs there
     d = clamp(d, 0, L);
     let i = 1; while (i < pts.length - 1 && len[i] < d) i++;
@@ -395,12 +399,16 @@ function presnap(S, kind) {
   const tRun = jet ? timeTo(snapAt) : timeTo(L - 1e-6);
   const before = Math.round((MO.settle + tRun + (jet ? 0 : MO.set)) / DT); // frames before the snap
   const t0 = -before * DT, go = t0 + MO.settle, setAt = go + tRun;
+  const smooth = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
   const done = go + (jet ? timeTo(L - 1e-6) : tRun); // when the defense has finished sliding (with jet, after the snap)
+  // His man in man coverage drops back to 6 yards deep as he gets to the line (taking at least 0.6 s over it), crosses
+  // there, and comes back up as he leaves it on the other side, over the last 0.8 s at least, ending as he sets.
+  const tEnd = done - go, tA = Math.max(timeTo(dIn), 0.6), tB = Math.min(timeTo(dOut), tEnd - 0.8);
+  const deep = tm => (tm <= 0 ? 0 : Math.min(smooth(tm / tA), tm > tB ? smooth((tEnd - tm) / (tEnd - tB)) : 1));
   // His defender, in man coverage: the man who has him at the snap.
   const man = S.D.find(d => d.job.kind === 'man' && d.job.r === mover) || null;
   const moverAt = t => along(run(t - go));
   const A = S.D.map((d, k) => ({ x: from.D[k].x, y: from.D[k].y })), B = S.D.map(d => ({ x: d.x, y: d.y }));
-  const smooth = u => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
   const at = t => { // where everyone is t seconds from the snap (t <= 0)
     const xy = new Float32Array(n * 2);
     for (const p of S.O) { const q = p === mover ? moverAt(t) : p; xy[2 * p.i] = q.x; xy[2 * p.i + 1] = q.y; }
@@ -415,8 +423,8 @@ function presnap(S, kind) {
         // him before the motion to how he will at the snap, as the man in motion gets there
         const w = smooth(run(t - MO.lag - go) / L), m = moverAt(t - MO.lag);
         x = m.x + (A[k].x - start.x) * (1 - w) + (B[k].x - end.x) * w;
-        const base = A[k].y + (B[k].y - A[k].y) * w, inside = base < 5 ? smooth((7 - Math.abs(x)) / 2) : 0; // (a deep man stays deep)
-        y = base + (clamp(base, 2.3, 3) - base) * inside;
+        const base = A[k].y + (B[k].y - A[k].y) * w;
+        y = base + (Math.max(base, MO.behind) - base) * deep(t - MO.lag - go); // (a deep man stays deep)
       }
       xy[2 * d.i] = x; xy[2 * d.i + 1] = y;
     });

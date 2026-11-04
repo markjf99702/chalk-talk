@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '885db5c1b992' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '9ed9fc42a4d7' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1070,8 +1070,16 @@ test('motion: he runs across and is counted on his new side; in man coverage his
       assert.ok(Math.sign(at(snap, had.i).x) === Math.sign(fm.motion.to * f) || Math.abs(at(snap, had.i).x) < 6, `${what}: his man ran with him`);
       assert.ok(Math.hypot(at(snap, had.i).x - at(r.frames[0], had.i).x) > 4, `${what}: his man ran with him`);
       assert.match(line.text, /runs with him: man coverage\.$/, what);
-      // He crosses at his own depth, or between the line and the linebackers: never down on the line.
-      for (const fr of r.frames.filter(x => x.t <= 0)) assert.ok(at(fr, had.i).y > 1.5, `${what}: his man is down on the line at ${fr.t}`);
+      // He's never down on the line, and he crosses the formation behind the linebackers (who line up 4.2 to 4.8 yards
+      // deep): 6 yards deep, or at his own depth if that's deeper, and still 5 1/2 between the tackles as he comes back
+      // up on the far side, not over the top of the linemen and through the linebackers. Across, he's set on him at the
+      // snap.
+      for (const fr of r.frames.filter(x => x.t <= 0)) {
+        const y = at(fr, had.i).y;
+        assert.ok(y > 1.5, `${what}: his man is down on the line at ${fr.t}`);
+        if (Math.abs(at(fr, had.i).x) < 3) assert.ok(y >= Math.max(5.5, Math.min(was.P[had.i].y, S.P[had.i].y) - 0.1), `${what}: his man crosses ${y.toFixed(1)} yards deep at ${fr.t}`);
+      }
+      if (motion === 'across') assert.ok(Math.hypot(at(snap, had.i).x - at(before, had.i).x, at(snap, had.i).y - at(before, had.i).y) < 1e-3, `${what}: his man isn't set on him at the snap`);
     } else {
       assert.equal(r.motion.man, -1, what);
       for (const d of S.D) assert.ok(at(r.frames[0], d.i).x * at(snap, d.i).x > -2, `${what}: the ${d.label} crossed the field after him in a zone`);
