@@ -728,8 +728,10 @@ function assignRun(S) {
   }
   const kick = blockers.find(b => b.job.scheme === 'kick');
   if (kick) kick.job.target = emol || null;
-  // Counter's filler: the last man on the line on the back side, the end the pullers left.
-  if (filler) filler.job.target = box.filter(d => d.y < 2 && d.x * p < -2.6 && d.cls !== 's' && !blockers.some(b => b !== filler && b.job.target === d)).sort((a, b) => a.x * p - b.x * p)[0] || null;
+  // Counter's filler: the end the pullers left, the man on the line on the back side nearest the play. Not one wider out,
+  // farther from it: against the 3-4 the outside linebacker stands up outside the end there, and with the filler on
+  // him the end walked into the backfield untouched: Counter lost yards against it nearly half the time.
+  if (filler) filler.job.target = box.filter(d => d.y < 2 && d.x * p < -2.6 && d.cls !== 's' && !blockers.some(b => b !== filler && b.job.target === d)).sort((a, b) => b.x * p - a.x * p)[0] || null;
   const blocked = new Set(blockers.map(b => b.job.target).filter(Boolean));
   S.unblocked = box.filter(d => !blocked.has(d));
   if (S.FB && play.scheme !== 'power') S.FB.job.lead = true;

@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '1a81e3f00160' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'b8a0e108782b' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -285,6 +285,13 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     assert.equal(job(single, 'U').scheme, 'fill', 'and the back-side tight end takes the end they leave');
     assert.equal(job(single, 'U').target?.label, 'DE');
     for (const S of [iform, trips]) assert.deepEqual([job(S, bt).scheme, job(S, bt).target?.label], ['fill', 'DE'], `${S.fm.id}: the tackle stays home on the end`);
+    // Against the 3-4 the outside linebacker stands up outside that end. The man left on the back side takes the end
+    // nearest him, and leaves the outside linebacker, farthest from the play.
+    for (const fm of ['iform', 'trips', 'doubles', 'pistol', 'single']) {
+      const T = prepare({ ...call(fm), front: '34' }, 3), who = fm === 'single' ? 'U' : bt;
+      assert.deepEqual([job(T, who).scheme, job(T, who).target?.label], ['fill', 'DE'], `${fm} against the 3-4: the ${who} blocks the end`);
+      assert.match(T.jobText[T.O.find(o => o.label === who).i], /the weak-side end, the (end the pulling guard|man the pullers) leaves?\./, `${fm} against the 3-4: the ${who}'s card`);
+    }
     assert.equal(job(iform, 'FB').scheme, 'lead', 'from I-Form the fullback leads through the hole');
     // From Gun Ace the tight end a step off the line on the back side blocks that end, so the tackle staying home has
     // nobody of his own, and his card doesn't say he has the end.
@@ -310,18 +317,21 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     assert.equal(sam?.label, 'S', 'the Sam bumps');
     assert.ok((xy[2 * sam.i] - sam.x0) * p > -0.2, `the Sam in the bump holds his ground: ${(xy[2 * sam.i] - sam.x0).toFixed(2)} yards`);
   }
-  // Over many snaps: about 3 yards a carry, a bit more than a third of them gaining 4, and about one in four losing
-  // yards (the coach's note says one in five). (Built before the shotgun read and the run-down from behind, it gave 3.1
-  // yards a carry here, 29% gaining 4 and 25% losing yards; since then, 3.6, 51% and 20%: from the shotgun, where the
-  // defense waited to read the handoff as well as stepping with the fake, it gained 4 yards 44-81% of the time, from
-  // 11-39%. With their step ending at the handoff there, from this seed and 1, 100000 and 7777777: 2.4-3.2 yards a
-  // carry, 36-43% gaining 4, 24-27% losing yards.)
-  let n = 0, y = 0, ok = 0, lost = 0;
+  // Over many snaps: about 3.5 yards a carry, a bit less than half of them gaining 4, and about one in eight losing
+  // yards (the coach's note says so). (Built before the shotgun read and the run-down from behind, it gave 3.1 yards a
+  // carry here, 29% gaining 4 and 25% losing yards; since then, 3.6, 51% and 20%: from the shotgun, where the defense
+  // waited to read the handoff as well as stepping with the fake, it gained 4 yards 44-81% of the time, from 11-39%.
+  // With their step ending at the handoff there, from this seed and 1, 100000 and 7777777: 2.4-3.2 yards a carry,
+  // 36-43% gaining 4, 24-27% losing yards. With the back side's end blocked rather than the outside linebacker beyond
+  // him: 3.2-3.8, 44-51% and 10-14%; against the 3-4, 7-10% losing yards, from 49-53%.)
+  let n = 0, y = 0, ok = 0, lost = 0, n34 = 0, lost34 = 0;
   for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'counter'))) for (const front of ['over', 'nickel', '34']) for (const coverage of ['c1', 'c2', 'c3']) for (let k = 0; k < 4; k++) {
     const res = simulate({ formation: fm.id, play: 'counter', front, coverage, pressure: k % 2 ? 'four' : 'blitz', flip: k % 2 === 1 }, 1300 + n++).result;
     y += res.yards; if (Math.round(res.yards) >= 4) ok++; if (res.yards < 0) lost++;
+    if (front === '34') { n34++; if (res.yards < 0) lost34++; }
   }
-  assert.ok(y / n > 2 && y / n < 5 && ok / n > 0.3 && ok / n < 0.5 && lost / n > 0.15 && lost / n < 0.32, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
+  assert.ok(y / n > 2.5 && y / n < 5 && ok / n > 0.35 && ok / n < 0.6 && lost / n > 0.06 && lost / n < 0.2, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
+  assert.ok(lost34 / n34 < 0.2, `against the 3-4 Counter loses yards ${Math.round(100 * lost34 / n34)}% of the time`);
 });
 
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
