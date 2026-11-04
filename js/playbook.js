@@ -367,7 +367,7 @@ export const DRILLS = [
     brief: 'They play Cover 2 and rush four, every snap.',
     note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Stick and Slant-Flat get there most often, about four times in five: quick throws underneath, in front of the corner sitting in the flat or beside him.',
     long: 'On 3rd & 8 some of the surest 4 yards don\'t get there: Stick and Flood make the first down one time in five or less. Four Verticals, Slant-Flat, the Play-Action Shot, Smash and Mesh make it about half the time each, with throws into the holes past the line to gain or a catch on the run.',
-    short: 'On 3rd & 2, Stick, Slant-Flat, Flood and the Draw make it most often, three or four times in five. On 4th & 1, a single yard, the runs come first: Inside Zone, the Draw, Outside Zone and Counter make it most often, about four times in five or better.',
+    short: 'On 3rd & 2, Stick, Slant-Flat, Flood, Inside Zone and the Draw make it most often, three or four times in five. On 4th & 1, a single yard, the runs come first: Inside Zone, the Draw, Outside Zone and Counter make it most often, about four times in five or better.',
   },
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',

@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'c7f93221f719' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '658b37a12fd1' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1281,6 +1281,37 @@ test('from the shotgun the linebackers and safeties read the handoff before they
   for (const [n, ok] of Object.values(rate)) assert.ok(ok / n > 0.12, `from the shotgun against Nickel, runs succeed ${say}`);
 });
 
+test('from the Pistol the linebackers can\'t tell which way the run is going, and come downhill over their own gaps until they\'ve read it', () => {
+  // The Pistol's back is straight behind the quarterback, 2 yards deeper than a back beside him, and gets to the line
+  // about a quarter of a second later. When the linebackers drifted across with him as they read the handoff, as they
+  // do from the other shotgun sets, the Will lined up over the slot on the other side got across in time: Inside Zone
+  // and Power against the Nickel front succeeded (gained 4 yards or more) 20% and 16% of the time from this test's
+  // seeds, and the Will made about half the stops. Now they lean only PISTOL_LEAN of the way toward him (see bite() in
+  // js/sim.js): 34% and 44% (from six start seeds, 34-44% and 33-45%). A back lined up beside the quarterback still
+  // tells them: from Gun Doubles the Will has come 1.7-3.0 yards across a third of a second after the handoff, and from
+  // the Pistol he came 2.6-3.3 before, 1.3-2.3 now.
+  const drift = (formation, play, coverage, flip, seed) => {
+    const r = simulate({ formation, play, front: 'nickel', coverage, pressure: 'four', flip }, seed);
+    const w = r.players.findIndex(p => p.label === 'W'), h = r.events.find(e => e.kind === 'hand');
+    const f = r.frames.find(f => f.t >= h.t + 0.35 - 1e-6);
+    return (f.xy[2 * w] - r.frames[0].xy[2 * w]) * (flip ? -1 : 1); // toward the play side
+  };
+  for (const play of ['iz', 'power']) for (const coverage of ['c2', 'c3', 'c4']) for (const flip of [false, true]) for (let s = 1; s <= 6; s++) {
+    const what = `${play} against ${coverage}${flip ? ', flipped' : ''}, seed ${s}`;
+    assert.ok(drift('pistol', play, coverage, flip, s) < 2.5, `from the Pistol, ${what}: the Will has come ${drift('pistol', play, coverage, flip, s).toFixed(1)} yards across`);
+    assert.ok(drift('doubles', play, coverage, flip, s) > 1.5, `from Gun Doubles, ${what}: the Will has come only ${drift('doubles', play, coverage, flip, s).toFixed(1)} yards across`);
+  }
+  let seed = 5100;
+  const rate = {};
+  for (const play of ['iz', 'power']) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (let k = 0; k < 12; k++) {
+    const r = simulate({ formation: 'pistol', play, front: 'nickel', coverage: cv.id, pressure, flip: k % 2 === 1 }, seed++).result;
+    const a = rate[play] ??= [0, 0];
+    a[0]++; if (r.yards >= 4) a[1]++;
+  }
+  const say = Object.entries(rate).map(([p, [n, ok]]) => `${p} ${Math.round(100 * ok / n)}%`).join(', ');
+  for (const [n, ok] of Object.values(rate)) assert.ok(ok / n > 0.27, `from the Pistol against Nickel, runs succeed ${say}`);
+});
+
 test('on a short third or fourth down a handoff from the shotgun makes it less often than one from under center', () => {
   // A defense expecting a run reads a shotgun handoff sooner (see gunRead() in js/sim.js), in time to meet the back
   // before the blocks do; under center the handoff comes after the read anyway, so nothing changes there. NFL backs'
@@ -1437,7 +1468,8 @@ test('the drills\' notes say what the board shows', () => {
   // calls 40 snaps a run, and every defense 4 a run for the share held short), from three start seeds (11, 100000,
   // 7777777): against Cover 2 on 3rd & 8, Four Verticals, Slant-Flat, the Play-Action Shot, Smash and Mesh made it
   // 43-56% of the time, the next 21% (Flood 18-20%, Stick 13-15%); on 3rd & 2 Stick, Slant-Flat, Flood and the Draw
-  // 69-86%, the top three always among them; on 4th & 1 Inside Zone, the Draw, Outside Zone and Counter 79-94%, the top
+  // 69-86%, the top three always among them (and Inside Zone 71-74%: since the Pistol's linebackers come downhill over
+  // their own gaps, 81-85%, with them); on 4th & 1 Inside Zone, the Draw, Outside Zone and Counter 79-94%, the top
   // two among them. Against Cover 3 on 3rd & 8, Flood 50-61% and the Play-Action Shot 50-58%, both always in the top
   // three; the Draw, Four Verticals and Stick 36-50%; Slant-Flat 15-20%. On 3rd & 2 Stick, Slant-Flat, the Draw and the
   // RB Screen 65-86%, the top two among them; on 4th & 1 the Draw 88-92%, first or second, and Stick, Inside Zone and the
@@ -1469,8 +1501,8 @@ test('the drills\' notes say what the board shows', () => {
   among(o, 5, ['verts', 'slants', 'pa', 'smash', 'mesh'], 'Cover 2 on 3rd & 8');
   within(o, ['stick', 'flood'], 0, 0.26, 'Cover 2 on 3rd & 8, "one time in five or less"');
   o = on('3and2', 'c2', 'four');
-  within(o, ['stick', 'slants', 'flood', 'draw'], 0.6, 0.92, 'Cover 2 on 3rd & 2, "three or four times in five"');
-  among(o, 3, ['stick', 'slants', 'flood', 'draw'], 'Cover 2 on 3rd & 2, "most often"');
+  within(o, ['stick', 'slants', 'flood', 'iz', 'draw'], 0.6, 0.92, 'Cover 2 on 3rd & 2, "three or four times in five"');
+  among(o, 3, ['stick', 'slants', 'flood', 'iz', 'draw'], 'Cover 2 on 3rd & 2, "most often"');
   o = on('4and1', 'c2', 'four');
   within(o, ['iz', 'draw', 'oz', 'counter'], 0.72, 1, 'Cover 2 on 4th & 1, "about four times in five or better"');
   among(o, 2, ['iz', 'draw', 'oz', 'counter'], 'Cover 2 on 4th & 1, "most often"');

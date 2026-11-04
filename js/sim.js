@@ -1390,6 +1390,10 @@ function gunRead(S, d) {
   return p.type === 'run' && p.scheme !== 'draw' && !S.fm.under && c === S.RB && c.y < -0.5 && S.t < S.handT + d.lag * (S.short ? SHORT_READ : 1) && d.cls !== 'cb' && d.job.kind !== 'rush';
 }
 
+// The Pistol: a back straight behind a quarterback in the shotgun (see bite()).
+const PISTOL_LEAN = 0.3;
+const pistol = S => !S.fm.under && !!S.RB && Math.abs(S.RB.x0) < 0.5;
+
 // Third or fourth down with 2 yards or less to go, from the situation in the call (an id in SITUATIONS, js/playbook.js;
 // none is 1st & 10).
 function shortYardage(id) {
@@ -1454,7 +1458,16 @@ function bite(S, d) {
   const rb = S.RB || S.QB;
   const target = S.play.type === 'run' && S.carrier && S.carrier !== S.QB ? S.carrier : rb;
   // (A man in the bump creeps as a safety does, from outside: see buildDefense().)
-  if (d.cls === 'lb' && !d.bump) { d.tx = target.x + (S.aimX ?? 0) * 0.3; d.ty = Math.max(0.6, d.y0 - 2.5); d.ts = d.top * 0.75; }
+  if (d.cls === 'lb' && !d.bump) {
+    d.tx = target.x + (S.aimX ?? 0) * 0.3; d.ty = Math.max(0.6, d.y0 - 2.5); d.ts = d.top * 0.75;
+    // From the Pistol the back is straight behind the quarterback, so where he lines up doesn't tell a linebacker which
+    // way the run is going: until he has read the handoff (see gunRead()) he comes downhill over his own gap, leaning
+    // only PISTOL_LEAN of the way toward the back, rather than drifting across with him as he does when the back lines
+    // up beside the quarterback. (Drifting with him, the Will lined up over the slot on the other side got across in
+    // time to make most of the stops: the Pistol's back starts 2 yards deeper than one beside the quarterback and gets
+    // to the line about a quarter of a second later.)
+    if (pistol(S) && gunRead(S, d)) d.tx = d.x0 + (d.tx - d.x0) * PISTOL_LEAN;
+  }
   else if (d.cls === 's' || d.bump) { d.tx = d.x; d.ty = (d.home ? d.home.y : d.y0) - 2.2; d.ts = d.top * 0.5; }
   else { d.tx = target.x; d.ty = target.y; d.ts = d.top; }
   d.want = target;
