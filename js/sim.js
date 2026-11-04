@@ -1225,6 +1225,10 @@ function fake(S, pl) {
 
 const COUNTER_STEP = 0.2; // seconds the back's step away from the play takes, on Counter
 const COUNTER_READ = 0.9; // and until when the linebackers go with it
+// From the shotgun their step ends at the handoff. The back has the ball sooner there, and then the linebackers wait to
+// see who has it (see gunRead()): with the step going on after the handoff as well, the two delays added up, and
+// Counter from the shotgun gained 4 yards on 47-72% of its snaps, more than any other run from there.
+const counterRead = S => (S.fm.under ? COUNTER_READ : Math.min(COUNTER_READ, S.handT));
 function toMesh(S, pl) {
   // Run plays: get to the mesh with the quarterback, then (once handed the ball) carry.
   const t = S.t, m = S.mesh;
@@ -1357,8 +1361,8 @@ function defense(S, d) {
   d.want = null;
   const ballOut = S.ball.state === 'air';
   // Counter: the linebackers take a step with the back's fake the other way before they see where the ball is going.
-  // (Not one in the bump, holding the edge: see holdEdge().)
-  if (S.play.scheme === 'counter' && d.cls === 'lb' && j.kind !== 'rush' && !d.holds && t < COUNTER_READ) { d.tx = d.x0 - S.p * 1.5; d.ty = d.y0 - 0.6; d.ts = d.top * 0.6; d.want = S.RB; return; }
+  // (Not one in the bump, holding the edge: see holdEdge(). From the shotgun, only until the handoff: see counterRead.)
+  if (S.play.scheme === 'counter' && d.cls === 'lb' && j.kind !== 'rush' && !d.holds && t < counterRead(S)) { d.tx = d.x0 - S.p * 1.5; d.ty = d.y0 - 0.6; d.ts = d.top * 0.6; d.want = S.RB; return; }
   if (j.kind === 'man' && j.r === S.RB && S.play.type === 'run' && S.play.scheme !== 'draw') return scrape(S, d, S.RB);
   if (gunRead(S, d)) return rotate(S, d) || bite(S, d);
   // After a catch or a handoff seen: everyone runs to the ball.
