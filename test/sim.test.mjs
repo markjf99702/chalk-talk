@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '6dde01d1dd1c' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '885db5c1b992' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -400,6 +400,16 @@ test('on the screen against the 3-4, the end let through doesn\'t get to the qua
   }
   assert.ok(sacks / n < 0.05, `the screen against the 3-4 is a sack ${sacks} times in ${n}`);
   assert.ok(early > 0, 'thrown before the drop is over when a rusher is about to get there');
+  // Against the other fronts nobody gets to him that soon, so he still waits for the drop, and the linemen get out in
+  // front first. (When a rusher within 3 yards was enough, the ball went early on nine screens in ten against every
+  // front, and the screen worked less often.)
+  let m = 0, thrown = 0, soon = 0;
+  for (const formation of ['pistol', 'ace', 'doubles', 'trips']) for (const front of ['over', 'under', 'nickel']) for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (let k = 0; k < 2; k++) {
+    const r = simulate({ formation, play: 'screen', front, coverage, pressure: 'four', flip: k % 2 === 1 }, 1500 + m++);
+    const thr = r.events.find(e => e.kind === 'throw');
+    if (thr) { thrown++; if (thr.t < 1.75) soon++; }
+  }
+  assert.ok(soon / thrown < 1 / 3, `against the other fronts the screen went before the drop was over ${soon} times in ${thrown}`);
 });
 
 test('the rush read tells the truth: only blitzers are drawn as blitzers, and only rushers nobody blocked came unblocked', () => {
@@ -1339,9 +1349,10 @@ test('the drills\' notes say what the board shows', () => {
   // 77-84% and Slant-Flat 75-79% succeed, the next 77% (Flood). Against Cover 3, Four Verticals 11.2-13.7 yards and
   // Play-Action Shot 10.0-10.4, the next 9.0 (Flood 8.7-10.0 since the Cover 3 curl-flat defender expands to a back in
   // the flat); the Draw 69-73% and Slant-Flat 68-71%, the next 71% (Smash, from one seed), and since Stick's flat goes
-  // outside the stick from three receivers on a side, Stick 75-78% ahead of them, with the Draw, Slant-Flat and Smash
-  // 65-73%, the next 61% (Counter). Against Cover 0, the RB
-  // Screen 63-71%, then Smash, Slant-Flat and Play-Action Shot 45-54%, the next 46%, and the Draw 1-5% and Power 9-18%,
+  // outside the stick from three receivers on a side, Stick 77-81% ahead of them, with the Draw, Slant-Flat and Smash
+  // 65-73%, the next 57-61% (Flood or Counter). Against Cover 0, the RB Screen 63-71% (70-75% since it's thrown before
+  // the drop is over when a rusher is within 2 yards of the quarterback, and the back has turned), then Smash,
+  // Slant-Flat and Play-Action Shot 45-54%, the next 46%, and the Draw 1-5% and Power 9-18%,
   // the next 18-22%. Against I-Form's five runs, the 4-3 Over in Cover 1 with a blitz stops 68-73% for 2.4-2.7 yards a
   // run, and in Cover 0 73-80% for 5.2-8.0. (Before Counter, 80-82% and 81-84%, from four start seeds: Counter gets
   // through it two times in three, its fake pulling the linebackers the wrong way.)
@@ -1406,8 +1417,9 @@ test('over many snaps the numbers look like football', () => {
   // gave 66.9%, 1.4% and 4.82. With the screen thrown before a rusher gets there and the Cover 3 curl-flat defender
   // expanding to the back in Flood's flat, 64.1-70.0% complete (mean 67.4%), sacks on 1.9-4.0%; with Stick's flat
   // outside the stick from three receivers on a side, which gets Stick from Gun Trips caught about five times in six
-  // rather than one in three, 64.7-71.2% (mean 68.1%, six seeds above 68%) and interceptions on 1.0-2.3%. This one
-  // gives 67.7%, 1.0% (13 in 1,248) and 4.82.
+  // rather than one in three, 64.8-71.3% (mean 68.2%, six seeds above 68%) and interceptions on 1.0-2.3%; with the
+  // screen thrown early only when a rusher is within 2 yards, 65.3-71.6% (mean 68.3%, six above 68%). This one gives
+  // 67.7%, 1.0% (13 in 1,248) and 4.82.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
