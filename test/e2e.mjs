@@ -288,12 +288,12 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
     ['O.trips.smash.0.nickel.c2.four.262', 'Gain of 19 yards and a first down', 'A win for the offense', 'O'],
     ['O.trips.smash.0.nickel.c2.four.10', 'Gain of 20 yards and a first down', 'A big play for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.579', 'Gain of 9 yards, 1 short of the first down', 'A win for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.647', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
     ['O.single.iz.0.over.c3.four.1.0.none.2and6', 'Gain of 3 yards, 3 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
     ['O.single.iz.0.over.c3.four.2.0.none.2and6', 'Gain of 4 yards, 2 short of the first down', 'A win for the offense', 'O'],
     ['O.single.iz.0.over.c3.four.1.0.none.3and2', 'Gain of 3 yards and a first down', 'A win for the offense', 'O'],
     ['O.single.iz.0.over.c3.four.47.0.none.3and8', 'Gain of 6 yards, 2 short of the first down', 'A win for the defense: short of the first down', 'D'],
-    ['D.single.iz.0.over.c3.four.8.0.none.3and8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.647.0.none.3and8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
     ['O.trips.smash.0.nickel.c3.four.1.0.none.3and8', 'Incomplete', 'A win for the defense', 'D'],
     ['O.single.iz.0.over.c3.four.11.0.none.4and1', 'Gain of 1 yard and a first down', 'A win for the offense', 'O'],
     ['O.single.iz.0.over.c3.four.10.0.none.4and1', 'No gain', 'A win for the defense: a turnover on downs', 'D'],
@@ -657,7 +657,9 @@ for (const side of ['O', 'D']) {
     Object.assign(state.off, { formation: 'iform', play: 'oz', flip: false, motion: 'none' });
     Object.assign(state.def, { front: 'over', coverage: 'c3', pressure: 'four', disguise: false });
     let a, b;
-    for (let seed = 1; seed < 500 && !b; seed++) {
+    // (Few runs go on long enough after two lines close together: since a back who breaks a tackle down the field loses
+    // a step, the first is seed 1982.)
+    for (let seed = 1; seed < 3000 && !b; seed++) {
       const r = simulate({ ...state.off, ...state.def }, seed), evs = r.events.filter(e => e.kind !== 'shed');
       // two different lines between 0.2 and 1 second apart, and nothing else until after the first has gone, mid-play
       const k = evs.findIndex((e, n) => n && e.text !== evs[n - 1].text && e.t - evs[n - 1].t > 0.2 && e.t - evs[n - 1].t < 1 && !(evs[n + 1]?.t < evs[n - 1].t + 2.4) && evs[n - 1].t + 2.4 < r.frames.at(-1).t);

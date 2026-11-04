@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: '658b37a12fd1' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '9fe658423b16' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1362,8 +1362,9 @@ test('a back through the line is run down from behind: not every run that gets 1
   // Inside Zone, Outside Zone and Power from every formation that has a back, against every front and coverage. Before
   // a defender chasing a back 3 yards past the line had the odds one chasing a deep catch has (see contact() in
   // js/sim.js), a run that got 10 yards went on for 35.6-39.0 more on average, from three start seeds (61, 5000, 90000),
-  // and more than half went past 60, where the board stops counting; now 21.5-23.0. (NFL 2023 regular season, designed
-  // runs, from nflverse's play-by-play: 6.8, and 1 in 80 went 60.)
+  // and more than half went past 60, where the board stops counting; then 21.5-23.0, and since a tackle he breaks down
+  // the field costs him a step (STUMBLE), 21.2-23.6: Cover 0, with nobody deep, is most of it. (NFL 2023 regular
+  // season, designed runs, from nflverse's play-by-play: 6.8, and 1 in 80 went 60.)
   let seed = 61;
   const long = [];
   for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 2; k++) {
@@ -1385,6 +1386,38 @@ test('a back through the line is run down from behind: not every run that gets 1
     for (let k = 1; k < miss.length; k++) assert.notEqual(miss[k].text, miss[k - 1].text, `seed ${s}: ${miss.map(e => e.text).join(' / ')}`);
   }
   assert.ok(twice, 'no run where a man missed the back twice');
+});
+
+test('a back who breaks a tackle past the line loses a step, so getting past the one deep safety isn\'t a sure long run', () => {
+  // Without it a back was back to full speed a tenth of a second after he broke a tackle, and with the men chasing him
+  // no faster than he is, one who got past the lone deep safety in Cover 1 or Cover 3 nearly always went a long way.
+  // Inside Zone, Outside Zone, Power and Counter from every formation that has a back, every front, both pressures:
+  // from this test's seeds a run that got 10 yards went on 17.1 more on average against Cover 1 and Cover 3, now 7.6.
+  // (NFL 2023 designed runs: 6.8; nflverse play-by-play.)
+  let seed = 4400;
+  const long = [];
+  for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (const coverage of ['c1', 'c3']) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 8; k++) {
+    if (cantCall(fm.id, play)) continue;
+    const y = simulate({ formation: fm.id, play, front: fr.id, coverage, pressure, flip: k % 2 === 1 }, seed++).result.yards;
+    if (y >= 10) long.push(y - 10);
+  }
+  const more = long.reduce((a, b) => a + b, 0) / long.length;
+  assert.ok(long.length > 50, `${long.length} runs of 10 yards or more`);
+  assert.ok(more < 11, `against Cover 1 and Cover 3, ${long.length} runs of 10 yards or more went on for ${more.toFixed(1)} more on average`);
+  // The step he loses: for half a second after a tackle he breaks 3 yards past the line, he runs at 70% of his speed.
+  let seen = 0;
+  for (let s = 1; s < 300 && seen < 5; s++) {
+    const call = { formation: 'iform', play: 'oz', front: 'over', coverage: 'c3', pressure: 'four', flip: s % 2 === 1 };
+    const r = simulate(call, s), c = r.result.carrier, top = prepare(call, s).P[c].top;
+    const at = t => r.frames.find(f => f.t >= t - 1e-6);
+    const miss = r.events.find(e => e.kind === 'miss' && at(e.t).xy[2 * c + 1] > 3.5 && e.t + 0.5 < r.result.t && !r.events.some(x => x.kind === 'miss' && x.t > e.t && x.t < e.t + 0.6));
+    if (!miss) continue;
+    seen++;
+    const a = at(miss.t + 0.2), b = at(miss.t + 0.4);
+    const speed = Math.hypot(b.xy[2 * c] - a.xy[2 * c], b.xy[2 * c + 1] - a.xy[2 * c + 1]) / (b.t - a.t);
+    assert.ok(speed < 0.75 * top, `seed ${s}: ${speed.toFixed(1)} yards a second after a broken tackle, his best is ${top.toFixed(1)}`);
+  }
+  assert.ok(seen, 'no broken tackle downfield to look at');
 });
 
 test('a deep catch is run down from behind: no long run after every catch 15 yards downfield', () => {
@@ -1575,7 +1608,8 @@ test('over many snaps the numbers look like football', () => {
   // outside the stick from three receivers on a side, which gets Stick from Gun Trips caught about five times in six
   // rather than one in three, 64.8-71.3% (mean 68.2%, six seeds above 68%) and interceptions on 1.0-2.3%; with the
   // screen thrown early only when a rusher is within 2 yards, 65.3-71.6% (mean 68.3%, six above 68%). This one gives
-  // 67.7%, 1.0% (13 in 1,248) and 4.82.
+  // 67.7%, 1.0% (13 in 1,248) and 4.82. With the Pistol's linebackers over their own gaps, 4.14-5.06 yards a carry; and
+  // since a tackle a back breaks down the field costs him a step, 3.74-4.58 (this one 4.30), the passes as before.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };

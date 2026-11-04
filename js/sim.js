@@ -1268,7 +1268,7 @@ function carry(S, c) {
   }
   if (run && c.dir && !S.cutNoted && c.y > -2 && c.y < 2 && (bx * S.p < -0.45) && S.aimX * S.p > 0) { S.cutNoted = true; ev(S, 'cut', `${cap(name(S, c))} cuts it back against the flow.`, { who: c.i }); }
   c.dir = [bx, by];
-  c.tx = c.x + bx * 3; c.ty = c.y + by * 3; c.ts = c.top * (S.caught ? 0.86 : 0.95);
+  c.tx = c.x + bx * 3; c.ty = c.y + by * 3; c.ts = c.top * (S.caught ? 0.86 : 0.95) * (c.stumble > S.t ? STUMBLE_PACE : 1);
 }
 
 function runBlock(S, pl) {
@@ -1796,6 +1796,13 @@ function hole(S) {
 // How far past the line a back on a run is through the first wave, and is run down from behind as a deep catch is (see
 // contact()).
 const RUNDOWN = 3;
+// A back through the first wave who breaks a tackle has to get his balance back: for STUMBLE seconds he runs at
+// STUMBLE_PACE of his speed (see carry()), so the men he got past, or the next man, can get back to him. Without it he
+// was back to full speed a tenth of a second later, and with the men chasing him no faster than he is, a back who got
+// past the one deep safety in Cover 1 or Cover 3 nearly always went a long way: a run that got 10 yards went on 16 more
+// on average against Cover 1 and 12 against Cover 3, and one in six against Cover 1 reached 60 (NFL 2023 designed runs:
+// 6.8, and one in 80; nflverse play-by-play).
+const STUMBLE = 0.5, STUMBLE_PACE = 0.7;
 
 function contact(S) {
   const c = S.carrier, t = S.t, R = S.R;
@@ -1840,6 +1847,7 @@ function contact(S) {
     // the chase a step later (sooner after a back, who keeps running straight on, away from him).
     d.missUntil = t + (head < -0.4 && deep ? 0.3 : head < -0.4 && away ? 0.15 : 0.8);
     c.vx *= 0.75; c.vy *= 0.75;
+    if (away) c.stumble = t + STUMBLE;
     if (qbHeld) { ev(S, 'escape', `${cap(name(S, S.QB, true))} slips out of ${name(S, d)}'s grasp.`, { who: S.QB.i }); S.QB.tx = S.QB.x - (d.x - S.QB.x) * 2; continue; }
     // (Run down from behind, the same man can miss him twice in a few steps: the second time isn't put the same way, nor
     // the third as the second.)
