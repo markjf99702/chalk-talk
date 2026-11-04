@@ -358,28 +358,37 @@ export const needed = s => Math.ceil(NEED[s.down - 1] * s.togo - 1e-9);
 // On offense his defense is the drill's (with his front set to your personnel: nickel against three or four receivers,
 // the 4-3 Over against two backs or two tight ends); on defense he runs from the drill's formation, a different run
 // each snap. A snap counts as a success by its down, as everywhere on the board (see SITUATIONS): on 1st & 10, a gain
-// of 4 yards or more. Each note says what the board shows over many snaps on 1st & 10 (test/sim.test.mjs holds them
-// to it).
+// of 4 yards or more. Each note says what the board shows over many snaps on 1st & 10 (and 2nd & 6, where a success is 4
+// yards too); long says it for 3rd & 8, and short for a short third or fourth down, 3rd & 2 and 4th & 1, where a success
+// is the first down (test/sim.test.mjs holds them all to it).
 export const DRILLS = [
   {
     id: 'c2', name: 'Beat Cover 2', side: 'O', coverage: 'c2', pressure: 'four',
     brief: 'They play Cover 2 and rush four, every snap.',
     note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 2 here, throwing into its deep holes; Smash, the classic Cover 2 beater, goes after the one behind the corner in the flat. For a sure 4 yards, Stick and Slant-Flat get there most often, about four times in five: quick throws underneath, in front of the corner sitting in the flat or beside him.',
+    long: 'On 3rd & 8 the surest 4 yards don\'t get there: Stick and Flood make the first down one time in five or less. Four Verticals, Slant-Flat, the Play-Action Shot, Smash and Mesh make it about half the time each, with throws into the holes past the sticks or a catch on the run.',
+    short: 'On 3rd & 2, Stick, Slant-Flat, Flood and the Draw make it most often, three or four times in five. On 4th & 1, a single yard, the runs come first: Inside Zone, the Draw, Outside Zone and Counter make it most often, about four times in five or better.',
   },
   {
     id: 'c3', name: 'Beat Cover 3', side: 'O', coverage: 'c3', pressure: 'four',
     brief: 'They play Cover 3 and rush four, every snap.',
     note: 'Four Verticals and Play-Action Shot gain the most yards a play against Cover 3 here: four receivers going deep against three deep defenders, and the deep crosser running in behind linebackers who stepped up for the fake. Flood, the classic Cover 3 beater, puts three receivers on the two zone defenders on one side. For a sure 4 yards, Stick gets there most often: the defender between the stick and the flat can\'t take both. Next, about seven times in ten, come the Draw, Slant-Flat and Smash.',
+    long: 'On 3rd & 8 Flood and the Play-Action Shot make the first down most often, about half the time: the sail settles at 12 to 14 yards, past the sticks, and the deep crosser runs in behind the linebackers. Next, about two times in five, come the Draw, Four Verticals and Stick. Slant-Flat, a sure 4 yards on first down, makes 8 about one time in five.',
+    short: 'On 3rd & 2, Stick, Slant-Flat, the Draw and the RB Screen make it most often, about three times in four. On 4th & 1 the Draw does best, about nine times in ten, with Stick, Inside Zone and the screen about four in five.',
   },
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
     brief: 'They blitz, every snap. Count who\'s coming and who\'s left to cover.',
     note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw and Power run straight into it.',
+    long: 'On 3rd & 8 against an all-out blitz, Smash, Four Verticals and the Play-Action Shot make the first down most often, a little under half the time: their deep routes are one-on-ones with nobody over the top. The RB Screen, the surest 4 yards against it, makes 8 only about one time in four.',
+    short: 'On a short third or fourth down the RB Screen and the zone runs, Inside Zone and Outside Zone, make it most often: with everyone rushing and nobody deep, a back who gets past the rush has room. They make it about two times in three or more on 3rd & 2, and about four in five on 4th & 1. The Draw still runs straight into it.',
   },
   {
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
     brief: 'They run from I-Form, every snap: any of the five runs, to either side.',
     note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about seven runs in ten here. The 4-3 Over in Cover 0 stops about as many, but with nobody deep, the runs that get through go a long way.',
+    long: 'On 3rd & 8 a run has to go all 8 yards, and against I-Form most calls hold it short about nine times in ten: the 4-3 Over with Cover 1 and a blitz more than nine in ten. Cover 3 rushing four lets the most through, about one in four.',
+    short: 'On a short third or fourth down a run needs only a yard or two, and against I-Form it usually gets it: about one run in three is held short on 3rd & 2, one in five on 4th & 1. Cover 0\'s all-out blitz holds about three in five short on 3rd & 2 and, from the 4-3, about half on 4th & 1, as many as any call here. With two safeties deep and four rushing, the 4-3 Over almost never stops it on 4th & 1.',
   },
 ];
 

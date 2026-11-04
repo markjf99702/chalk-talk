@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS } from '../js/playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS, needed } from '../js/playbook.js';
 import { rng } from '../js/rng.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -1431,6 +1431,97 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(Math.abs(zero.stop - one.stop) < 0.1 && zero.avg > one.avg + 2, `"about as many, but the runs that get through go a long way": ${both}`);
   const S = prepare({ formation: drill('run').formation, play: 'iz', front: 'over', coverage: 'c1', pressure: 'blitz' }, 5);
   assert.deepEqual([S.box.box, S.box.blockers], [8, 7], '"eight against seven"');
+
+  // On 3rd & 8 (long) and on a short third or fourth down (short: 3rd & 2 and 4th & 1) a success is the first down, and
+  // each drill has a note for those downs too. Run the same way, 12 snaps a play from each formation (the run drill's
+  // calls 40 snaps a run, and every defense 4 a run for the share held short), from three start seeds (11, 100000,
+  // 7777777): against Cover 2 on 3rd & 8, Four Verticals, Slant-Flat, the Play-Action Shot, Smash and Mesh made it
+  // 43-56% of the time, the next 21% (Flood 18-20%, Stick 13-15%); on 3rd & 2 Stick, Slant-Flat, Flood and the Draw
+  // 69-86%, the top three always among them; on 4th & 1 Inside Zone, the Draw, Outside Zone and Counter 79-94%, the top
+  // two among them. Against Cover 3 on 3rd & 8, Flood 50-61% and the Play-Action Shot 50-58%, both always in the top
+  // three; the Draw, Four Verticals and Stick 36-50%; Slant-Flat 15-20%. On 3rd & 2 Stick, Slant-Flat, the Draw and the
+  // RB Screen 65-86%, the top two among them; on 4th & 1 the Draw 88-92%, first or second, and Stick, Inside Zone and the
+  // screen 72-86%. Against the blitz on 3rd & 8, Smash, Four Verticals and the Play-Action Shot 35-50%, the next 32%
+  // (the screen 25-32%); on 3rd & 2 the screen 75-85%, Outside Zone 72-78% and Inside Zone 61-67% (75% as this test
+  // runs it), the top two among them, and the Draw last, 4-10%;
+  // on 4th & 1 Inside Zone 81-90%, Outside Zone 82-83% and the screen 75-85%, the top two among them, and the Draw last,
+  // 18-24%. Against I-Form's runs on 3rd & 8, the 4-3 Over in Cover 1 with a blitz held 92-95% short and every defense
+  // 85%; Cover 3 rushing four from the 4-3 and the 3-4, 68-81%. On 3rd & 2 every defense held 36% short, and Cover 0
+  // from the 4-3 or the 3-4 56-68%; on 4th & 1, 21%, Cover 0 from the 4-3 47-53% (the most of any call), and the 4-3
+  // Over with two safeties deep and four rushing 1-4%.
+  const on = (sit, coverage, pressure) => {
+    const need = needed(SITUATIONS.find(s => s.id === sit));
+    return Object.fromEntries(PLAYS.map(pl => {
+      let n = 0, ok = 0;
+      for (const fm of FORMATIONS.filter(f => !cantCall(f.id, pl.id))) for (let k = 0; k < 12; k++) {
+        const r = simulate({ formation: fm.id, play: pl.id, flip: k % 2 === 1, front: front(fm), coverage, pressure, sit }, seed++).result;
+        n++; if ((r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= need) ok++;
+      }
+      return [pl.id, { rate: ok / n }];
+    }));
+  };
+  const within = (o, ids, lo, hi, what) => { for (const id of ids) assert.ok(o[id].rate >= lo && o[id].rate <= hi, `${what}: ${say(o, 'rate')}`); };
+  const among = (o, k, ids, what) => assert.ok(top(o, 'rate', k).every(id => ids.includes(id)), `${what}: ${say(o, 'rate')}`);
+  const last = (o, id, what) => assert.equal(Object.entries(o).sort((a, b) => a[1].rate - b[1].rate)[0][0], id, `${what}: ${say(o, 'rate')}`);
+  for (const id of ['c2', 'c3', 'blitz']) assert.ok(drill(id).long && drill(id).short, `${id} has no note for third down`);
+  let o = on('3and8', 'c2', 'four');
+  within(o, ['verts', 'slants', 'pa', 'smash', 'mesh'], 0.36, 0.64, 'Cover 2 on 3rd & 8, "about half the time each"');
+  among(o, 5, ['verts', 'slants', 'pa', 'smash', 'mesh'], 'Cover 2 on 3rd & 8');
+  within(o, ['stick', 'flood'], 0, 0.26, 'Cover 2 on 3rd & 8, "one time in five or less"');
+  o = on('3and2', 'c2', 'four');
+  within(o, ['stick', 'slants', 'flood', 'draw'], 0.6, 0.92, 'Cover 2 on 3rd & 2, "three or four times in five"');
+  among(o, 3, ['stick', 'slants', 'flood', 'draw'], 'Cover 2 on 3rd & 2, "most often"');
+  o = on('4and1', 'c2', 'four');
+  within(o, ['iz', 'draw', 'oz', 'counter'], 0.72, 1, 'Cover 2 on 4th & 1, "about four times in five or better"');
+  among(o, 2, ['iz', 'draw', 'oz', 'counter'], 'Cover 2 on 4th & 1, "most often"');
+  o = on('3and8', 'c3', 'four');
+  within(o, ['flood', 'pa'], 0.42, 0.68, 'Cover 3 on 3rd & 8, "about half the time"');
+  assert.ok(top(o, 'rate', 3).includes('flood') && top(o, 'rate', 3).includes('pa'), `Cover 3 on 3rd & 8, "most often": ${say(o, 'rate')}`);
+  within(o, ['draw', 'verts', 'stick'], 0.3, 0.56, 'Cover 3 on 3rd & 8, "about two times in five"');
+  within(o, ['slants'], 0.1, 0.28, 'Cover 3 on 3rd & 8, "about one time in five"');
+  o = on('3and2', 'c3', 'four');
+  within(o, ['stick', 'slants', 'draw', 'screen'], 0.58, 0.9, 'Cover 3 on 3rd & 2, "about three times in four"');
+  among(o, 2, ['stick', 'slants', 'draw', 'screen'], 'Cover 3 on 3rd & 2, "most often"');
+  o = on('4and1', 'c3', 'four');
+  within(o, ['draw'], 0.8, 1, 'Cover 3 on 4th & 1, "about nine times in ten"');
+  among(o, 2, ['draw', 'stick', 'iz', 'screen'], 'Cover 3 on 4th & 1, "the Draw does best"');
+  within(o, ['stick', 'iz', 'screen'], 0.64, 0.92, 'Cover 3 on 4th & 1, "about four in five"');
+  o = on('3and8', 'c0', 'blitz');
+  within(o, ['smash', 'verts', 'pa'], 0.3, 0.58, 'Cover 0 on 3rd & 8, "a little under half the time"');
+  among(o, 3, ['smash', 'verts', 'pa'], 'Cover 0 on 3rd & 8, "most often"');
+  within(o, ['screen'], 0.15, 0.36, 'Cover 0 on 3rd & 8, the screen "about one time in four"');
+  o = on('3and2', 'c0', 'blitz');
+  within(o, ['screen', 'oz', 'iz'], 0.55, 0.92, 'Cover 0 on 3rd & 2, "about two times in three or more"');
+  among(o, 2, ['screen', 'oz', 'iz'], 'Cover 0 on 3rd & 2, "most often"');
+  last(o, 'draw', 'Cover 0 on 3rd & 2, "the Draw still runs straight into it"');
+  o = on('4and1', 'c0', 'blitz');
+  within(o, ['iz', 'oz', 'screen'], 0.68, 0.94, 'Cover 0 on 4th & 1, "about four in five"');
+  among(o, 2, ['iz', 'oz', 'screen'], 'Cover 0 on 4th & 1');
+  last(o, 'draw', 'Cover 0 on 4th & 1, "the Draw still runs straight into it"');
+  // The run drill: how often I-Form's runs are held short of the first down.
+  const held = (sit, front, coverage, pressure, each = 40) => {
+    const need = needed(SITUATIONS.find(s => s.id === sit));
+    let n = 0, s = 0;
+    for (const play of runs) for (let k = 0; k < each; k++) {
+      const r = simulate({ formation: drill('run').formation, play, flip: k % 2 === 1, front, coverage, pressure, sit }, seed++).result;
+      n++; if (!((r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= need)) s++;
+    }
+    return s / n;
+  };
+  const everyone = sit => { let t = 0, n = 0; for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) { t += held(sit, fr.id, cv.id, pressure, 4); n++; } return t / n; };
+  assert.ok(drill('run').long && drill('run').short, 'the run drill has no note for third down');
+  const long1 = held('3and8', 'over', 'c1', 'blitz'), longAll = everyone('3and8'), long3 = ['over', '34'].map(fr => held('3and8', fr, 'c3', 'four'));
+  assert.ok(long1 > 0.88, `"the 4-3 Over with Cover 1 and a blitz more than nine in ten": ${long1.toFixed(2)}`);
+  assert.ok(longAll > 0.78 && longAll < 0.93, `"most calls hold it short about nine times in ten": every defense ${longAll.toFixed(2)}`);
+  assert.ok(long3.every(x => x > 0.6 && x < 0.86 && x < long1), `"Cover 3 rushing four lets the most through, about one in four": ${long3.map(x => x.toFixed(2))}`);
+  const shortAll = everyone('3and2'), short0 = ['over', 'under', '34'].map(fr => held('3and2', fr, 'c0', 'blitz'));
+  assert.ok(shortAll > 0.28 && shortAll < 0.45, `"about one run in three is held short on 3rd & 2": ${shortAll.toFixed(2)}`);
+  assert.ok(short0.every(x => x > 0.5 && x < 0.75), `"Cover 0 holds about three in five short on 3rd & 2": ${short0.map(x => x.toFixed(2))}`);
+  const oneAll = everyone('4and1'), one0 = ['over', 'under'].map(fr => held('4and1', fr, 'c0', 'blitz')), oneRest = [['34', 'c1', 'blitz'], ['34', 'c3', 'blitz'], ['over', 'c1', 'blitz'], ['nickel', 'c3', 'four']].map(c => held('4and1', ...c));
+  assert.ok(oneAll > 0.14 && oneAll < 0.28, `"one in five on 4th & 1": ${oneAll.toFixed(2)}`);
+  assert.ok(one0.every(x => x > 0.38 && x < 0.62 && x > Math.max(...oneRest) - 0.06), `"from the 4-3, about half on 4th & 1, as many as any call here": ${one0.map(x => x.toFixed(2))} against ${oneRest.map(x => x.toFixed(2))}`);
+  const oneDeep = ['c2', 'c4'].map(cv => held('4and1', 'over', cv, 'four'));
+  assert.ok(oneDeep.every(x => x < 0.08), `"the 4-3 Over with two safeties deep and four rushing almost never stops it on 4th & 1": ${oneDeep.map(x => x.toFixed(2))}`);
 });
 
 test('over many snaps the numbers look like football', () => {

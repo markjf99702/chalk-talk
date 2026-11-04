@@ -1495,6 +1495,10 @@ const drillSit = d => byId(SITUATIONS, okSit(d?.sit) || state.sit);
 // What counts: a success in the situation on offense (4 yards or more on 1st & 10, the first down on third down), a run
 // held short of one on defense. A drill is five snaps in one situation (a new one starts it over: see setSit()).
 const drillWorked = (D, res, sit) => (D.side === 'O' ? success(res, sit) : !success(res, sit));
+// The coach's word at the end of a drill, for the down it ran on: on 3rd & 8 and on a short third or fourth down a
+// success is the first down, and what gets it most often isn't what gains 4 yards on first down (DRILLS: note, long,
+// short). On 2nd & 6 a success is 4 yards too, as on 1st & 10.
+const drillNote = (D, sit) => (sit.down < 3 ? D.note : sit.togo > 4 ? D.long : D.short);
 function drillGoal(D, snap = false, sit = situation()) {
   const n = needed(sit), first = sit.down > 2;
   if (snap) return D.side === 'O' ? (first ? 'snap that makes the first down' : `snap that gains ${n} yards or more`) : (first ? 'run held short of the first down' : `run held under ${n} yards`);
@@ -1585,7 +1589,7 @@ function renderDrills() {
     // (in the situation it ran in, named once another is set)
     const ran = drillSit(drilled);
     p('drill-count', `<b>${esc(D.name)}${ran.id === state.sit ? '' : ` on ${esc(ran.name)}`}: ${drilled.ok} of ${drilled.n} ${drillGoal(D, false, ran)}.</b>`);
-    p('drill-note', esc(D.note));
+    p('drill-note', esc(drillNote(D, ran)));
     row.append(button('Run it again', () => startDrill(D.id)), button('Done', () => { drilled = null; renderDrills(); keepPlay(); toDrills(); }));
   }
   host.append(row);

@@ -2480,17 +2480,23 @@ for (const colorScheme of ['light', 'dark']) {
   assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 3rd & 8, a snap that makes the first down counts. Snap 1 of 5. Stop the drill`);
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), { front: 'nickel', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false }, 'a new situation changed the drill\'s call');
   let firsts = 0;
-  for (let k = 1; k <= 3; k++) {
-    if (await p.evaluate(() => {
-      const { state, board, snap, finish } = window.chalkTalk;
-      snap(); state.t = board.duration(); finish();
-      const r = state.play.result, n = Math.sign(r.yards) * Math.round(Math.abs(r.yards));
-      return (r.kind === 'run' || r.kind === 'catch') && n >= 8;
-    })) firsts++;
-  }
+  const first = () => p.evaluate(() => {
+    const { state, board, snap, finish } = window.chalkTalk;
+    snap(); state.t = board.duration(); finish();
+    const r = state.play.result, n = Math.sign(r.yards) * Math.round(Math.abs(r.yards));
+    return (r.kind === 'run' || r.kind === 'catch') && n >= 8;
+  });
+  for (let k = 1; k <= 3; k++) if (await first()) firsts++;
   assert.equal((await card()).now, `Beat Cover 2. ${D.brief} On 3rd & 8, a snap that makes the first down counts. 3 of 5 snaps: ${firsts} made the first down. Stop the drill`);
-  await p.click('#drillNow button:text-is("Stop the drill")');
+  // Its word at the end is the one for third and long, where only the first down counts; after a reload too.
+  for (let k = 4; k <= 5; k++) if (await first()) firsts++;
+  assert.ok(D.long && D.long !== D.note, 'Beat Cover 2 has no note of its own for 3rd & 8');
+  assert.equal((await card()).now, `Beat Cover 2: ${firsts} of 5 made the first down. ${D.long} Run it again Done`);
+  await p.reload();
+  assert.equal((await card()).now, `Beat Cover 2: ${firsts} of 5 made the first down. ${D.long} Run it again Done`, 'after a reload');
   await p.getByRole('radio', { name: '1st & 10' }).click();
+  assert.equal((await card()).now, `Beat Cover 2 on 3rd & 8: ${firsts} of 5 made the first down. ${D.long} Run it again Done`, 'a new situation changed the note for the drill that ran');
+  await p.click('#drillNow button:text-is("Done")');
   // The blitz drill doesn't name its coverage before the first snap.
   await p.click('#drillChips button:text-is("Beat the blitz")');
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def.coverage), 'c0');
