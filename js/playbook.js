@@ -427,7 +427,7 @@ export const NOTES = {
   stick: {
     c0: 'Against an all-out blitz the ball comes out hot, most often to the back in the flat, but the man covering him is waiting there and tackles him short. Stick\'s throws are all short, and Cover 0 has a man on each of them.',
     c1: 'In man coverage the stick turns in at five yards and sits down, with the man chasing him still behind him: an easy completion most of the time, though a short one, with the free safety deep.',
-    c2: 'The Cover 2 corner sits in the flat, so the flat route is covered; the stick settles in front of the linebackers and behind the corner, and that\'s where the ball goes most often.',
+    c2: 'The Cover 2 corner sits in the flat, so a receiver running to it is covered. The ball goes to the stick, settling in front of the linebackers and behind the corner, or about as often to the back coming out of the backfield to the flat, who gains more.',
     c3: 'The curl-flat defender has to choose: when he sits on the stick, the flat route outside him is open, and that\'s where the ball goes most of the time. Cover 3\'s corners bail deep, so there\'s room underneath, for short gains.',
     c4: 'Quarters keeps four deep and three underneath, so the stick and the flat are both open, but short: the safeties come down fast once the ball is caught.',
   },

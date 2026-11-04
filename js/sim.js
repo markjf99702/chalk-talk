@@ -493,6 +493,18 @@ function assignOffense(S) {
     const at = pl.spot || pl; // a man in jet motion runs his route from the spot he's on his way to
     pl.path = (pl.lead || []).concat(r.pts.map(([o, u]) => ({ x: clamp(at.x + o * out, -EDGE + 0.6, EDGE - 0.6), y: r.fromLine ? u : at.y + u })));
   }
+  // A back's flat route ends in the flat at least 5 yards outside where a receiver on that side stops short and sits
+  // down (a stick or a hitch), so the man sitting on him can't cover both. (From beside the quarterback in Gun Doubles
+  // it ended under the slot's stick, and one defender had them both.)
+  for (const b of S.O) if (b.job.kind === 'route' && b.job.route === 'bflat') {
+    const end = b.path.at(-1), sd = b.job.out;
+    for (const r of S.O) {
+      const R = ROUTES[r.job.route];
+      if (r === b || r.job.kind !== 'route' || !r.num || !R.settle || Math.max(...R.pts.map(([, u]) => u)) > 7) continue;
+      const at = r.path.at(-1).x * sd;
+      if (at > 0) end.x = sd * Math.min(Math.max(end.x * sd, at + 5), EDGE - 0.6);
+    }
+  }
   for (const pl of S.O) if (pl.cls !== 'qb' && pl.cls !== 'ol' && pl.job.kind === 'none') pl.job = { kind: 'pro' };
   for (const ol of S.OL) ol.job = { kind: 'pro' };
   if (play.drop === 'screen') {

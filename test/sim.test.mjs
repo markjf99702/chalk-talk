@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'f831ea0f50a3' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '6dde01d1dd1c' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -242,6 +242,21 @@ test('Stick: the outside man clears out deep, one man sits at five yards, and th
       y += r.yards; if (r.kind !== 'sack') att++; if (r.kind === 'catch') comp++; if (r.kind === 'int') int++;
     }
     assert.ok(comp / att > 0.65 && y / n > 4.5 && int / att < 0.03, `Gun Trips against ${coverage}: ${(100 * comp / att).toFixed(0)}% complete, ${(y / n).toFixed(1)} yards a dropback, ${int} intercepted in ${att}`);
+  }
+  // From Gun Doubles the back's flat ends well outside the slot's stick, and against Cover 3 the quarterback finds one of
+  // them. (It ended under the stick, and the man sitting there had both: the ball was thrown away about half the time.)
+  for (const flip of [false, true]) {
+    const D = prepare({ formation: 'doubles', play: 'stick', front: 'nickel', coverage: 'c3', pressure: 'four', flip }, 2);
+    const st = D.keys.S2.path.at(-1), fl = D.RB.path.at(-1);
+    assert.ok(Math.abs(fl.x) >= Math.abs(st.x) + 5 && Math.sign(fl.x) === Math.sign(st.x), `the back's flat ends at ${fl.x.toFixed(1)}, the stick sits at ${st.x.toFixed(1)}`);
+  }
+  {
+    let n = 0, y = 0, away = 0;
+    for (const front of FRONTS) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 24; k++) {
+      const r = simulate({ formation: 'doubles', play: 'stick', front: front.id, coverage: 'c3', pressure, flip: k % 2 === 1 }, 4300 + n++).result;
+      y += r.yards; if (r.kind === 'throwaway') away++;
+    }
+    assert.ok(away / n < 0.35 && y / n > 4, `Gun Doubles against Cover 3: thrown away ${away} times in ${n}, ${(y / n).toFixed(1)} yards a dropback`);
   }
   // Over many snaps: short, sure throws, the stick or a flat route nearly every time, against zone and man alike.
   for (const coverage of ['c1', 'c3', 'c4']) {
@@ -638,15 +653,19 @@ test('the box count sees a safety rolled down, and counts every man who blocks o
   assert.equal(box('iform', 'over', 'c3').blockers, 7, 'I-Form: the five linemen, the tight end and the fullback');
 });
 
-test('a back\'s flat route and check-down end past the line, and Flood sends one back to the flat', () => {
-  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) {
-    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
-    const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip }, 5);
+test('a back\'s flat route and check-down end past the line, the flat well outside a receiver who sits down short, and Flood sends one back to the flat', () => {
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const flip of [false, true]) for (const motion of ['none', 'across']) {
+    if (cantCall(fm.id, pl.id) || (motion !== 'none' && !fm.motion)) continue; // (Empty has no back: no runs, no fake, no screen)
+    const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c3', pressure: 'four', flip, motion }, 5);
     const backs = S.O.filter(p => p.job.kind === 'route' && (p.job.route === 'bflat' || p.job.route === 'check'));
     for (const b of backs) {
       const end = b.path.at(-1);
       assert.ok(end.y > 1.5, `${fm.id} ${pl.id}: the ${b.label}'s ${b.job.route} ends at ${end.y.toFixed(1)}, not past the line`);
       if (b.job.route === 'check') assert.ok(Math.abs(end.x) > 3.5, `${fm.id} ${pl.id}: the ${b.label}'s check-down ends inside the tackles, at x ${end.x.toFixed(1)}`);
+      // A stick or a hitch on his side: the flat ends 5 yards or more past where he sits, not under him.
+      if (b.job.route === 'bflat') for (const r of S.O.filter(p => p.num && ['stick', 'hitch'].includes(p.job.route) && p.path.at(-1).x * b.job.out > 0)) {
+        assert.ok(end.x * b.job.out >= r.path.at(-1).x * b.job.out + 5 - 1e-9, `${fm.id} ${pl.id} ${motion}: the ${b.label}'s flat ends at ${end.x.toFixed(1)}, under the ${r.label}'s ${r.job.route} at ${r.path.at(-1).x.toFixed(1)}`);
+      }
     }
     if (pl.id === 'flood') assert.equal(backs.filter(b => b.job.route === 'bflat').length + S.O.filter(p => p.num && p.job.route === 'flat').length, 1, `${fm.id} flood: one man in the flat`);
   }
