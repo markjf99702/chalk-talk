@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'fcf8cbfc952f' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: '6a6f5c73aeed' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -634,6 +634,28 @@ test('a back\'s flat route and check-down end past the line, and Flood sends one
       if (b.job.route === 'check') assert.ok(Math.abs(end.x) > 3.5, `${fm.id} ${pl.id}: the ${b.label}'s check-down ends inside the tackles, at x ${end.x.toFixed(1)}`);
     }
     if (pl.id === 'flood') assert.equal(backs.filter(b => b.job.route === 'bflat').length + S.O.filter(p => p.num && p.job.route === 'flat').length, 1, `${fm.id} flood: one man in the flat`);
+  }
+});
+
+test('Flood beats Cover 3 from Gun Ace and the Pistol too: the curl-flat defender leaves the tight end going deep for the back in the flat, and the sail opens behind him', () => {
+  // From two receivers on a side the tight end runs Flood's sail and the back runs to the flat from behind the
+  // quarterback. The Cover 3 curl-flat defender used to stay with the tight end until the back got into his area, so the
+  // sail was covered when it was thrown: from Gun Ace about one throw to it in three was caught and one in nine was
+  // intercepted, and from both formations Flood gained less against Cover 3 than against Cover 1 or Cover 2.
+  let seed = 6100;
+  const run = (formation, coverage) => {
+    let n = 0, y = 0, sail = 0, caught = 0;
+    for (const front of FRONTS) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 8; k++) {
+      const r = simulate({ formation, play: 'flood', front: front.id, coverage, pressure, flip: k % 2 === 1 }, seed++);
+      n++; y += r.result.yards;
+      if (r.events.find(e => e.kind === 'throw')?.route === 'sail') { sail++; if (r.result.kind === 'catch') caught++; }
+    }
+    return { y: y / n, sail: caught / sail };
+  };
+  for (const formation of ['ace', 'pistol']) {
+    const c1 = run(formation, 'c1'), c2 = run(formation, 'c2'), c3 = run(formation, 'c3');
+    assert.ok(c3.y > c1.y && c3.y > c2.y, `${formation}: ${c3.y.toFixed(1)} yards a dropback against Cover 3, ${c1.y.toFixed(1)} against Cover 1, ${c2.y.toFixed(1)} against Cover 2`);
+    assert.ok(c3.sail > 0.5, `${formation}: ${(100 * c3.sail).toFixed(0)}% of the throws to the sail caught against Cover 3`);
   }
 });
 
@@ -1281,11 +1303,12 @@ test('the drills\' notes say what the board shows', () => {
   // this one, 100000 and 7777777), with Counter (which reshuffles the snaps every later play draws, but changes no
   // pass): against Cover 2, Four Verticals 22.0-25.3 yards a play and Play-Action Shot 15.3-17.5, the next 14.9; Stick
   // 78-84% and Slant-Flat 75-79% succeed, the next 77% (Flood). Against Cover 3, Four Verticals 11.2-13.7 yards and
-  // Play-Action Shot 10.0-10.4, the next 9.0; the Draw 69-73% and Slant-Flat 68-71%, the next 71% (Smash, from one
-  // seed). Against Cover 0, the RB Screen 63-71%, then Smash, Slant-Flat and Play-Action Shot 45-54%, the next 46%, and
-  // the Draw 1-5% and Power 9-18%, the next 18-22%. Against I-Form's five runs, the 4-3 Over in Cover 1 with a blitz
-  // stops 68-73% for 2.4-2.7 yards a run, and in Cover 0 73-80% for 5.2-8.0. (Before Counter, 80-82% and 81-84%, from
-  // four start seeds: Counter gets through it two times in three, its fake pulling the linebackers the wrong way.)
+  // Play-Action Shot 10.0-10.4, the next 9.0 (Flood 8.7-10.0 since the Cover 3 curl-flat defender expands to a back in
+  // the flat); the Draw 69-73% and Slant-Flat 68-71%, the next 71% (Smash, from one seed). Against Cover 0, the RB
+  // Screen 63-71%, then Smash, Slant-Flat and Play-Action Shot 45-54%, the next 46%, and the Draw 1-5% and Power 9-18%,
+  // the next 18-22%. Against I-Form's five runs, the 4-3 Over in Cover 1 with a blitz stops 68-73% for 2.4-2.7 yards a
+  // run, and in Cover 0 73-80% for 5.2-8.0. (Before Counter, 80-82% and 81-84%, from four start seeds: Counter gets
+  // through it two times in three, its fake pulling the linebackers the wrong way.)
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1367,9 +1390,10 @@ test('the README\'s matchups', () => {
   // snaps: every formation against every front, 15 snaps each, a blitz on one in four. From four start seeds (2718,
   // 31415, 16180, 14142), with the Pistol, Gun Ace and Empty, Four Verticals gained 22.2-24.1 yards a dropback against
   // Cover 2 and 9.1-12.8 against Cover 3 and 4, Smash 14.0-14.7 against Cover 2 and 6.2-8.3 against Cover 3 and 4,
-  // Flood 8.9-9.5 against Cover 3 and 4.8-8.5 against Cover 1 and 2 (its lead over Cover 1 is 0.4-1.5 yards, down from
-  // at least 1.7 before those formations: from Gun Ace and the Pistol it does worst against Cover 3), a throw to Mesh's
-  // crossers 10.9-12.2 yards against Cover 1 and 4.4-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
+  // Flood 8.9-9.5 against Cover 3 and 4.8-8.5 against Cover 1 and 2 (its lead over Cover 1 was 0.4-1.5 yards, down from
+  // at least 1.7 before those formations: from Gun Ace and the Pistol it did worst against Cover 3; since the Cover 3
+  // curl-flat defender expands to a back in the flat, 11.1-11.8 against Cover 3, a lead of 2.6-3.8), a throw to Mesh's
+  // crossers 10.9-12.2 yards against Cover 1 and 4.2-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
   // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read, the run-down
   // from behind and a tight end on the nickel back (version 2), 50-52% and 25-28%; with Counter among the runs, 52-54%
   // and 26-27%. A change to the balance that undoes one of these has to change the README with it.

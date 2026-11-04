@@ -1510,6 +1510,20 @@ function zone(S, d) {
     const lo = zx0 - (flat && sd > 0 ? 0 : 2), hi = zx1 + (flat && sd < 0 ? 0 : 2);
     const inZone = routes.filter(r => r.x > zx0 - 1 && r.x < zx1 + 1 && r.y > zy0 - 1 && r.y < zy1 + 1 && !(flat && r.x * sd < d.x * sd && r.vx * sd < -1));
     const QB = S.QB;
+    // Cover 3's curl-flat defender carries the man in his area up the field, but once that man has gone past him (deeper
+    // than 7 1/2 yards) and a back is coming out of the backfield to the flat on his side, he leaves him to the deep
+    // defender and expands to the flat: in front of the back once he's outside him, and wide toward where he's going
+    // before that. It's what Flood from two receivers on a side is built on: the tight end's sail opens behind him.
+    // (He used to stay with the tight end until the back was in his area, so the sail was covered and the quarterback
+    // threw it anyway: from Gun Ace about a third of those throws were caught, and one in nine was intercepted.)
+    const back = S.cov.id === 'c3' && d.job.zid.startsWith('cf') && routes.find(r => (r.cls === 'rb' || r.cls === 'fb') && (r.job.route === 'bflat' || r.job.route === 'swing') && r.path.at(-1).x * sd > 6 && r.vx * sd > 1 && r.y < 4);
+    if (back && inZone.every(r => r === back || r.y > 7.5)) {
+      const end = back.path.at(-1);
+      if (Math.abs(back.x) + 1 < Math.abs(d.x)) { tx = clamp(end.x - 2 * sd, lo, hi); ty = clamp(d.y, end.y + 1.5, 6); }
+      else { tx = clamp(back.x + back.vx * 0.45, lo, hi); ty = back.y + 1.6; }
+      d.tx = tx; d.ty = ty; d.ts = d.top * 0.85;
+      return;
+    }
     if (inZone.length) {
       // Who to play: a flat defender takes the shallowest man threatening the flat, a hook defender the one
       // nearest the middle of his area; otherwise the nearest. The quarterback's eyes pull him a little.
