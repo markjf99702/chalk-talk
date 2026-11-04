@@ -2997,6 +2997,13 @@ for (const colorScheme of ['light', 'dark']) {
   assert.deepEqual(await mine(), { chips: ['trips slant 2 Gun Trips', 'Doubles Curl Gun Doubles'], part: 'Your version of Smash: the H on a slant. Keep it, with a name, in My plays. Save as my play', saved: [{ name: 'trips slant 2', formation: 'trips', play: 'smash', motion: 'none', hot: { H: 'post' } }, { name: 'Doubles Curl', formation: 'doubles', play: 'verts', motion: 'none', hot: { Y: 'curl' } }] });
   assert.equal(await p.textContent('#caption'), 'Trips Slant is out of My plays. It\'s still your call until you change it.');
   assert.equal(await p.evaluate(() => document.activeElement.id), 'mySave');
+  // The name it starts from has as many of the changed routes as fit whole in 30 characters.
+  await p.getByRole('radio', { name: 'Four Verticals' }).click();
+  await route('Y', 'curl');
+  await route('H', 'slant');
+  await p.click('#routesSave');
+  assert.equal(await p.inputValue('#myName'), 'Four Verticals, Y curl');
+  await p.keyboard.press('Escape');
   // What this version can't run is left out: no name, no such formation, a run, no routes changed, a second "Doubles Curl".
   await p.evaluate(() => {
     const s = JSON.parse(localStorage.getItem('chalk-talk.v1'));

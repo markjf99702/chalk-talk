@@ -125,8 +125,12 @@ function mineOf(o) {
   const hot = JSON.stringify(okHot(o.hot, o.formation, o.play));
   return myPlays.find(m => m.formation === o.formation && m.play === o.play && m.motion === motionOf(o) && JSON.stringify(m.hot) === hot) || null;
 }
-// A name to start from: the play and its changed routes, "Smash, H slant, Y curl".
-const nameFor = o => tidyName(`${byId(PLAYS, o.play).name}, ${hotList(o).map(([who, r]) => `${who} ${r === 'check' ? 'check-down' : r}`).join(', ')}`);
+// A name to start from: the play and its changed routes, "Smash, H slant, Y curl", as many of them as fit whole.
+function nameFor(o) {
+  let s = byId(PLAYS, o.play).name;
+  for (const [who, r] of hotList(o)) { const t = `${s}, ${who} ${r === 'check' ? 'check-down' : r}`; if (t.length > MY_NAME) break; s = t; }
+  return s;
+}
 // Keeps the play in your call as one of yours, under the name typed (or the one it started from); a name that's taken
 // gets a number. The call itself doesn't change.
 function saveMine(text) {
