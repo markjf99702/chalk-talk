@@ -1650,7 +1650,9 @@ test('the drills\' notes say what the board shows', () => {
   // 18-24%. Against I-Form's runs on 3rd & 8, the 4-3 Over in Cover 1 with a blitz held 92-95% short and every defense
   // 85%; Cover 3 rushing four from the 4-3 and the 3-4, 68-81% (since a deep safety fits the run from depth, every
   // defense 83-84% and Cover 3 rushing four 57-67%: its lone free safety is the man a back past the linebackers has to
-  // beat, and he now meets him farther down the field). On 3rd & 2 every defense held 36% short, and Cover 0
+  // beat, and he now meets him farther down the field. With each of the 36 calls run 200 times from start seed 8800,
+  // they held 82.5% short on average, from 85.8%, and half of them 83% or more, so the note says about four in five,
+  // not nine in ten). On 3rd & 2 every defense held 36% short, and Cover 0
   // from the 4-3 or the 3-4 56-68%; on 4th & 1, 21%, Cover 0 from the 4-3 47-53% (the most of any call), and the 4-3
   // Over with two safeties deep and four rushing 1-4%.
   const on = (sit, coverage, pressure) => {
@@ -1719,7 +1721,7 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(drill('run').long && drill('run').short, 'the run drill has no note for third down');
   const long1 = held('3and8', 'over', 'c1', 'blitz'), longAll = everyone('3and8'), long3 = ['over', '34'].map(fr => held('3and8', fr, 'c3', 'four'));
   assert.ok(long1 > 0.88, `"the 4-3 Over with Cover 1 and a blitz more than nine in ten": ${long1.toFixed(2)}`);
-  assert.ok(longAll > 0.78 && longAll < 0.93, `"most calls hold it short about nine times in ten": every defense ${longAll.toFixed(2)}`);
+  assert.ok(longAll > 0.72 && longAll < 0.88, `"most calls hold it short about four times in five": every defense ${longAll.toFixed(2)}`);
   assert.ok(long3.every(x => x > 0.5 && x < 0.75 && x < long1), `"Cover 3 rushing four lets the most through, about one in three": ${long3.map(x => x.toFixed(2))}`);
   const shortAll = everyone('3and2'), short0 = ['over', 'under', '34'].map(fr => held('3and2', fr, 'c0', 'blitz'));
   assert.ok(shortAll > 0.28 && shortAll < 0.45, `"about one run in three is held short on 3rd & 2": ${shortAll.toFixed(2)}`);
