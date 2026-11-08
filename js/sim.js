@@ -9,7 +9,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLI
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
 // sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
 // differently, and says what to set this to.
-export const SIM_VERSION = 2;
+export const SIM_VERSION = 3;
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -1492,8 +1492,25 @@ function pursue(S, d, c) {
   // Deep defenders keep the ball in front of them until they're close.
   if (d.y > c.y + 4 && dd > 6) d.ty = Math.max(d.ty, c.y + 2);
   d.ts = d.top;
+  // On a run, a safety with a deep zone is the last line, and fits it from depth (see FIT_DEPTH).
+  if (S.play.type === 'run' && !S.caught && d.cls === 's' && d.job.z?.deep && d.y > c.y + 0.5) {
+    if (dd > FIT_RANGE) d.ty = Math.max(d.ty, c.y + FIT_DEPTH);
+    else d.ts = d.top * FIT_PACE;
+  }
   d.want = c;
 }
+
+// The last line on a run: a safety with a deep zone (the free safety in Cover 1 and Cover 3, both safeties in Cover 2
+// and Cover 4) comes down to the ball carrier but keeps him in front, FIT_DEPTH yards beyond him, until he's within
+// FIT_RANGE of him, then closes at FIT_PACE of his speed, under control, to make the tackle. He used to run flat out at
+// the back from the handoff and meet him 4 to 6 yards past the line: the safeties made about half the tackles on runs
+// of 4 to 6 yards and 60% on runs of 7 to 9, where NFL safeties made 18% and 32% in the 2023 regular season (designed
+// runs, the tackler's position from nflverse's play-by-play and participation files), so a back past the linebackers
+// was nearly always down short of 10 yards: one run in 22 got there, against one in 10 in the NFL. And on a cutback
+// he was still coming down hard when the back got to him, about 5 yards past the line, and was run around or missed,
+// with nobody behind him: Counter from the shotgun against Cover 1 cuts back behind linebackers who've come downhill,
+// and a run of its that got 10 yards went on about 17 more.
+const FIT_DEPTH = 4, FIT_RANGE = 4, FIT_PACE = 0.75;
 
 // The bump in Cover 1 (see buildDefense()): on a run to the outside or off tackle (not a draw, up the middle after he's
 // dropped) the strong safety holds the edge on the side the cornerback left until the ball carrier gets to the line, at
@@ -2103,6 +2120,7 @@ function jobWords(S, pl) {
     : pl.holds ? ' On this run he holds the edge, outside the ball carrier, until the ball carrier gets to the line, then comes up.'
     : j.kind === 'man' && pl.cls === 'cb' && !pl.bump ? ' On this run he stays with his man until the ball carrier gets to the line, then comes up.'
     : pl.bump ? ' On this run he comes up to the ball as soon as he sees it, from outside.'
+    : pl.cls === 's' && j.kind === 'zone' && j.z.deep ? ' On this run he\'s the last line: he comes down to the ball carrier but keeps him in front, and closes under control.'
     : ' On this run he reads it and comes downhill to the ball.';
   // A disguise: how he lines up, and what he does about it at the snap (see the end of buildDefense()).
   const look = !S.disguise ? '' : pl === S.FS ? ' He lines up deep over half the field, as if it were two deep, and rotates to the middle at the snap: the disguise.'

@@ -387,7 +387,7 @@ export const DRILLS = [
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
     brief: 'They run from I-Form, every snap: any of the five runs, to either side.',
     note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about seven runs in ten here. The 4-3 Over in Cover 0 stops about as many, but with nobody deep, the runs that get through go a long way.',
-    long: 'On 3rd & 8 a run has to go all 8 yards, and against I-Form most calls hold it short about nine times in ten: the 4-3 Over with Cover 1 and a blitz more than nine in ten. Cover 3 rushing four lets the most through, about one in four.',
+    long: 'On 3rd & 8 a run has to go all 8 yards, and against I-Form most calls hold it short about nine times in ten: the 4-3 Over with Cover 1 and a blitz more than nine in ten. Cover 3 rushing four lets the most through, about one in three.',
     short: 'On a short third or fourth down a run needs only a yard or two, and against I-Form it usually gets it: about one run in three is held short on 3rd & 2, one in five on 4th & 1. Cover 0\'s all-out blitz holds about three in five short on 3rd & 2 and, from the 4-3, about half on 4th & 1, as many as any call here. With two safeties deep and four rushing, the 4-3 Over almost never stops it on 4th & 1.',
   },
 ];

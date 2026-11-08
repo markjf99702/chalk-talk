@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'f77d81bd78d6' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1482,6 +1482,8 @@ test('a back who breaks a tackle past the line loses a step, so getting past the
   // (NFL 2023 designed runs: 6.8; nflverse play-by-play.) Since Counter's linebackers stop stepping with the fake at the
   // handoff from the shotgun, 8.8 here, and 9.6-10.6 from start seeds 1, 100000 and 7777777 (7.7-9.2 before): Counter
   // from the shotgun against Cover 1 cuts back behind linebackers who've come downhill, and goes a long way more often.
+  // Since a deep safety keeps the ball carrier in front of him and closes under control (FIT_DEPTH in js/sim.js), more
+  // runs get 10 yards, and they go on 9.0 here, 7.3-9.0 from those seeds.
   let seed = 4400;
   const long = [];
   for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (const coverage of ['c1', 'c3']) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 8; k++) {
@@ -1494,7 +1496,7 @@ test('a back who breaks a tackle past the line loses a step, so getting past the
   assert.ok(more < 11, `against Cover 1 and Cover 3, ${long.length} runs of 10 yards or more went on for ${more.toFixed(1)} more on average`);
   // The step he loses: for half a second after a tackle he breaks 3 yards past the line, he runs at 70% of his speed.
   let seen = 0;
-  for (let s = 1; s < 300 && seen < 5; s++) {
+  for (let s = 1; s < 3000 && seen < 5; s++) {
     const call = { formation: 'iform', play: 'oz', front: 'over', coverage: 'c3', pressure: 'four', flip: s % 2 === 1 };
     const r = simulate(call, s), c = r.result.carrier, top = prepare(call, s).P[c].top;
     const at = t => r.frames.find(f => f.t >= t - 1e-6);
@@ -1506,6 +1508,53 @@ test('a back who breaks a tackle past the line loses a step, so getting past the
     assert.ok(speed < 0.75 * top, `seed ${s}: ${speed.toFixed(1)} yards a second after a broken tackle, his best is ${top.toFixed(1)}`);
   }
   assert.ok(seen, 'no broken tackle downfield to look at');
+});
+
+test('on a run a deep safety is the last line: he keeps the ball carrier in front of him and closes under control', () => {
+  // A safety with a deep zone (the free safety in Cover 1 and Cover 3, both safeties in Cover 2 and Cover 4) used to run
+  // flat out at the back from the handoff, and met him 4 to 6 yards past the line: over these snaps, once he'd been
+  // within 4 yards in front of the back for a fifth of a second and was within 3, he was going at more than 0.82 of his
+  // top speed in 68% of the frames (half of them at 0.95 or more). Now he keeps 4 yards beyond the back until he's
+  // within 4 (FIT_DEPTH, FIT_RANGE in js/sim.js) and closes at three quarters of his speed: 2% of those frames, from
+  // bumps. So more runs get past 10 yards: 27 of these 768 before, 50 now (NFL 2023 regular season: one designed run in
+  // ten, from nflverse's play-by-play).
+  let seed = 7000, n = 0, fast = 0, runs = 0, ten = 0;
+  for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (const flip of [false, true]) {
+    if (cantCall(fm.id, play)) continue;
+    const call = { formation: fm.id, play, front: fr.id, coverage, pressure: 'four', flip };
+    const r = simulate(call, seed), S = prepare(call, seed++);
+    const c = r.result.carrier, hand = r.events.find(e => e.kind === 'hand');
+    runs++; if (r.result.yards >= 10) ten++;
+    const F = r.frames.filter(f => f.t >= hand.t && f.t <= r.result.t), at = (f, i) => ({ x: f.xy[2 * i], y: f.xy[2 * i + 1] });
+    for (const d of S.P.filter(p => p.cls === 's' && p.job.z?.deep)) for (let k = 4; k < F.length - 1; k++) {
+      if ([k - 4, k, k + 1].some(j => F[j].eng[d.i] >= 0)) continue; // (not while somebody's blocking him)
+      const D = at(F[k], d.i), C = at(F[k], c), Dp = at(F[k - 4], d.i), Cp = at(F[k - 4], c), D1 = at(F[k + 1], d.i);
+      if (!(D.y > C.y + 0.5 && Dp.y > Cp.y + 0.5 && Math.hypot(D.x - C.x, D.y - C.y) < 3 && Math.hypot(Dp.x - Cp.x, Dp.y - Cp.y) < 4)) continue;
+      n++; if (Math.hypot(D1.x - D.x, D1.y - D.y) / (F[k + 1].t - F[k].t) > 0.82 * d.top) fast++;
+    }
+  }
+  assert.ok(n > 300, `${n} frames of a deep safety closing on the ball carrier`);
+  assert.ok(fast / n < 0.1, `a deep safety closing on the ball carrier was going flat out in ${fast} frames of ${n}`);
+  assert.ok(ten > 38, `${ten} runs of ${runs} got 10 yards`);
+});
+
+test('Counter from the shotgun against Cover 1: a run that gets 10 yards doesn\'t go on as far, and it gains 4 yards as often', () => {
+  // The back cuts back behind linebackers who've come downhill (their step with his fake ends at the handoff from the
+  // shotgun), and the free safety met him about 5 yards past the line still coming down hard, and was run around or
+  // missed, with nobody behind him. From this start seed, of 1,024 snaps 55 reached 10 yards and went on 14.7 more
+  // (16.1-17.3 from start seeds 1, 100000 and 55555); since the deep safety keeps the ball in front of him and closes
+  // under control, 91 reach 10 and go on 11.6 more (11.6-14.3). It gains 4 yards as often: 45.9% of the time, now 46.2%
+  // (41.9-46.5% from the other seeds before, 42.4-46.7% now).
+  let seed = 3300, n = 0, ok = 0;
+  const long = [];
+  for (const fm of FORMATIONS) for (const fr of FRONTS) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 32; k++) {
+    if (fm.under || cantCall(fm.id, 'counter')) continue;
+    const y = simulate({ formation: fm.id, play: 'counter', front: fr.id, coverage: 'c1', pressure, flip: k % 2 === 1 }, seed++).result.yards;
+    n++; if (Math.round(y) >= 4) ok++; if (y >= 10) long.push(y - 10);
+  }
+  const more = long.reduce((a, b) => a + b, 0) / long.length;
+  assert.ok(long.length > 40 && more < 13, `${long.length} runs of ${n} got 10 yards and went on ${more.toFixed(1)} more on average`);
+  assert.ok(ok / n > 0.42 && ok / n < 0.5, `it gained 4 yards ${(100 * ok / n).toFixed(1)}% of the time`);
 });
 
 test('a deep catch is run down from behind: no long run after every catch 15 yards downfield', () => {
@@ -1599,7 +1648,9 @@ test('the drills\' notes say what the board shows', () => {
   // runs it), the top two among them, and the Draw last, 4-10%;
   // on 4th & 1 Inside Zone 81-90%, Outside Zone 82-83% and the screen 75-85%, the top two among them, and the Draw last,
   // 18-24%. Against I-Form's runs on 3rd & 8, the 4-3 Over in Cover 1 with a blitz held 92-95% short and every defense
-  // 85%; Cover 3 rushing four from the 4-3 and the 3-4, 68-81%. On 3rd & 2 every defense held 36% short, and Cover 0
+  // 85%; Cover 3 rushing four from the 4-3 and the 3-4, 68-81% (since a deep safety fits the run from depth, every
+  // defense 83-84% and Cover 3 rushing four 57-67%: its lone free safety is the man a back past the linebackers has to
+  // beat, and he now meets him farther down the field). On 3rd & 2 every defense held 36% short, and Cover 0
   // from the 4-3 or the 3-4 56-68%; on 4th & 1, 21%, Cover 0 from the 4-3 47-53% (the most of any call), and the 4-3
   // Over with two safeties deep and four rushing 1-4%.
   const on = (sit, coverage, pressure) => {
@@ -1669,7 +1720,7 @@ test('the drills\' notes say what the board shows', () => {
   const long1 = held('3and8', 'over', 'c1', 'blitz'), longAll = everyone('3and8'), long3 = ['over', '34'].map(fr => held('3and8', fr, 'c3', 'four'));
   assert.ok(long1 > 0.88, `"the 4-3 Over with Cover 1 and a blitz more than nine in ten": ${long1.toFixed(2)}`);
   assert.ok(longAll > 0.78 && longAll < 0.93, `"most calls hold it short about nine times in ten": every defense ${longAll.toFixed(2)}`);
-  assert.ok(long3.every(x => x > 0.6 && x < 0.86 && x < long1), `"Cover 3 rushing four lets the most through, about one in four": ${long3.map(x => x.toFixed(2))}`);
+  assert.ok(long3.every(x => x > 0.5 && x < 0.75 && x < long1), `"Cover 3 rushing four lets the most through, about one in three": ${long3.map(x => x.toFixed(2))}`);
   const shortAll = everyone('3and2'), short0 = ['over', 'under', '34'].map(fr => held('3and2', fr, 'c0', 'blitz'));
   assert.ok(shortAll > 0.28 && shortAll < 0.45, `"about one run in three is held short on 3rd & 2": ${shortAll.toFixed(2)}`);
   assert.ok(short0.every(x => x > 0.5 && x < 0.75), `"Cover 0 holds about three in five short on 3rd & 2": ${short0.map(x => x.toFixed(2))}`);
@@ -1703,7 +1754,9 @@ test('over many snaps the numbers look like football', () => {
   // since a tackle a back breaks down the field costs him a step, 3.74-4.58 (this one 4.30), the passes as before. With
   // a man kept in to block taking his own man in man coverage, and the quarterback counting a rusher with a blocker set
   // up in his path as blocked, the twelve give 64.5-71.1% complete (mean 67.7%, down from 68.3%; six above 68%) and sacks
-  // on 2.0-4.1% of dropbacks; this one 67.9% (from 67.7%), 3.5% and 4.36.
+  // on 2.0-4.1% of dropbacks; this one 67.9% (from 67.7%), 3.5% and 4.36. Since a deep safety fits the run from depth
+  // (version 3), 4.17-4.97 yards a carry (mean 4.52, from 4.27; this one 4.74), with 5.6-9.1% of runs gaining 10 yards
+  // or more (from 3.6-6.2%), and the passes as before.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1734,7 +1787,8 @@ test('the README\'s matchups', () => {
   // crossers 10.9-12.2 yards against Cover 1 and 4.2-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
   // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read, the run-down
   // from behind and a tight end on the nickel back (version 2), 50-52% and 25-28%; with Counter among the runs, 52-54%
-  // and 26-27%. A change to the balance that undoes one of these has to change the README with it.
+  // and 26-27%; with a deep safety fitting the run from depth (version 3), 55-57% and 22-26%. A change to the balance
+  // that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const cell = (play, coverage, each) => {
