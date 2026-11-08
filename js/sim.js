@@ -1293,6 +1293,9 @@ function fake(S, pl) {
 const COUNTER_STEP = 0.2; // seconds the back's step away from the play takes, on Counter
 const COUNTER_READ = 0.9; // and until when the linebackers go with it
 const COUNTER_WRAP = 0.45; // and the pulling tackle's step back, to get round behind the guard
+const COUNTER_KICK = 1.2; // how far behind the line the guard pulls to kick out the end: at the heels of the line
+// (when the man he kicks out is a linebacker off the line, the Sam outside a tight end: see runBlock())
+const kickFlat = (S, j) => S.play.scheme === 'counter' && j.scheme === 'kick' && j.target?.y0 >= 2;
 // From the shotgun their step ends at the handoff. The back has the ball sooner there, and then the linebackers wait to
 // see who has it (see gunRead()): with the step going on after the handoff as well, the two delays added up, and
 // Counter from the shotgun gained 4 yards on 47-72% of its snaps, more than any other run from there.
@@ -1363,9 +1366,17 @@ function runBlock(S, pl) {
   }
   // The pulling guard: step back and run along the line. (Counter's pulling tackle goes a step deeper, to get round
   // behind the guard, then runs along the line to the hole, inside the guard's kick-out, and turns up through it.)
+  // Counter's guard, when the man he kicks out is a linebacker off the line (the Sam, outside a tight end), pulls flat,
+  // at the heels of the line (COUNTER_KICK), to get up through it to him before the back gets there. 1.8 yards deep,
+  // from Singleback against the 4-3 Over he came up behind the play-side tackle blocking down and was caught on his
+  // back: he got to the Sam on 8 snaps in 48, and Counter there gained 4 yards about one time in five. From I-Form the
+  // fullback, crossing his path, bumped him up past the tackle, and the back, half a yard deeper and round the
+  // fullback, got to the line a fifth of a second later, with the Sam still inside waiting for him: 41 in 48. Now from
+  // Singleback 19 in 48, and Counter there gains 4 yards one time in three. (When his man is the end on the line, from
+  // Gun Ace, Doubles and Trips, he gets to him behind the line either way: there, and on Power, he pulls as before.)
   const wrap = S.play.scheme === 'counter' && j.scheme === 'pull';
   if (j.pull && t < (wrap ? COUNTER_WRAP : 0.55)) {
-    pl.tx = pl.x0 + p * 4; pl.ty = wrap ? -2.6 : -1.8; pl.ts = pl.top * 0.85; return;
+    pl.tx = pl.x0 + p * 4; pl.ty = wrap ? -2.6 : kickFlat(S, j) ? -COUNTER_KICK : -1.8; pl.ts = pl.top * 0.85; return;
   }
   if (!tgt) { // nobody yet: a lead blocker goes to the hole, a lineman to his play-side gap, each looking for work
     const hole = S.aimX - p * 0.3;
@@ -2151,8 +2162,8 @@ function overlay(S) {
     else if (j.kind === 'block' || j.kind === 'stalk') {
       const tg = j.target;
       if (j.pull && j.scheme === 'kick' && tg) { // along the line behind it, then out at the end man from inside him
-        const kx = tg.x - S.p * 0.8;
-        out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: -1.8 }, { x: kx, y: -1.6 }, { x: kx + S.p * 0.3, y: tg.y - 0.5 }], to: tg.i });
+        const kx = tg.x - S.p * 0.8, ky = kickFlat(S, j) ? -COUNTER_KICK : -1.8;
+        out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: ky }, { x: kx, y: ky + 0.2 }, { x: kx + S.p * 0.3, y: tg.y - 0.5 }], to: tg.i });
       } else if (j.pull) out.push({ team: 'O', kind: 'pull', i: pl.i, pts: [{ x: pl.x0, y: pl.y0 }, { x: pl.x0, y: -1.8 }, { x: S.aimX, y: -1.6 }, { x: S.aimX, y: 1.5 }], to: tg ? tg.i : -1 });
       else out.push({ team: 'O', kind: 'block', i: pl.i, to: tg ? tg.i : -1, dir: j.scheme });
     } else if (j.kind === 'pro' || j.kind === 'screenOL' || j.kind === 'fake') out.push({ team: 'O', kind: 'pro', i: pl.i, set: pl.set, to: j.target ? j.target.i : -1, screen: j.kind === 'screenOL' ? j.at : null });

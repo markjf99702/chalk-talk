@@ -120,7 +120,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'f77d81bd78d6' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -360,7 +360,8 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
   // him: 3.2-3.8, 44-51% and 10-14%; against the 3-4, 7-10% losing yards, from 49-53%. With Singleback's pulling
   // tackle leading through the hole rather than chasing the Mike: 3.4-4.0, 48-56% and 7-10%, and from Singleback 44-50%
   // gaining 4, from 17-25%. From 424242 and 55555 as well, 7-10% losing yards: held under 15%, so the note's "one time
-  // in ten" can't drift to one in five unseen.)
+  // in ten" can't drift to one in five unseen. With the guard pulling flat when the man he kicks out is the Sam, 3.7-4.1
+  // yards a carry, 48-56% gaining 4 and 7-10% losing yards, and from Singleback 53-56% gaining 4, from 44-53%.)
   let n = 0, y = 0, ok = 0, lost = 0, n34 = 0, lost34 = 0, n1 = 0, ok1 = 0;
   for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'counter'))) for (const front of ['over', 'nickel', '34']) for (const coverage of ['c1', 'c2', 'c3']) for (let k = 0; k < 4; k++) {
     const res = simulate({ formation: fm.id, play: 'counter', front, coverage, pressure: k % 2 ? 'four' : 'blitz', flip: k % 2 === 1 }, 1300 + n++).result;
@@ -371,6 +372,32 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
   assert.ok(y / n > 2.5 && y / n < 5 && ok / n > 0.35 && ok / n < 0.6 && lost / n > 0.06 && lost / n < 0.15, `Counter: ${(y / n).toFixed(1)} yards a carry, ${Math.round(100 * ok / n)}% gaining 4, ${Math.round(100 * lost / n)}% losing yards`);
   assert.ok(lost34 / n34 < 0.2, `against the 3-4 Counter loses yards ${Math.round(100 * lost34 / n34)}% of the time`);
   assert.ok(ok1 / n1 > 0.33, `from Singleback Counter gains 4 yards ${Math.round(100 * ok1 / n1)}% of the time`);
+});
+
+test('Counter from Singleback against the 4-3 Over: the guard pulls at the heels of the line and gets up through it to the Sam', () => {
+  // The man he kicks out there is the Sam, a linebacker off the line outside the tight end. Pulling 1.8 yards deep he
+  // came up behind the play-side tackle blocking down and was caught on his back, with the back already at the line:
+  // from this start seed and 1, 100000 and 7777 he got to the Sam on 11-15% of these snaps, and Counter gained 4 yards
+  // 18-24% of the time. Pulling flat, 33-36%, and 29-31% gaining 4: at least one time in four (Mark's call).
+  let n = 0, reach = 0, ok = 0, seed = 2600;
+  for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (const pressure of ['four', 'blitz']) for (let k = 0; k < 10; k++) {
+    const call = { formation: 'single', play: 'counter', front: 'over', coverage, pressure, flip: k % 2 === 1 };
+    const S = prepare(call, seed), r = simulate(call, seed++), g = S.O.find(o => o.job.scheme === 'kick');
+    assert.equal(g.job.target?.label, 'S', 'the guard kicks out the Sam');
+    if (!k) for (const f of r.frames) if (f.t > 0 && f.t <= 0.55) assert.ok(f.xy[2 * g.i + 1] > -1.3, `${coverage} ${pressure}: the guard pulls ${(-f.xy[2 * g.i + 1]).toFixed(2)} yards behind the line`);
+    n++;
+    if (r.frames.some(f => f.eng[g.i] === g.job.target.i && f.t <= r.result.t)) reach++;
+    if (Math.round(r.result.yards) >= 4) ok++;
+  }
+  assert.ok(reach / n > 0.25, `the guard got to the Sam on ${reach} snaps of ${n}`);
+  assert.ok(ok / n > 0.25, `Counter gained 4 yards on ${ok} snaps of ${n}`);
+  // Power's guard, and Counter's when his man is the end on the line (from Gun Doubles), pull as before, and are drawn so.
+  for (const [fm, play] of [['single', 'power'], ['doubles', 'counter']]) {
+    const S = prepare({ formation: fm, play, front: 'over', coverage: 'c3', pressure: 'four' }, 5), g = S.O.find(o => o.job.pull);
+    assert.equal(S.overlay.find(o => o.kind === 'pull' && o.i === g.i).pts[1].y, -1.8, `${fm} ${play}: the guard's pull is drawn 1.8 yards deep`);
+  }
+  const C = prepare({ formation: 'single', play: 'counter', front: 'over', coverage: 'c3', pressure: 'four' }, 5), cg = C.O.find(o => o.job.scheme === 'kick');
+  assert.equal(C.overlay.find(o => o.kind === 'pull' && o.i === cg.i).pts[1].y, -1.2, 'Singleback Counter: the guard\'s pull is drawn at the heels of the line');
 });
 
 test('the line is named left to right with the strength on either side, and on Power the back-side guard pulls', () => {
