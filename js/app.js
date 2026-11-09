@@ -1407,7 +1407,8 @@ function renderRead() {
   const picks = $('readPicks');
   picks.textContent = '';
   for (const p of R.picks) {
-    const li = el('li'), b = el('button', 'chip', p.label), rate = el('span', 'read-rate', p.rateText);
+    // (on defense the two numbers go on a line of their own under the chip, whatever its length)
+    const li = el('li'), b = el('button', 'chip', p.label), rate = el('span', R.side === 'D' ? 'read-rate read-rate-own' : 'read-rate', p.rateText);
     b.type = 'button';
     b.setAttribute('aria-pressed', String(p.current));
     b.setAttribute('aria-describedby', `readWhy${R.picks.indexOf(p)}`);

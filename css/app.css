@@ -496,6 +496,7 @@ button:disabled { cursor: default; }
 .read-picks li { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 8px; }
 .read-picks .chip { font-size: 14px; padding: 5px 11px; }
 .read-rate { font-size: 14px; font-weight: 600; }
+.read-rate-own { flex: 1 1 100%; }
 .read-why { flex: 1 1 100%; margin: 2px 0 0; font-size: 14px; color: var(--muted); }
 .read-more { margin-top: 10px; }
 .read-more > summary { cursor: pointer; font-size: 14px; font-weight: 600; padding: 4px 0; }
