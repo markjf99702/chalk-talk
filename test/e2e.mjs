@@ -3775,6 +3775,9 @@ for (const [width, height, stuck] of [[390, 844, true], [375, 667, true], [700, 
   R = await read();
   assert.equal(R.side, 'D');
   assert.match(R.lede, /personnel, strength to your (left|right)/);
+  // Each pick says how often it holds his plays short, and how often one still goes 15 yards or more against it.
+  assert.match(R.picksTitle, /and how often he goes 15 yards or more against it:$/);
+  assert.match(await p.textContent('#readPicks li:first-child .read-rate'), /; 15 yards or more (almost never|about \d in 10)$/);
   const d = R.picks[0];
   await p.click(`#readPicks button[data-pick="${d.label}"]`);
   assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), d.set);

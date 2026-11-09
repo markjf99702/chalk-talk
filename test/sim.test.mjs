@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS, needed } from '../js/playbook.js';
 import { rng } from '../js/rng.js';
-import { coachRead, lookOf, lookAlikes, rankPlays, rankDefenses, rate } from '../js/read.js';
+import { coachRead, lookOf, lookAlikes, rankPlays, rankDefenses, rate, lean, playMix, motionShare } from '../js/read.js';
 import { TABLE } from '../js/read-table.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -2017,10 +2017,46 @@ test('the coach\'s read picks by the numbers: the top pick does at least as well
     // Calling the defense: the best call, then the best of each other coverage and rush, so the three aren't one call
     // from three fronts.
     const D = coachRead({ side: 'D', formation: fm.id, flip: false, sit: sit.id, call: {} }), all = rankDefenses(fm.id, sit);
-    for (let n = 1; n < all.length; n++) assert.ok(all[n - 1].rate >= all[n].rate);
+    for (let n = 1; n < all.length; n++) assert.ok(all[n - 1].score >= all[n].score);
     const kind = code => code.split('.').slice(1, 3).join(), best = [];
     for (const x of all) if (best.length < 3 && !best.some(y => kind(y.code) === kind(x.code))) best.push(x);
     assert.deepEqual(D.picks.map(p => `${p.set.front}.${p.set.coverage}.${p.set.pressure}.M.0`), best.map(x => x.code));
     assert.equal(D.picks[0].rate, all[0].rate);
   }
+});
+
+test('calling the defense, the read counts the long plays a call gives up against it', () => {
+  // A call ranks by how often it holds his plays short of a success, less how often one goes 15 yards or more against
+  // it, each over the plays he runs from that formation and as often as he sends a man in motion, read here straight
+  // from the table. By holding plays short alone, Cover 0 (nobody deep) came first for most formations and downs: it
+  // stops the most plays short and gives up the most long ones.
+  const val = ch => TABLE.alpha.indexOf(ch) / (TABLE.alpha.length - 1), col = sit => [1, 2, 4, 8].indexOf(needed(sit));
+  let zeroHeld = 0, zeroNow = 0, moved = 0;
+  for (const fm of FORMATIONS) for (const sit of SITUATIONS) {
+    const L = lean(sit), plays = playMix(fm.id, L), m = motionShare(fm.id, L);
+    const calls = TABLE.base.map((call, b) => {
+      let held = 0, long = 0;
+      for (const [id, p] of plays) {
+        const k = TABLE.plays[fm.id].indexOf(id), at = (k * TABLE.base.length + b) * 2 + (needed(sit) <= 2 ? 0 : 1);
+        const still = val(TABLE.cells[fm.id][(k * TABLE.calls.length + call) * 4 + col(sit)]), lstill = val(TABLE.long[fm.id][at]);
+        const moving = m ? val(TABLE.motion[fm.id][(k * TABLE.base.length + b) * 4 + col(sit)]) : 0, lmoving = m ? val(TABLE.longMotion[fm.id][at]) : 0;
+        held += p * ((1 - m) * (1 - still) + m * (1 - moving));
+        long += p * ((1 - m) * lstill + m * lmoving);
+      }
+      return { code: TABLE.calls[call], held, long };
+    });
+    const top = (f) => calls.reduce((a, x) => (f(x) > f(a) ? x : a));
+    const byHeld = top(x => x.held), byBoth = top(x => x.held - x.long);
+    const D = coachRead({ side: 'D', formation: fm.id, flip: false, sit: sit.id, call: {} });
+    const why = `${fm.name}, ${sit.name}`;
+    assert.equal(`${D.picks[0].set.front}.${D.picks[0].set.coverage}.${D.picks[0].set.pressure}.M.0`, byBoth.code, `${why}: the first pick isn't the call that holds his plays short most, less his long plays`);
+    assert.ok(Math.abs(D.picks[0].rate - byBoth.held) < 1e-9 && Math.abs(D.picks[0].long - byBoth.long) < 1e-9, why);
+    assert.match(D.picks[0].rateText, /^(about \d times? in 10|nearly every time|almost never); 15 yards or more (almost never|about \d in 10)$/, why);
+    assert.match(D.picksTitle, /and how often he goes 15 yards or more against it:$/, why);
+    if (byHeld.code.includes('.c0.')) zeroHeld++;
+    if (byBoth.code.includes('.c0.')) zeroNow++;
+    if (byHeld.code !== byBoth.code) moved++;
+  }
+  assert.ok(zeroNow < zeroHeld, `Cover 0 first for ${zeroNow} formations and downs, and ${zeroHeld} by holding plays short alone`);
+  assert.ok(moved > 0, 'counting long plays moved no first pick');
 });

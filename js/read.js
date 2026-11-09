@@ -135,7 +135,7 @@ const unkey = key => { const [deep, corners, box, walked] = key.split('|'); retu
 
 // The table is for one version of the simulator: with another, the read still says what they're showing, but makes no
 // picks (test/sim.test.mjs fails until the table is made again).
-export const fresh = () => !!TABLE && TABLE.sim === SIM_VERSION;
+export const fresh = () => !!TABLE && TABLE.sim === SIM_VERSION && !!TABLE.long;
 const VALUE = TABLE ? Object.fromEntries([...TABLE.alpha].map((ch, k) => [ch, k / (TABLE.alpha.length - 1)])) : {};
 const NEEDS = [1, 2, 4, 8]; // the yards to gain, by the table's four numbers in a cell
 const column = sit => NEEDS.indexOf(needed(sit));
@@ -147,6 +147,12 @@ export function rate(formation, play, call, sit) {
 function rateMoving(formation, play, b, sit) {
   const k = TABLE.plays[formation].indexOf(play);
   return VALUE[TABLE.motion[formation][(k * TABLE.base.length + b) * 4 + column(sit)]];
+}
+// How often a play from a formation goes 15 yards or more against the call in TABLE.base (b), with a man in motion or
+// not: the table has it for a short third or fourth down, and for any other.
+export function longRate(formation, play, b, sit, moving = false) {
+  const k = TABLE.plays[formation].indexOf(play);
+  return VALUE[(moving ? TABLE.longMotion : TABLE.long)[formation][(k * TABLE.base.length + b) * 2 + (needed(sit) <= 2 ? 0 : 1)]];
 }
 
 // The calls he could have made that look the way this one does, each with its share of how often he'd make one of them.
@@ -163,13 +169,17 @@ export function rankPlays(formation, alike, sit) {
     .sort((a, b) => b.rate - a.rate);
 }
 // Each call a defense can pick in its chips (TABLE.base), by how often it stops his plays from a formation short of a
-// success, weighed by how often he runs each play and sends a man in motion first: best first.
+// success (rate), less how often one of them goes 15 yards or more against it (long), each weighed by how often he runs
+// each play and sends a man in motion first: best first. (By the first alone, Cover 0 came first for 27 of the 35
+// formations and downs: it stops the most plays short, and gives up the most long ones. Counting them, 24.)
 export function rankDefenses(formation, sit) {
   const L = lean(sit), plays = playMix(formation, L), m = motionShare(formation, L);
-  return TABLE.base.map((call, b) => ({
-    call, code: TABLE.calls[call],
-    rate: plays.reduce((a, [id, p]) => a + p * ((1 - m) * (1 - rate(formation, id, call, sit)) + (m ? m * (1 - rateMoving(formation, id, b, sit)) : 0)), 0),
-  })).sort((a, b) => b.rate - a.rate);
+  const mix = (still, moving) => plays.reduce((a, [id, p]) => a + p * ((1 - m) * still(id) + (m ? m * moving(id) : 0)), 0);
+  return TABLE.base.map((call, b) => {
+    const held = mix(id => 1 - rate(formation, id, call, sit), id => 1 - rateMoving(formation, id, b, sit));
+    const long = mix(id => longRate(formation, id, b, sit), id => longRate(formation, id, b, sit, true));
+    return { call, code: TABLE.calls[call], rate: held, long, score: held - long };
+  }).sort((a, b) => b.score - a.score);
 }
 
 // ---------------------------------------------------------------- the words
@@ -288,7 +298,8 @@ function protection(v) {
 // and your own call (to mark the pick it is, if it is one).
 // The read: { side, key, lede, likelyShort, likely (null while the quiz is on), showing, tips, picksTitle, picks: [{
 // label, set, rate, rateText, reason, current }], numbers }: lede and likelyShort are the read in a line each, likely
-// and showing in full; set is the call a pick's chip sets, rate how often it's a success against the look.
+// and showing in full; set is the call a pick's chip sets, rate how often it's a success against the look (calling the
+// defense, how often the call holds his plays short of one, and long how often one goes 15 yards or more against it).
 export function coachRead(v) {
   return v.side === 'D' ? defenseRead(v) : offenseRead(v);
 }
@@ -368,14 +379,14 @@ function defenseRead(v) {
   const likely = [run ? `A run ${times(run)}: ${or(runs)}, about equally. Otherwise one of his ${word(passes)} pass plays.` : `A pass: one of his ${word(passes)} pass plays, about equally.`];
   const lede = `${fm.name}, ${fm.personnel} personnel, strength to your ${v.flip ? 'right' : 'left'}: ${!run ? 'a pass' : tenths(run) > 5 ? 'leaning run' : tenths(run) < 5 ? 'leaning pass' : 'run or pass about evenly'}.`;
   const likelyShort = run ? `A run ${times(run)}, a pass the rest.` : 'A pass: there\'s no back to hand it to.';
-  const read = { side: 'D', key: fm.id, lede, likelyShort, likely, showing, tips: [`Two backs or two tight ends lean run; four receivers lean pass.${fm.motion ? ' Watch for motion: in man coverage the man covering him has to run across with him.' : ''}`], picksTitle: `Worth a look on ${sit.name}, and how often each ${holds(sit)} from here:`, picks: [], numbers: '' };
+  const read = { side: 'D', key: fm.id, lede, likelyShort, likely, showing, tips: [`Two backs or two tight ends lean run; four receivers lean pass.${fm.motion ? ' Watch for motion: in man coverage the man covering him has to run across with him.' : ''}`], picksTitle: `Worth a look on ${sit.name}: how often each ${holds(sit)} from here, and how often he goes 15 yards or more against it:`, picks: [], numbers: '' };
   if (!fresh()) return read;
   // The best calls, each a different coverage or rush from the ones above it (the best front for it), so three picks
   // aren't one call from three fronts.
   const picks = [];
   for (const x of rankDefenses(fm.id, sit)) if (picks.length < 3 && !picks.some(y => y.code.split('.').slice(1, 3).join() === x.code.split('.').slice(1, 3).join())) picks.push(x);
   const leans = !run ? 'a formation that can only throw' : tenths(run) > 5 ? 'a formation that leans run' : tenths(run) < 5 ? 'a formation that leans pass' : 'a formation that runs about half the time';
-  read.picks = picks.map(({ call, code, rate: r }) => {
+  read.picks = picks.map(({ call, code, rate: r, long }) => {
     const [front, coverage, pressure] = code.split('.'), L = unkey(TABLE.looks[fm.id][call]), zero = coverage === 'c0';
     const set = { front, coverage, pressure, blitzer: 'M', disguise: false };
     const c = v.call || {}, current = c.front === front && c.coverage === coverage && (zero || (c.pressure === pressure && (pressure === 'four' || c.blitzer === 'M') && !c.disguise));
@@ -387,7 +398,7 @@ function defenseRead(v) {
     const risk = zero ? ' With nobody deep, though, a play that gets through can go a long way.' : '';
     return {
       label: `${byId(FRONTS, front).name}, ${byId(COVERAGES, coverage).name}${zero ? '' : pressure === 'blitz' ? ', blitz' : ', rush four'}`,
-      set, rate: r, rateText: times(r), current,
+      set, rate: r, long, rateText: `${times(r)}; 15 yards or more ${long < 0.05 ? 'almost never' : `about ${tenths(long)} in 10`}`, current,
       reason: `${cap(word(L.box))} in the box against his ${word(blockers)} blockers, ${DEEP_SHORT[L.deep]}, ${rush}: ${why}.${risk}`,
     };
   });

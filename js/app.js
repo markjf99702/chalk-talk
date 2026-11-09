@@ -1429,7 +1429,7 @@ function renderRead() {
   list('What it probably means', R.likely || (R.side === 'O' && quizOn() ? [R.likelyShort] : null));
   list('Worth knowing', R.tips);
   if (R.numbers) more.append(el('p', 'hint', R.numbers));
-  more.append(el('p', 'hint', `It goes only on what you can see before the snap, never on the call they made. The picks rank plays by the board's own numbers, ${state.side === 'O' ? 'over the calls that look like this one' : 'over the plays he runs from here'}, as often as the other coach makes each one.`));
+  more.append(el('p', 'hint', `It goes only on what you can see before the snap, never on the call they made. ${R.side === 'O' ? 'The picks rank plays by the board\'s own numbers, over the calls that look like this one, as often as the other coach makes each one.' : 'The picks rank calls by the board\'s own numbers, over the plays he runs from here, as often as he runs each one: how often a call holds him short, less how often he goes 15 yards or more against it.'}`));
 }
 $('readOn').addEventListener('change', e => {
   state.read = e.target.checked;
