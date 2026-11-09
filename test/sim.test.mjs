@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS, needed } from '../js/playbook.js';
 import { rng } from '../js/rng.js';
+import { lookOf } from '../js/read.js';
+import { TABLE } from '../js/read-table.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
 // The play-by-play line that ends a play: a tackle, out of bounds, a long run the board stops counting, a sack, an
@@ -1857,4 +1859,66 @@ test('the README\'s matchups', () => {
   }
   const rate = d => box[d][1] / box[d][0];
   assert.ok(rate(2) < rate(0), `runs that succeed: ${(100 * rate(0)).toFixed(0)}% at even numbers in the box (${box[0][0]} runs), ${(100 * rate(2)).toFixed(0)}% with two more defenders than blockers (${box[2][0]})`);
+});
+
+// ---------------------------------------------------------------- the coach's read (js/read.js)
+
+// The board's calls on defense, as the other coach can make them: what tools/read-table.mjs measures.
+const theirCalls = () => {
+  const out = [];
+  for (const f of FRONTS) for (const c of COVERAGES) {
+    if (c.id === 'c0') { out.push(`${f.id}.c0.blitz.M.0`); continue; }
+    for (const d of c.id === 'c1' || c.id === 'c3' ? [0, 1] : [0]) {
+      out.push(`${f.id}.${c.id}.four.M.${d}`);
+      for (const b of BLITZERS) if (!blitzerFor(f.id, c.id, b.id, !!d)) out.push(`${f.id}.${c.id}.blitz.${b.id}.${d}`);
+    }
+  }
+  return out;
+};
+const callOf = code => { const [front, coverage, pressure, blitzer, d] = code.split('.'); return { front, coverage, pressure, blitzer, disguise: d === '1' }; };
+test('the coach\'s read: its numbers were made for this version of the simulator, for every call and every play', () => {
+  assert.equal(TABLE.sim, SIM_VERSION, `the simulator's version is ${SIM_VERSION}, and the coach's read's numbers were made for ${TABLE.sim}: run node tools/read-table.mjs`);
+  assert.deepEqual(TABLE.calls, theirCalls(), 'the other coach\'s calls have changed: run node tools/read-table.mjs');
+  for (const fm of FORMATIONS) {
+    assert.deepEqual(TABLE.plays[fm.id], PLAYS.filter(p => !cantCall(fm.id, p.id)).map(p => p.id), `${fm.name}'s plays have changed: run node tools/read-table.mjs`);
+    assert.equal(TABLE.cells[fm.id].length, TABLE.plays[fm.id].length * TABLE.calls.length * 4);
+    if (fm.motion) assert.equal(TABLE.motion[fm.id].length, TABLE.plays[fm.id].length * TABLE.base.length * 4);
+    // the look each call shows, as the read sees it now
+    TABLE.calls.forEach((code, i) => {
+      const S = prepare({ formation: fm.id, play: TABLE.plays[fm.id][0], flip: false, ...callOf(code) }, 1);
+      assert.equal(lookOf(S.P, callOf(code).front).key, TABLE.looks[fm.id][i], `${fm.name} against ${code}: the look has changed: run node tools/read-table.mjs`);
+    });
+  }
+});
+
+test('the coach\'s read: its numbers are the simulator\'s', () => {
+  // A few cells snapped again with the table's own seeds come out exactly as it has them; with new seeds, within the
+  // noise of 120 and 200 snaps (three and a half standard errors, and the table's rounding to 1/90).
+  const NEED = [1, 2, 4, 8], code = n => TABLE.alpha[Math.round((n / TABLE.snaps) * (TABLE.alpha.length - 1))];
+  const count = (call, seeds) => {
+    const c = [0, 0, 0, 0];
+    for (const seed of seeds) {
+      const r = simulate(call(seed), seed).result, g = Math.sign(r.yards) * Math.round(Math.abs(r.yards));
+      if (r.kind === 'run' || r.kind === 'catch') NEED.forEach((n, j) => { if (g >= n) c[j]++; });
+    }
+    return c;
+  };
+  const per = TABLE.snaps / TABLE.sets.length, mine = TABLE.sets.flatMap(b => Array.from({ length: per }, (_, k) => b + k));
+  const cells = [['iform', 'smash', 'over.c2.four.M.0', '1and10', 'none'], ['trips', 'iz', 'nickel.c1.blitz.W.0', '3and2', 'none'], ['pistol', 'power', '34.c1.blitz.M.0', '1and10', 'motion']];
+  for (const [formation, play, c, sit, mo] of cells) {
+    const i = TABLE.calls.indexOf(c), k = TABLE.plays[formation].indexOf(play);
+    const at = mo === 'motion' ? (k * TABLE.base.length + TABLE.base.indexOf(i)) * 4 : (k * TABLE.calls.length + i) * 4;
+    const have = (mo === 'motion' ? TABLE.motion : TABLE.cells)[formation].slice(at, at + 4);
+    const call = seed => ({ formation, play, flip: false, motion: mo === 'motion' ? (seed % 2 ? 'jet' : 'across') : 'none', hot: {}, ...callOf(c), sit });
+    const got = count(call, mine);
+    // (the 1- and 2-yard numbers for a run from the shotgun are from 3rd & 2: those are the ones this cell checks)
+    const j = sit === '3and2' ? [0, 1] : [2, 3];
+    for (const n of j) assert.equal(have[n], code(got[n]), `${formation} ${play} against ${c}${mo === 'motion' ? ' with motion' : ''}, ${NEED[n]} yards: the table has ${have[n]}, the simulator ${code(got[n])}`);
+    const fresh = Array.from({ length: 200 }, (_, n) => 7e6 + n), again = count(call, fresh);
+    for (const n of j) {
+      const p = TABLE.alpha.indexOf(have[n]) / (TABLE.alpha.length - 1), q = again[n] / 200, pq = (p + q) / 2;
+      const se = Math.sqrt(pq * (1 - pq) * (1 / TABLE.snaps + 1 / 200));
+      assert.ok(Math.abs(p - q) < 3.5 * se + 1 / 90, `${formation} ${play} against ${c}, ${NEED[n]} yards: the table says ${p.toFixed(2)}, 200 new snaps ${q.toFixed(2)}`);
+    }
+  }
 });
