@@ -205,7 +205,7 @@ const RUN_WORDS = {
   iz: 'Inside Zone wants a blocker for every man in the box.',
   oz: 'Outside Zone stretches them sideways, and the back cuts up where it opens.',
   power: 'Power brings a pulling guard to the hole: one more blocker where the ball goes.',
-  counter: 'Counter steps one way and goes the other, behind pulling blockers.',
+  counter: 'Counter steps one way and goes the other, behind the pulling guard.',
   draw: 'The Draw looks like a pass, and hands it off under rushers running up the field.',
 };
 function reasonFor(id, L, blockers, again = false) {
