@@ -10,6 +10,8 @@
 // top play by its numbers. The situation changes how a snap plays out only for a handoff from the shotgun on a short
 // third or fourth down (gunRead() in js/sim.js), so those runs are snapped again on 3rd & 2 for the 1- and 2-yard
 // numbers; every other snap is the same on any down.
+// It counts the long plays too, for the calls a defense can pick in its card (below): a run or a catch of 15 yards or
+// more, which the read's picks on defense count against a call.
 // Calling the defense, the other coach's offense sends a man in motion about one snap in three, so each play from a
 // formation with motion is also snapped against the calls a defense can pick in its card (any front, any coverage,
 // rush four or the Mike blitzing, no disguise) with the man in motion, across and jet alike.
@@ -21,7 +23,7 @@ import { Worker, isMainThread, workerData, parentPort } from 'node:worker_thread
 import { writeFileSync, readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { cpus } from 'node:os';
 
-const NEED = [1, 2, 4, 8];
+const NEED = [1, 2, 4, 8, 15]; // the four successes, then a long play
 
 if (!isMainThread) {
   const { simulate } = await import('../js/sim.js');
@@ -31,7 +33,7 @@ if (!isMainThread) {
     const [job, base] = task.split('@');
     const [kind, formation, play, call] = job.split(':');
     const [front, coverage, pressure, blitzer, disguise] = call.split('.');
-    const c = [0, 0, 0, 0];
+    const c = NEED.map(() => 0);
     for (let k = 0; k < snaps; k++) {
       const motion = kind[0] === 'm' ? (k % 2 ? 'jet' : 'across') : 'none';
       const P = simulate({ formation, play, flip: false, motion, hot: {}, front, coverage, pressure, blitzer, disguise: disguise === '1', sit: kind.endsWith('s') ? '3and2' : '1and10' }, +base + k);
@@ -90,9 +92,8 @@ if (!isMainThread) {
     for (const line of readFileSync(progress, 'utf8').split('\n')) {
       if (!line) continue;
       const r = JSON.parse(line);
-      if (r.sim !== SIM_VERSION || r.snaps !== snaps) continue;
-      if (r.base) done.set(`${r.job}@${r.base}`, r.counts);
-      else r.counts.forEach((c, k) => done.set(`${r.job}@${(k + 1) * 1e6}`, c)); // (a line with the first three sets)
+      if (r.sim !== SIM_VERSION || r.snaps !== snaps || !r.base || r.counts.length !== NEED.length) continue;
+      done.set(`${r.job}@${r.base}`, r.counts);
     }
   }
   const todo = SETS.flatMap(base => jobs.map(j => `${j}@${base}`)).filter(t => !done.has(t));
@@ -118,15 +119,17 @@ if (!isMainThread) {
   const ALPHA = [...Array(94)].map((_, k) => String.fromCharCode(33 + k)).filter(ch => !`'"\\`.includes(ch)).join('');
   const code = (n, of) => ALPHA[Math.round((n / of) * (ALPHA.length - 1))];
   const of = snaps * SETS.length;
-  const pooled = job => SETS.map(base => done.get(`${job}@${base}`)).reduce((a, c) => a.map((v, j) => v + c[j]), [0, 0, 0, 0]);
-  const cell = (k, f, p, c) => {
-    const n = pooled(`${k}:${f.id}:${p}:${c}`), s = gunRun(f, p) ? pooled(`${k}s:${f.id}:${p}:${c}`.replace(/^ns:/, 's:')) : n;
-    return code(s[0], of) + code(s[1], of) + code(n[2], of) + code(n[3], of);
-  };
-  const cells = {}, motion = {};
+  const pooled = job => SETS.map(base => done.get(`${job}@${base}`)).reduce((a, c) => a.map((v, j) => v + c[j]), NEED.map(() => 0));
+  // a cell's snaps on 1st & 10 (n) and on 3rd & 2 (s, the same for any play but a handoff from the shotgun)
+  const both = (k, f, p, c) => { const n = pooled(`${k}:${f.id}:${p}:${c}`); return [n, gunRun(f, p) ? pooled(`${k}s:${f.id}:${p}:${c}`.replace(/^ns:/, 's:')) : n]; };
+  const cell = (k, f, p, c) => { const [n, s] = both(k, f, p, c); return code(s[0], of) + code(s[1], of) + code(n[2], of) + code(n[3], of); };
+  const longCell = (k, f, p, c) => { const [n, s] = both(k, f, p, c); return code(s[4], of) + code(n[4], of); };
+  const cells = {}, motion = {}, long = {}, longMotion = {};
   for (const f of FORMATIONS) {
     cells[f.id] = plays[f.id].map(p => calls.map(c => cell('n', f, p, c)).join('')).join('');
+    long[f.id] = plays[f.id].map(p => base.map(i => longCell('n', f, p, calls[i])).join('')).join('');
     if (f.motion) motion[f.id] = plays[f.id].map(p => base.map(i => cell('m', f, p, calls[i])).join('')).join('');
+    if (f.motion) longMotion[f.id] = plays[f.id].map(p => base.map(i => longCell('m', f, p, calls[i])).join('')).join('');
   }
   const out = `// Made by tools/read-table.mjs for the simulator's version ${SIM_VERSION}, ${of} snaps a cell (${snaps} in each of
 // ${SETS.length} seed sets): how often each play from each formation is a success against each call the other coach can
@@ -137,8 +140,10 @@ if (!isMainThread) {
 // walked up. cells: for each formation, its plays one after another, and for each play the calls one after another,
 // four characters each: the success rate with 1, 2, 4 and 8 yards to gain (alpha, below: its place in it, of
 // ${ALPHA.length - 1}). motion: the same with a man in motion (half across, half jet), for the base calls only, for each
-// formation that has one.
-export const TABLE = ${JSON.stringify({ sim: SIM_VERSION, snaps: of, sets: SETS, alpha: ALPHA, calls, base, plays, looks, cells, motion }, null, 0).replace(/,"(?=[a-z]+":)/g, ',\n  "')};
+// formation that has one. long: for each formation, its plays one after another, and for each play the base calls one
+// after another, two characters each: how often it went 15 yards or more, a run or a catch, on a short third or fourth
+// down (3rd & 2 and 4th & 1) and on any other. longMotion: the same with a man in motion.
+export const TABLE = ${JSON.stringify({ sim: SIM_VERSION, snaps: of, sets: SETS, alpha: ALPHA, calls, base, plays, looks, cells, motion, long, longMotion }, null, 0).replace(/,"(?=[a-zA-Z]+":)/g, ',\n  "')};
 `;
   writeFileSync(new URL('../js/read-table.js', import.meta.url), out);
   console.log(`wrote js/read-table.js (${(out.length / 1024).toFixed(0)} KB) in ${((Date.now() - t0) / 60000).toFixed(1)} min`);

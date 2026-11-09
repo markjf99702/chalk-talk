@@ -1891,6 +1891,8 @@ test('the coach\'s read: its numbers were made for this version of the simulator
     assert.deepEqual(TABLE.plays[fm.id], PLAYS.filter(p => !cantCall(fm.id, p.id)).map(p => p.id), `${fm.name}'s plays have changed: run node tools/read-table.mjs`);
     assert.equal(TABLE.cells[fm.id].length, TABLE.plays[fm.id].length * TABLE.calls.length * 4);
     if (fm.motion) assert.equal(TABLE.motion[fm.id].length, TABLE.plays[fm.id].length * TABLE.base.length * 4);
+    assert.equal(TABLE.long[fm.id].length, TABLE.plays[fm.id].length * TABLE.base.length * 2, `${fm.name} has no long plays in the table: run node tools/read-table.mjs`);
+    if (fm.motion) assert.equal(TABLE.longMotion[fm.id].length, TABLE.plays[fm.id].length * TABLE.base.length * 2);
     // the look each call shows, as the read sees it now
     TABLE.calls.forEach((code, i) => {
       const S = prepare({ formation: fm.id, play: TABLE.plays[fm.id][0], flip: false, ...callOf(code) }, 1);
@@ -1928,6 +1930,26 @@ test('the coach\'s read: its numbers are the simulator\'s', () => {
       const se = Math.sqrt(pq * (1 - pq) * (1 / TABLE.snaps + 1 / 200));
       assert.ok(Math.abs(p - q) < 3.5 * se + 1 / 90, `${formation} ${play} against ${c}, ${NEED[n]} yards: the table says ${p.toFixed(2)}, 200 new snaps ${q.toFixed(2)}`);
     }
+  }
+});
+
+test('the coach\'s read: its long plays are the simulator\'s', () => {
+  // How often a play went 15 yards or more, a run or a catch, against a call a defense can pick in its card: a few cells
+  // snapped again with the table's own seeds come out exactly as it has them. A handoff from the shotgun is counted on
+  // 3rd & 2 for a short third or fourth down (the table's first number) and on 1st & 10 for any other (its second).
+  const code = n => TABLE.alpha[Math.round((n / TABLE.snaps) * (TABLE.alpha.length - 1))];
+  const per = TABLE.snaps / TABLE.sets.length, mine = TABLE.sets.flatMap(b => Array.from({ length: per }, (_, k) => b + k));
+  const cells = [['iform', 'pa', 'over.c0.blitz.M.0', '1and10', 'none'], ['trips', 'iz', 'nickel.c2.four.M.0', '3and2', 'none'], ['pistol', 'oz', '34.c3.four.M.0', '1and10', 'motion']];
+  for (const [formation, play, c, sit, mo] of cells) {
+    const b = TABLE.base.indexOf(TABLE.calls.indexOf(c)), k = TABLE.plays[formation].indexOf(play);
+    const have = (mo === 'motion' ? TABLE.longMotion : TABLE.long)[formation][(k * TABLE.base.length + b) * 2 + (sit === '3and2' ? 0 : 1)];
+    let n = 0;
+    for (const seed of mine) {
+      const r = simulate({ formation, play, flip: false, motion: mo === 'motion' ? (seed % 2 ? 'jet' : 'across') : 'none', hot: {}, ...callOf(c), sit }, seed).result;
+      if ((r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 15) n++;
+    }
+    assert.ok(b >= 0, `${c} isn't one of the calls a defense can pick`);
+    assert.equal(have, code(n), `${formation} ${play} against ${c}${mo === 'motion' ? ' with motion' : ''} on ${sit}: 15 yards or more, the table has ${have}, the simulator ${code(n)} (${n} of ${TABLE.snaps})`);
   }
 });
 
