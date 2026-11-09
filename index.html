@@ -94,6 +94,24 @@
         <div id="keyBody"></div>
       </section>
 
+      <section class="card read" id="read" aria-labelledby="readTitle">
+        <div class="read-head">
+          <h2 id="readTitle">Coach's read</h2>
+          <label class="switch" id="readSwitch"><input type="checkbox" id="readOn" checked> <span>Show it</span></label>
+        </div>
+        <p class="hint" id="readOff" hidden></p>
+        <div class="read-body" id="readBody">
+          <p class="read-lede" id="readLede"></p>
+          <p class="read-likely" id="readLikely"></p>
+          <p class="read-title" id="readPicksTitle"></p>
+          <ul class="read-picks" id="readPicks"></ul>
+          <details class="read-more" id="readMore">
+            <summary>What they're showing, and what it means</summary>
+            <div id="readMoreBody"></div>
+          </details>
+        </div>
+      </section>
+
       <section class="card drills" id="drills" aria-labelledby="drillsTitle">
         <h2 id="drillsTitle">Drills</h2>
         <p class="hint" id="drillsHint">Five snaps against one call. Find what beats it.</p>

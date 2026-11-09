@@ -3,6 +3,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, PRESSURES, BLITZERS, POSITIONS, P
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from './sim.js';
 import { Board } from './board.js';
 import { rng, newSeed } from './rng.js';
+import { coachRead, lean, frontMix, coverMix, blitzerMix, formationMix, playMix, motionShare, DISGUISES, DISGUISE_SHARE, BLITZ_SHARE } from './read.js';
 
 const SITE = 'https://chalk-talk.junkdrawer.works/';
 const KEY = 'chalk-talk.v1';
@@ -33,6 +34,7 @@ const state = {
   seen: false, // the other coach's call has been out since he picked it: a snap showed it, or the playbook did
   book: false, // the playbook set his call and showed it, and it hasn't been snapped yet (see showPart())
   quiz: true, // calling the offense against the other coach, ask what he played after the snap (see answer())
+  read: true, // the coach's read before the snap (see renderRead()), on this device
   streak: 0, best: 0, // coverages named right in a row, and the most, on this device
   ask: null, // that question for his call: { guess: null } while it's open, then { guess } once it's answered
   play: null,
@@ -88,7 +90,6 @@ const chartBlitzer = d => (BLITZERS.some(b => b.id === d.blitzer) && !blitzerFor
 const blitzWord = d => ({ M: 'blitz', W: 'Will blitz', NB: 'nickel blitz', SS: 'safety blitz' })[blitzer(d)];
 // Only Cover 1 and Cover 3 disguise, showing two deep and rotating at the snap (see the end of buildDefense() in
 // js/sim.js); a call keeps its disguise through a change to another coverage and back, as it keeps its pressure.
-const DISGUISES = ['c1', 'c3'];
 const disguised = d => d.disguise && DISGUISES.includes(d.coverage);
 // The coverage as a sentence says it: "Cover 3", or "disguised Cover 3".
 const covWords = d => `${disguised(d) ? 'disguised ' : ''}${byId(COVERAGES, d.coverage).name}`;
@@ -231,6 +232,7 @@ function load() {
       if (typeof s.auto === 'boolean') state.auto = s.auto;
       if (typeof s.labels === 'boolean') state.labels = s.labels;
       if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
+      if (typeof s.read === 'boolean') state.read = s.read;
       takeQuiz(s);
       myPlays = okMine(s.plays);
     }
@@ -249,7 +251,7 @@ function keepOwn() {
   if (!state.auto || state.side === 'D') own.def = { ...state.def };
 }
 function save() {
-  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, sit: state.sit, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best, plays: myPlays })); } catch { /* fine */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ side: state.side, off: own.off, def: own.def, sit: state.sit, auto: ownAuto, labels: state.labels, speed: state.speed, quiz: state.quiz, streak: state.streak, best: state.best, read: state.read, plays: myPlays })); } catch { /* fine */ }
 }
 // The question's switch and the streak, from a save (this tab's, or another tab's as it saves).
 const tally = n => (Number.isInteger(n) && n >= 0 ? n : null);
@@ -291,34 +293,9 @@ const hidden = () => state.auto && ((state.phase === 'pre' && !state.seen) || at
 // Whether the question "What did they play?" is waiting for an answer.
 const asking = () => state.auto && state.side === 'O' && !!state.ask && !state.ask.guess;
 
-// The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on. It's
-// never the call they had (New look always changes something), short of ten unlucky rolls in a row.
-// Calling the defense, his play leans on his personnel, so reading it before the snap tells you something: about this
-// share of his plays are runs from each formation on 1st & 10, the rest passes, and every play stays possible. (A
-// design choice in the direction real offenses lean, more backs and tight ends running more; not a published
-// statistic.) The down moves it (see lean()).
-const RUN_SHARE = { iform: 0.6, single: 0.55, ace: 0.5, pistol: 0.45, trips: 0.375, doubles: 0.25, empty: 0 };
-// The down and distance moves his call the way NFL teams' calls moved from 1st & 10 to that situation in 2023 (nfl in
-// SITUATIONS, js/playbook.js), from his 1st & 10 call as it always was. A yes-or-no share moves by the same odds as the
-// NFL's did, so it stays between none and all: his nickel front by the NFL's five or more defensive backs, his blitz by
-// its five or more rushers, and his run share by its runs (on 3rd & 8 the NFL blitzed on 39% of dropbacks against 25%
-// on 1st & 10, and so does he; I-Form's 60% of runs on 1st & 10 becomes 6%). Each coverage moves by as many points as
-// its share of the NFL's five did, rather than by odds, as this board's Cover 0 already comes up far more often on
-// 1st & 10 than the NFL's 1%: on 3rd & 8 his Cover 1 goes from 22% to 38%.
-function lean(sit) {
-  const a = SITUATIONS[0].nfl, b = sit.nfl;
-  const odds = (from, to) => p => { if (from === to) return p; const o = (p / (1 - p)) * (to / (100 - to)) / (from / (100 - from)); return o / (1 + o); };
-  const share = n => { const all = Object.values(n.cover).reduce((x, y) => x + y, 0); return c => n.cover[c] / all; };
-  const was = share(a), now = share(b);
-  return { nickel: odds(a.nickel, b.nickel), blitz: odds(a.blitz, b.blitz), run: odds(100 - a.pass, 100 - b.pass), cover: (c, p) => Math.max(0.01, p + now(c) - was(c)), passing: b.pass / a.pass };
-}
-// Calling the defense, his offense puts a man in motion about one snap in three, across or jet alike, counting the
-// formations that have nobody to send. (A design choice, so motion comes up as you watch your own defense; not a
-// published statistic.)
-const MOTION_SHARE = 1 / 3;
-// Calling the offense, about one of his snaps in four is a disguise: he plays Cover 1 or Cover 3 on 54% of them, and
-// disguises 46% of those. (A design choice, so a look can't be trusted every time; not a published statistic.)
-const DISGUISE_SHARE = 0.46;
+// The other coach's call, picked the way a real one might: nickel against three and four receivers, and so on, from
+// his mix (js/read.js, where the coach's read weighs his calls by it too), leaning on the down. It's never the call they
+// had (New look always changes something), short of ten unlucky rolls in a row.
 function rollTheirs() {
   state.seen = state.book = false;
   state.ask = null;
@@ -331,31 +308,16 @@ function rollTheirs() {
   const had = theirs(), L = lean(situation());
   for (let tries = 0; tries < 10 && theirs() === had; tries++) {
     if (state.side === 'O') {
-      const pers = byId(FORMATIONS, state.off.formation).personnel;
-      const spread = pers === '10' || pers === '11';
-      // his fronts on 1st & 10, then nickel moved for the down and the others sharing what's left as they did
-      const fronts = spread ? [['nickel', 0.55], ['over', 0.15], ['under', 0.12], ['34', 0.18]] : [['over', 0.3], ['under', 0.25], ['34', 0.3], ['nickel', 0.15]];
-      const nickel = fronts.find(([f]) => f === 'nickel')[1], more = L.nickel(nickel);
-      state.def.front = w(fronts.map(([f, p]) => [f, f === 'nickel' ? more : p * (1 - more) / (1 - nickel)]));
-      state.def.coverage = w([['c0', 0.06], ['c1', 0.22], ['c2', 0.2], ['c3', 0.32], ['c4', 0.2]].map(([c, p]) => [c, L.cover(c, p)]));
-      state.def.pressure = R() < L.blitz(0.25) ? 'blitz' : 'four';
+      state.def.front = w(frontMix(state.off.formation, L));
+      state.def.coverage = w(coverMix(L));
+      state.def.pressure = R() < L.blitz(BLITZ_SHARE) ? 'blitz' : 'four';
       state.def.disguise = DISGUISES.includes(state.def.coverage) && R() < DISGUISE_SHARE;
-      // who comes, of the ones who can with this front, coverage and disguise: the Mike most often, then the Will, the
-      // nickel back and the safety
-      state.def.blitzer = w([['M', 0.4], ['W', 0.3], ['NB', 0.15], ['SS', 0.15]].filter(([b]) => !blitzerFor(state.def.front, state.def.coverage, b, state.def.disguise)));
+      state.def.blitzer = w(blitzerMix(state.def.front, state.def.coverage, state.def.disguise));
     } else {
-      // Empty, which can only throw, half as often as each of the others on 1st & 10, and more or less often as the NFL's
-      // passes went with the down (a design choice, so it comes up without taking over; not a published statistic)
-      const lineups = FORMATIONS.map(f => [f.id, f.id === 'empty' ? 0.5 * L.passing : 1]);
-      state.off.formation = w(lineups);
-      // (only the plays his formation can run: from Empty, no runs, no fake and no screen)
-      const can = PLAYS.filter(p => !cantCall(state.off.formation, p.id)), runs = can.filter(p => p.type === 'run').length;
-      const run = runs ? L.run(RUN_SHARE[state.off.formation] ?? 0.42) : 0;
-      state.off.play = w(can.map(p => [p.id, p.type === 'run' ? run / runs : (1 - run) / (can.length - runs)]));
+      state.off.formation = w(formationMix(L));
+      state.off.play = w(playMix(state.off.formation, L));
       state.off.flip = R() < 0.5;
-      // Gun Ace and Empty have nobody to send, so from the others a little more often, to keep it one snap in three
-      const all = lineups.reduce((a, [, p]) => a + p, 0), movers = lineups.filter(([id]) => byId(FORMATIONS, id).motion).reduce((a, [, p]) => a + p, 0);
-      const share = byId(FORMATIONS, state.off.formation).motion ? Math.min(1, MOTION_SHARE * all / movers) : 0, m = R();
+      const share = motionShare(state.off.formation, L), m = R();
       state.off.motion = m < share / 2 ? 'across' : m < share ? 'jet' : 'none';
       state.off.hot = {};
     }
@@ -393,6 +355,7 @@ function lineUp(keep = false) {
   syncTheirs();
   renderMatchup();
   renderJobs();
+  renderRead();
   setCaption(firstHint ? FIRST_HINT : '');
   draw();
   keepPlay();
@@ -1136,22 +1099,26 @@ function smooth() { return matchMedia('(prefers-reduced-motion: reduce)').matche
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
 
+// A change to your call on offense (from its chips, or a pick in the coach's read).
+function setOff(patch) {
+  const was = byId(FORMATIONS, state.off.formation).personnel;
+  // (A play picked while one of your own plays is the call is that play as drawn, the one it's built on too.)
+  if ((patch.formation || state.off.formation) !== state.off.formation || (patch.play || state.off.play) !== state.off.play || (patch.play && mineOf(state.off))) patch.hot = {};
+  Object.assign(state.off, patch);
+  // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
+  // or strong side keeps his call, the way an audible at the line does. The board says so until the snap, the way New
+  // look does, since his new call is hidden.
+  const fixed = callable();
+  const subbed = state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was;
+  if (subbed) rollTheirs();
+  afterChange();
+  if (subbed || fixed) setCaption([fixed, subbed ? 'New personnel: they\'ve substituted.' : ''].filter(Boolean).join(' '));
+}
+// And on defense.
+function setDef(patch) { Object.assign(state.def, patch); afterChange(); }
+
 function offenseChooser(host, readonly) {
-  const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play);
-  const set = patch => {
-    const was = fm.personnel;
-    // (A play picked while one of your own plays is the call is that play as drawn, the one it's built on too.)
-    if ((patch.formation || state.off.formation) !== state.off.formation || (patch.play || state.off.play) !== state.off.play || (patch.play && mineOf(state.off))) patch.hot = {};
-    Object.assign(state.off, patch);
-    // New personnel and the other coach substitutes: nickel against three receivers, base against two backs. A new play
-    // or strong side keeps his call, the way an audible at the line does. The board says so until the snap, the way New
-    // look does, since his new call is hidden.
-    const fixed = callable();
-    const subbed = state.auto && state.side === 'O' && byId(FORMATIONS, state.off.formation).personnel !== was;
-    if (subbed) rollTheirs();
-    afterChange();
-    if (subbed || fixed) setCaption([fixed, subbed ? 'New personnel: they\'ve substituted.' : ''].filter(Boolean).join(' '));
-  };
+  const fm = byId(FORMATIONS, state.off.formation), pl = byId(PLAYS, state.off.play), set = setOff;
   chips(host, 'Formation', FORMATIONS.map(f => ({ id: f.id, name: f.name, sub: f.personnel, subWord: 'personnel' })), fm.id, id => set({ formation: id }), {
     disabled: readonly, blurb: `${fm.blurb} ${personnelWords(fm.personnel)}`,
   });
@@ -1218,7 +1185,7 @@ function motionBlurb(fm, motion) {
 
 function defenseChooser(host, readonly) {
   const fr = byId(FRONTS, state.def.front), cv = byId(COVERAGES, state.def.coverage), pr = byId(PRESSURES, state.def.pressure);
-  const set = patch => { Object.assign(state.def, patch); afterChange(); };
+  const set = setDef;
   chips(host, 'Front', FRONTS, fr.id, id => set({ front: id }), { disabled: readonly, blurb: fr.blurb });
   chips(host, 'Coverage', COVERAGES, cv.id, id => set({ coverage: id }), { disabled: readonly, blurb: cv.blurb });
   const zero = cv.id === 'c0';
@@ -1294,6 +1261,7 @@ function renderChoosers() {
   syncTheirs();
   renderDrills();
   renderSituation();
+  renderRead();
 }
 
 // The situation: a button for each down and distance, and what it means, for whichever side you call.
@@ -1399,6 +1367,72 @@ function newLook(e) {
 $('newLook').addEventListener('click', newLook);
 $('theirsLook').addEventListener('click', newLook);
 
+// ---------------------------------------------------------------- the coach's read
+
+// Before the snap, on whichever side you call: what the other side is showing, what it probably means, and two or three
+// calls worth a look, each a chip that makes it your call (js/read.js). It's worked out from the board as it stands
+// before the snap and nothing else: the other side where it lines up (with a man in motion, before he goes), your own
+// call, and the down and distance. Their call never goes into it. A switch turns it off on this device; it's off in a
+// drill, which is there to test your own read; and while the question after the snap is on, it doesn't say what
+// coverage the look probably is.
+let shownRead = null; // the read on the card, or null when the card shows none
+const quizOn = () => state.quiz && state.auto && state.side === 'O';
+function readView() {
+  const P = state.play, xy = P.frames[0].xy;
+  if (state.side === 'D') return { side: 'D', formation: state.off.formation, flip: state.off.flip, sit: state.sit, call: { ...state.def } };
+  return {
+    side: 'O', formation: state.off.formation, flip: state.off.flip, motion: motionOf(state.off), play: state.off.play,
+    hot: okHot(state.off.hot, state.off.formation, state.off.play), sit: state.sit, front: state.def.front, quiz: quizOn(),
+    players: P.players.map(p => ({ team: p.team, label: p.label, cls: p.cls, x: xy[2 * p.i], y: xy[2 * p.i + 1] })),
+  };
+}
+function renderRead() {
+  const on = state.read && !drill && !!state.play;
+  $('readOn').checked = state.read;
+  $('readSwitch').hidden = !!drill;
+  $('readOff').hidden = !drill;
+  $('readOff').textContent = drill ? 'Off during a drill: reading the look is the drill.' : '';
+  $('readBody').hidden = !on;
+  shownRead = on ? coachRead(readView()) : null;
+  if (!shownRead) return;
+  const R = shownRead, el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  $('readLede').textContent = R.lede;
+  $('readLikely').textContent = R.likelyShort;
+  $('readPicksTitle').textContent = R.picks.length ? R.picksTitle : '';
+  $('readPicksTitle').hidden = !R.picks.length;
+  const picks = $('readPicks');
+  picks.textContent = '';
+  for (const p of R.picks) {
+    const li = el('li'), b = el('button', 'chip', p.label), rate = el('span', 'read-rate', p.rateText);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(p.current));
+    b.setAttribute('aria-describedby', `readWhy${R.picks.indexOf(p)}`);
+    b.addEventListener('click', () => {
+      if (R.side === 'O') setOff({ ...p.set }); else setDef({ ...p.set });
+      setCaption(`${R.side === 'O' ? 'Your play' : 'Your call'}: ${p.label}, from the coach's read.`);
+      $('readPicks').querySelector(`[data-pick="${CSS.escape(p.label)}"]`)?.focus({ preventScroll: true });
+    });
+    b.dataset.pick = p.label;
+    const why = el('p', 'read-why', p.reason);
+    why.id = `readWhy${R.picks.indexOf(p)}`;
+    li.append(b, rate, why);
+    picks.append(li);
+  }
+  const more = $('readMoreBody');
+  more.textContent = '';
+  const list = (title, lines) => { if (!lines?.length) return; more.append(el('h3', '', title)); const ul = el('ul'); for (const t of lines) ul.append(el('li', '', t)); more.append(ul); };
+  list('What they\'re showing', R.showing);
+  list('What it probably means', R.likely || (R.side === 'O' && quizOn() ? [R.likelyShort] : null));
+  list('Worth knowing', R.tips);
+  if (R.numbers) more.append(el('p', 'hint', R.numbers));
+  more.append(el('p', 'hint', `It goes only on what you can see before the snap, never on the call they made. The picks rank plays by the board's own numbers, ${state.side === 'O' ? 'over the calls that look like this one' : 'over the plays he runs from here'}, as often as the other coach makes each one.`));
+}
+$('readOn').addEventListener('change', e => {
+  state.read = e.target.checked;
+  save();
+  renderRead();
+});
+
 // ---------------------------------------------------------------- what did they play?
 
 // Calling the offense with the other coach picking, a snap of a call you haven't seen asks what he played, with the
@@ -1412,6 +1446,7 @@ $('quiz').addEventListener('change', e => {
   state.quiz = e.target.checked;
   save();
   if (!state.quiz && asking()) reveal(); // the question goes, and his call is out
+  renderRead(); // (which says what it probably is only with the question off)
 });
 
 // The question, or its answer, in its card (his, or the result's). In his card, how many you've named right in a row.
@@ -2592,6 +2627,7 @@ addEventListener('storage', e => {
     if (s.speed === 0.5 || s.speed === 1) state.speed = s.speed;
     takeQuiz(s);
     $('quiz').checked = state.quiz;
+    if (typeof s.read === 'boolean' && s.read !== state.read) { state.read = s.read; renderRead(); }
     if (JSON.stringify(okMine(s.plays)) !== JSON.stringify(myPlays)) { myPlays = okMine(s.plays); renderChoosers(); renderMatchup(); syncChart(); } // kept there: here too
     if (!state.quiz && asking()) reveal(); // turned off there: the question goes here too, and his call is out
     syncTransport();
@@ -2608,4 +2644,4 @@ if ('serviceWorker' in navigator && !document.documentElement.hasAttribute('data
 }
 
 // For the screenshot and test scripts.
-window.chalkTalk = { state, board, lineUp, play, pause, snap, finish, simulate, rollTheirs, chart: () => chart };
+window.chalkTalk = { state, board, lineUp, play, pause, snap, finish, simulate, rollTheirs, chart: () => chart, coachRead: () => (shownRead ? structuredClone(shownRead) : null) };

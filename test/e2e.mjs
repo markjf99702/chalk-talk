@@ -992,9 +992,9 @@ for (const side of ['O', 'D']) {
   await p.goto(base);
   const where = () => p.evaluate(() => {
     const box = id => document.getElementById(id).getBoundingClientRect(), r = document.getElementById('result');
-    return { first: r.parentElement.firstElementChild.id, after: r.previousElementSibling?.id, shown: !r.hidden, result: box('result').top + scrollY, left: box('result').left, mine: box('mine').top + scrollY, column: box('drills').top + scrollY, board: document.querySelector('.board-wrap').getBoundingClientRect() };
+    return { first: r.parentElement.firstElementChild.id, after: r.previousElementSibling?.id, shown: !r.hidden, result: box('result').top + scrollY, left: box('result').left, mine: box('mine').top + scrollY, column: box('read').top + scrollY, board: document.querySelector('.board-wrap').getBoundingClientRect() };
   });
-  // (the top of the column is the drills, over your call)
+  // (the top of the column is the coach's read, over the drills and your call)
   const { mine: top, column } = await where();
   await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
   const done = await where();
@@ -3695,6 +3695,102 @@ for (const [width, height, stuck] of [[390, 844, true], [375, 667, true], [700, 
   await a.reload();
   assert.deepEqual(await settings(a), { labels: false, drawn: false, speed: 0.5, pressed: 'false' }, 'a reload lost a setting the other tab saved over');
   await a.context().close();
+}
+
+// The coach's read: a card at the top of the column, before the snap, on whichever side you call: what the other side
+// is showing, what it probably means, and two or three calls worth a look, each a chip that makes it your call. It goes
+// only on what can be seen before the snap: two calls that line up alike get the same read. While the question after
+// the snap is on it doesn't say what coverage the look probably is; it's off in a drill; and its switch turns it off on
+// this device, after a reload too. On a phone the board and Snap stay on screen with it.
+{
+  const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.goto(base);
+  const read = () => p.evaluate(() => window.chalkTalk.coachRead());
+  const text = () => p.evaluate(() => document.getElementById('read').textContent);
+  const lineUp = (off, def) => p.evaluate(([off, def]) => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, off); Object.assign(state.def, def); lineUp(); }, [off, def]);
+  assert.ok(await p.evaluate(() => document.getElementById('read').compareDocumentPosition(document.getElementById('drills')) & Node.DOCUMENT_POSITION_FOLLOWING), 'the read is above the drills');
+  let R = await read();
+  assert.equal(R.side, 'O');
+  assert.ok(R.picks.length >= 2 && R.picks.length <= 3, `${R.picks.length} picks`);
+  assert.equal(await p.isVisible('#readLede'), true);
+  // With the question on, nothing in the card names a coverage.
+  assert.equal(R.likely, null);
+  assert.doesNotMatch(await text(), /Cover [0-4]/, 'with the question on, the read names a coverage');
+  assert.match(R.likelyShort, /^The quiz after the snap is on/);
+  // Calls that line up alike get the same read: a disguised Cover 3 and Cover 4, rushing four, against Gun Trips; and
+  // calling the defense, any play from the same formation and strong side.
+  const own = { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} };
+  await lineUp(own, { front: 'nickel', coverage: 'c3', pressure: 'four', blitzer: 'M', disguise: true });
+  const disguised = await read();
+  await lineUp(own, { front: 'nickel', coverage: 'c4', pressure: 'four', blitzer: 'M', disguise: false });
+  assert.deepEqual(await read(), disguised, 'a disguised Cover 3 and a Cover 4 look alike, and get different reads');
+  await lineUp(own, { front: 'nickel', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false });
+  assert.notEqual((await read()).lede, disguised.lede, 'Cover 2 looks different: the corners stand about 5 yards off');
+  // Its switch for the question off: now it says what the look probably is.
+  await p.evaluate(() => { const q = document.getElementById('quiz'); q.click(); });
+  R = await read();
+  assert.match(R.likelyShort, /Cover 2/);
+  assert.ok(R.likely.length >= 1);
+  // A pick's chip makes it your call, and the read updates: that chip is pressed now.
+  const pick = R.picks.find(x => !x.current);
+  await p.click(`#readPicks button[data-pick="${pick.label}"]`);
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.off.play), pick.set.play);
+  R = await read();
+  assert.equal(R.picks.find(x => x.label === pick.label)?.current, true, 'the play picked is marked as the call');
+  assert.equal(await p.getAttribute(`#readPicks button[data-pick="${pick.label}"]`, 'aria-pressed'), 'true');
+  assert.equal(await p.evaluate(() => window.chalkTalk.state.def.coverage), 'c2', 'a pick keeps his call, as a change of play does');
+  // A new situation: the picks are for it.
+  await p.click('#sitChips button:text-is("3rd & 8")');
+  assert.match((await read()).picksTitle, /^Worth a look on 3rd & 8, and how often each makes the first down/);
+  // On a phone the board and Snap are on screen with the card, scrolled to it too.
+  await p.evaluate(() => document.getElementById('readPicks').scrollIntoView({ block: 'end' }));
+  const onScreen = sel => p.evaluate(sel => { const r = document.querySelector(sel).getBoundingClientRect(); return r.top >= -1 && r.bottom <= innerHeight + 1; }, sel);
+  assert.equal(await onScreen('#board'), true, 'the board scrolled away');
+  assert.equal(await onScreen('#snap'), true, 'Snap scrolled away');
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways');
+  // and on a short phone, with the flatter board stuck at the top
+  await p.setViewportSize({ width: 375, height: 667 });
+  await p.evaluate(() => document.getElementById('readPicks').scrollIntoView({ block: 'end' }));
+  assert.equal(await onScreen('#board'), true, 'the board scrolled away on a short phone');
+  assert.equal(await onScreen('#snap'), true, 'Snap scrolled away on a short phone');
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a short phone');
+  await p.setViewportSize({ width: 390, height: 844 });
+  await p.evaluate(() => scrollTo(0, 0));
+  // Calling the defense: his formation and the down, and a pick sets your front, coverage and pressure.
+  await p.click('[data-side="D"]');
+  R = await read();
+  assert.equal(R.side, 'D');
+  assert.match(R.lede, /personnel, strength to your (left|right)/);
+  const d = R.picks[0];
+  await p.click(`#readPicks button[data-pick="${d.label}"]`);
+  assert.deepEqual(await p.evaluate(() => window.chalkTalk.state.def), d.set);
+  assert.equal((await read()).picks[0].current, true);
+  const his = await p.evaluate(() => ({ ...window.chalkTalk.state.off }));
+  await p.evaluate(() => { const { state, lineUp } = window.chalkTalk; state.off.play = state.off.play === 'smash' ? 'flood' : 'smash'; state.off.motion = 'none'; lineUp(); });
+  const other = await read();
+  await p.evaluate(his => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, his); lineUp(); }, his);
+  assert.deepEqual(await read(), other, 'calling the defense, the read changed with his hidden play');
+  // Off in a drill, which tests your own read; back when it's over.
+  await p.click('#drillChips button:text-is("Beat Cover 2")');
+  assert.equal(await read(), null, 'the read is on in a drill');
+  assert.equal(await p.textContent('#readOff'), 'Off during a drill: reading the look is the drill.');
+  assert.equal(await p.isVisible('#readBody'), false);
+  await p.click('#drillNow button:text-is("Stop the drill")');
+  assert.ok(await read(), 'the read stays off after the drill');
+  // Its switch turns it off, and a reload remembers.
+  await p.click('#readOn');
+  assert.equal(await read(), null);
+  assert.equal(await p.isVisible('#readBody'), false);
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('chalk-talk.v1')).read), false);
+  await p.reload();
+  assert.equal(await read(), null, 'a reload turned the read back on');
+  assert.equal(await p.isChecked('#readOn'), false);
+  await p.click('#readOn');
+  assert.ok(await read());
+  await c.close();
 }
 
 // Fits a phone: nothing scrolls sideways.

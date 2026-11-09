@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS, needed } from '../js/playbook.js';
 import { rng } from '../js/rng.js';
-import { lookOf } from '../js/read.js';
+import { coachRead, lookOf, lookAlikes, rankPlays, rankDefenses, rate } from '../js/read.js';
 import { TABLE } from '../js/read-table.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -1876,6 +1876,13 @@ const theirCalls = () => {
   return out;
 };
 const callOf = code => { const [front, coverage, pressure, blitzer, d] = code.split('.'); return { front, coverage, pressure, blitzer, disguise: d === '1' }; };
+// The board before the snap, as the page hands it to the read (readView() in js/app.js): your call, the situation,
+// their front, and everyone where he stands. With nobody in motion that's where prepare() lines them up.
+const viewOf = (own, code, sit, quiz = false) => {
+  const S = prepare({ ...own, motion: 'none', hot: {}, ...callOf(code), sit }, 1);
+  return { side: 'O', ...own, motion: 'none', hot: {}, sit, front: callOf(code).front, quiz, players: S.P.map(p => ({ team: p.team, label: p.label, cls: p.cls, x: p.x, y: p.y })) };
+};
+
 test('the coach\'s read: its numbers were made for this version of the simulator, for every call and every play', () => {
   assert.equal(TABLE.sim, SIM_VERSION, `the simulator's version is ${SIM_VERSION}, and the coach's read's numbers were made for ${TABLE.sim}: run node tools/read-table.mjs`);
   assert.deepEqual(TABLE.calls, theirCalls(), 'the other coach\'s calls have changed: run node tools/read-table.mjs');
@@ -1920,5 +1927,77 @@ test('the coach\'s read: its numbers are the simulator\'s', () => {
       const se = Math.sqrt(pq * (1 - pq) * (1 / TABLE.snaps + 1 / 200));
       assert.ok(Math.abs(p - q) < 3.5 * se + 1 / 90, `${formation} ${play} against ${c}, ${NEED[n]} yards: the table says ${p.toFixed(2)}, 200 new snaps ${q.toFixed(2)}`);
     }
+  }
+});
+
+test('the coach\'s read goes only on what can be seen before the snap: calls that look alike get the same read', () => {
+  // Every call the other coach can make against every formation, with the strength either side, on every down: the
+  // read of a call is the read of every other call that looks the same before the snap (the same safeties deep, corners,
+  // box and men walked up, in the same front), whatever was called. (No two of his calls line up exactly alike, to a
+  // hundredth of a yard: a blitzer walks up a yard, a disguised corner stands half a yard nearer than a Cover 4 one; so
+  // these are the pairs a quarterback can't tell apart, which takes in any that did.) With the question after the snap
+  // on, it never names a coverage.
+  let groups = 0, alike = 0, twins = 0;
+  for (const fm of FORMATIONS) for (const flip of [false, true]) {
+    const own = { formation: fm.id, play: 'smash', flip };
+    const views = theirCalls().map(code => ({ code, v: viewOf(own, code, '1and10') }));
+    const byLook = new Map(), bySpot = new Map();
+    for (const x of views) {
+      const k = `${x.v.front} ${lookOf(x.v.players, x.v.front).key}`, spot = `${x.v.front} ${x.v.players.filter(p => p.team === 'D').map(p => `${p.label}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')}`;
+      byLook.set(k, [...(byLook.get(k) || []), x]);
+      bySpot.set(spot, [...(bySpot.get(spot) || []), x]);
+    }
+    twins += [...bySpot.values()].filter(g => g.length > 1).length;
+    for (const sit of SITUATIONS) for (const group of byLook.values()) {
+      groups++;
+      for (const quiz of [false, true]) {
+        const first = JSON.stringify(coachRead({ ...group[0].v, sit: sit.id, quiz }));
+        for (const x of group.slice(1)) {
+          alike++;
+          assert.equal(JSON.stringify(coachRead({ ...x.v, sit: sit.id, quiz })), first, `${fm.name}${flip ? ', strength left' : ''}, ${sit.name}: ${x.code} and ${group[0].code} look alike, and get different reads`);
+        }
+        if (quiz) assert.ok(!/Cover [0-4]/.test(first), `with the question on, the read names a coverage: ${first}`);
+      }
+    }
+    // Calling the defense, the read is his formation and strong side's: every play he could run, with or without
+    // motion, gets the same one.
+    const reads = new Set(PLAYS.filter(p => !cantCall(fm.id, p.id)).map(() => JSON.stringify(coachRead({ side: 'D', formation: fm.id, flip, sit: '3and8', call: { front: 'over', coverage: 'c3', pressure: 'four', blitzer: 'M', disguise: false } }))));
+    assert.equal(reads.size, 1);
+  }
+  assert.ok(alike > 5000, `${groups} looks, ${alike} calls compared with another that looks like them, ${twins} sets that line up exactly alike`);
+});
+
+test('the coach\'s read picks by the numbers: the top pick does at least as well as the next against the look', () => {
+  for (const fm of FORMATIONS) for (const sit of SITUATIONS) {
+    const own = { formation: fm.id, play: TABLE.plays[fm.id][0], flip: false };
+    const seen = new Set();
+    for (const code of theirCalls()) {
+      const v = viewOf(own, code, sit.id), k = `${v.front} ${lookOf(v.players, v.front).key}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const R = coachRead(v), all = rankPlays(fm.id, lookAlikes(fm.id, v.front, lookOf(v.players, v.front).key, sit), sit);
+      assert.equal(R.picks.length, Math.min(3, TABLE.plays[fm.id].length));
+      R.picks.forEach((p, n) => assert.equal(p.set.play, all[n].id));
+      // A run picked against more in the box than you can block says that usually makes a run hard (the board's word
+      // for the box), rather than giving Inside Zone's reason for even numbers; a second run picked says it shorter.
+      const L = lookOf(v.players, v.front);
+      R.picks.filter(x => PLAYS.find(pl => pl.id === x.set.play).type === 'run').forEach((p, n) => {
+        const why = `${fm.name}, ${sit.name}, ${k}: ${p.label}: ${p.reason}`;
+        if (L.box > L.blockers && L.deep > 0) assert.match(p.reason, n ? /^It does well despite the (extra man|\w+ extra men) in the box too\./ : /more in the box than you can block, which usually makes a run hard/, why);
+        if (L.box > L.blockers) assert.doesNotMatch(p.reason, /wants a blocker for every man/, why);
+      });
+      for (let n = 1; n < all.length; n++) assert.ok(all[n - 1].rate >= all[n].rate);
+      // a look only one call shows: the top pick is the play that does best against that call
+      const group = lookAlikes(fm.id, v.front, lookOf(v.players, v.front).key, sit);
+      if (group.length === 1) assert.equal(R.picks[0].rate, Math.max(...TABLE.plays[fm.id].map(id => rate(fm.id, id, group[0].call, sit))));
+    }
+    // Calling the defense: the best call, then the best of each other coverage and rush, so the three aren't one call
+    // from three fronts.
+    const D = coachRead({ side: 'D', formation: fm.id, flip: false, sit: sit.id, call: {} }), all = rankDefenses(fm.id, sit);
+    for (let n = 1; n < all.length; n++) assert.ok(all[n - 1].rate >= all[n].rate);
+    const kind = code => code.split('.').slice(1, 3).join(), best = [];
+    for (const x of all) if (best.length < 3 && !best.some(y => kind(y.code) === kind(x.code))) best.push(x);
+    assert.deepEqual(D.picks.map(p => `${p.set.front}.${p.set.coverage}.${p.set.pressure}.M.0`), best.map(x => x.code));
+    assert.equal(D.picks[0].rate, all[0].rate);
   }
 });
