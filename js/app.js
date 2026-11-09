@@ -448,6 +448,7 @@ function out() {
   else if (state.ask?.guess) state.ask = null; // answered last snap: this one shows his call as usual
   state.seen = true;
   say(asking() ? 'What did they play? Name their coverage, in their call.' : `They called: ${theirSummary()}.`);
+  renderRead(); // (off while the question waits)
 }
 // The ball snapped after a man's motion, as the play runs or is scrubbed past it: the call he kept back comes out, in
 // his drawn-up play, his card, the matchup, the jobs, the tapped player's card and the chart.
@@ -1373,8 +1374,9 @@ $('theirsLook').addEventListener('click', newLook);
 // calls worth a look, each a chip that makes it your call (js/read.js). It's worked out from the board as it stands
 // before the snap and nothing else: the other side where it lines up (with a man in motion, before he goes), your own
 // call, and the down and distance. Their call never goes into it. A switch turns it off on this device; it's off in a
-// drill, which is there to test your own read; and while the question after the snap is on, it doesn't say what
-// coverage the look probably is.
+// drill, where finding what beats his call is up to you; while the question after the snap is on, it doesn't say what
+// coverage the look probably is; and while that question waits for your answer, it's off, since it spells out the
+// safeties and the corners the question asks you to read (out() and reveal() draw it again either side of that).
 let shownRead = null; // the read on the card, or null when the card shows none
 const quizOn = () => state.quiz && state.auto && state.side === 'O';
 function readView() {
@@ -1387,11 +1389,13 @@ function readView() {
   };
 }
 function renderRead() {
-  const on = state.read && !drill && !!state.play;
+  const waiting = !drill && asking(), on = state.read && !drill && !waiting && !!state.play;
   $('readOn').checked = state.read;
   $('readSwitch').hidden = !!drill;
-  $('readOff').hidden = !drill;
-  $('readOff').textContent = drill ? 'Off during a drill: reading the look is the drill.' : '';
+  const off = drill ? 'Off during a drill: finding what beats it is the drill.'
+    : waiting && state.read ? 'Back once you\'ve named their coverage: reading the look is the question.' : '';
+  $('readOff').hidden = !off;
+  $('readOff').textContent = off;
   $('readBody').hidden = !on;
   shownRead = on ? coachRead(readView()) : null;
   if (!shownRead) return;
@@ -1504,6 +1508,7 @@ function reveal() {
   syncBoard();
   renderMatchup();
   syncTheirs();
+  renderRead(); // (back, now the question's answered)
   syncJobs();
   syncChart();
   if (board.selected >= 0) showWho(board.selected);

@@ -1,15 +1,15 @@
 // Measures the numbers the coach's read ranks its picks by (js/read.js), and writes them to js/read-table.js:
 //   node tools/read-table.mjs [--workers 3] [--snaps 40] [--sets 6] [--progress file.jsonl]
 // Every play from every formation against every call the other coach can make (front, coverage, rush or who blitzes,
-// disguised or not), each snapped --snaps times in each of three seed sets, and how often it was a success at each
-// down and distance the board has: a gain of 1 yard or more (4th & 1), 2 (3rd & 2), 4 (1st & 10, 2nd & 6) and 8
-// (3rd & 8), a run or a catch, as the board counts a success (success() in js/app.js): --snaps in each of --sets seed
-// sets, 240 a cell as it's made. Made in two halves of 120 snaps, the halves picked the same top play for 77% of the
-// looks (each look on each down, calling the offense), and where they didn't, each half's top play was in the other's
-// top three 99 times in 100, a median of no points and 2.5 or less nine times in ten behind the other's own top play by
-// its numbers. The situation changes how a snap
-// plays out only for a handoff from the shotgun on a short third or fourth down (gunRead() in js/sim.js), so those runs
-// are snapped again on 3rd & 2 for the 1- and 2-yard numbers; every other snap is the same on any down.
+// disguised or not), each snapped --snaps times in each of --sets seed sets (40 in each of 6, 240 a cell, as it's made),
+// and how often it was a success at each down and distance the board has: a gain of 1 yard or more (4th & 1), 2
+// (3rd & 2), 4 (1st & 10, 2nd & 6) and 8 (3rd & 8), a run or a catch, as the board counts a success (success() in
+// js/app.js). Made in two halves of 120 snaps, the halves picked the same top play for 77% of the looks (each look on
+// each down, calling the offense), and each half's top play was in the other's top three 99 times in 100; where they
+// didn't pick the same, 94 times in 100, a median of 2.1 points and 6.7 or less nine times in ten behind the other's own
+// top play by its numbers. The situation changes how a snap plays out only for a handoff from the shotgun on a short
+// third or fourth down (gunRead() in js/sim.js), so those runs are snapped again on 3rd & 2 for the 1- and 2-yard
+// numbers; every other snap is the same on any down.
 // Calling the defense, the other coach's offense sends a man in motion about one snap in three, so each play from a
 // formation with motion is also snapped against the calls a defense can pick in its card (any front, any coverage,
 // rush four or the Mike blitzing, no disguise) with the man in motion, across and jet alike.

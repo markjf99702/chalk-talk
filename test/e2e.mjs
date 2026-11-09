@@ -3700,8 +3700,9 @@ for (const [width, height, stuck] of [[390, 844, true], [375, 667, true], [700, 
 // The coach's read: a card at the top of the column, before the snap, on whichever side you call: what the other side
 // is showing, what it probably means, and two or three calls worth a look, each a chip that makes it your call. It goes
 // only on what can be seen before the snap: two calls that line up alike get the same read. While the question after
-// the snap is on it doesn't say what coverage the look probably is; it's off in a drill; and its switch turns it off on
-// this device, after a reload too. On a phone the board and Snap stay on screen with it.
+// the snap is on it doesn't say what coverage the look probably is, and it's off while that question waits; it's off in
+// a drill; and its switch turns it off on this device, after a reload too. On a phone the board and Snap stay on screen
+// with it.
 {
   const c = await browser.newContext({ quiz: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
   const p = await c.newPage();
@@ -3720,6 +3721,16 @@ for (const [width, height, stuck] of [[390, 844, true], [375, 667, true], [700, 
   assert.equal(R.likely, null);
   assert.doesNotMatch(await text(), /Cover [0-4]/, 'with the question on, the read names a coverage');
   assert.match(R.likelyShort, /^The quiz after the snap is on/);
+  // While the question waits for an answer the card is off, since it spells out the safeties and the corners the
+  // question asks you to read; it's back once you've answered.
+  await p.evaluate(() => { const { state, board, finish } = window.chalkTalk; window.chalkTalk.snap(); state.t = board.duration(); finish(); });
+  assert.equal(await p.isVisible('#theirsAsk'), true, 'the question isn\'t asked');
+  assert.equal(await read(), null, 'the read is on while the question waits');
+  assert.equal(await p.isVisible('#readBody'), false);
+  assert.equal(await p.textContent('#readOff'), 'Back once you\'ve named their coverage: reading the look is the question.');
+  await p.click('#theirsAsk button:text-is("Cover 2")');
+  assert.ok(await read(), 'the read is still off once the question is answered');
+  assert.equal(await p.isVisible('#readOff'), false);
   // Calls that line up alike get the same read: a disguised Cover 3 and Cover 4, rushing four, against Gun Trips; and
   // calling the defense, any play from the same formation and strong side.
   const own = { formation: 'trips', play: 'smash', flip: false, motion: 'none', hot: {} };
@@ -3773,10 +3784,10 @@ for (const [width, height, stuck] of [[390, 844, true], [375, 667, true], [700, 
   const other = await read();
   await p.evaluate(his => { const { state, lineUp } = window.chalkTalk; Object.assign(state.off, his); lineUp(); }, his);
   assert.deepEqual(await read(), other, 'calling the defense, the read changed with his hidden play');
-  // Off in a drill, which tests your own read; back when it's over.
+  // Off in a drill, where finding what beats his call is up to you; back when it's over.
   await p.click('#drillChips button:text-is("Beat Cover 2")');
   assert.equal(await read(), null, 'the read is on in a drill');
-  assert.equal(await p.textContent('#readOff'), 'Off during a drill: reading the look is the drill.');
+  assert.equal(await p.textContent('#readOff'), 'Off during a drill: finding what beats it is the drill.');
   assert.equal(await p.isVisible('#readBody'), false);
   await p.click('#drillNow button:text-is("Stop the drill")');
   assert.ok(await read(), 'the read stays off after the drill');
