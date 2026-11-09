@@ -665,8 +665,8 @@ function assignRun(S) {
   const emol = outside[0] || front7.filter(d => d.y < 2 && d.x * p > 2.6).sort((a, b) => b.x * p - a.x * p)[0];
   S.emol = emol;
   // On Counter the back-side guard always pulls and kicks out the end. With a tight end on the line on the back side to
-  // block the end the pullers leave, the back-side tackle pulls behind the guard and leads up through the hole, for the
-  // first defender to show up in it (see runBlock()); otherwise the tackle stays home and blocks that end himself (or,
+  // block the end the pullers leave, the back-side tackle pulls behind the guard and follows the back up through the
+  // hole, for whoever is left in it (see runBlock()); otherwise the tackle stays home and blocks that end himself (or,
   // from Gun Ace, where the tight end a step off the line there blocks him, takes anyone coming through the gap the
   // guard leaves), and a fullback, if there is one, leads through the hole instead.
   const counter = play.scheme === 'counter', backT = S.OL.find(o => o.label === (p > 0 ? 'LT' : 'RT'));
@@ -1021,8 +1021,8 @@ function pickUp(S, pl, range, near) {
   return best;
 }
 
-// Who Counter's pulling tackle takes, leading through the hole: the free defender nearest it, within HOLE yards of it
-// and not deep in the backfield, that no teammate is on his way to block.
+// Who Counter's pulling tackle takes, coming through the hole behind the back: the free defender nearest it, within
+// HOLE yards of it and not deep in the backfield, that no teammate is on his way to block.
 const HOLE = 3;
 function inHole(S, pl) {
   let best = null, bd = HOLE;
@@ -2045,9 +2045,11 @@ export const yardText = y => (y >= 0.5 ? `${yardWord(Math.round(y))} downfield` 
 // "a corner route", "an out route"; the check-down and the screen are what they are.
 const routeText = id => { const n = ROUTES[id]?.name; return !n ? 'his route' : id === 'check' || id === 'screen' ? `the ${n}` : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n} route`; };
 
-// Who Counter's back follows: "the pulling guard and tackle", "the pulling guard and the fullback", or "the pulling
-// guard" (see assignRun()).
-const pullers = S => (S.O.some(o => o.job.scheme === 'pull') ? 'the pulling guard and tackle' : S.FB ? 'the pulling guard and the fullback' : 'the pulling guard');
+// Who Counter's back follows: "the pulling guard and the fullback", or "the pulling guard" (see assignRun()). Not the
+// pulling tackle from Singleback: he starts six yards away on the far side and gets to the hole at about 1.5 s at best,
+// and the back, at the line at about 1.35 s, is ahead of him about six snaps in seven, so the tackle follows the back
+// through the hole and blocks whoever's left there.
+const pullers = S => (S.FB ? 'the pulling guard and the fullback' : 'the pulling guard');
 
 // The handoff, and where the run is headed: "Handoff to the running back, heading for the edge." On Power the back
 // follows the pulling guard up through the hole, or, with no fullback, cuts inside the guard's kick-out block.
@@ -2115,7 +2117,7 @@ function jobWords(S, pl) {
     if (j.kind === 'stalk') return j.target ? `Blocks ${name(S, j.target)} to keep him off the run.` : 'Blocks downfield.';
     if (j.kind === 'block') {
       const tgt = j.target ? name(S, j.target) : 'the first defender to show up';
-      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.`, fill: pl.cls === 'ol' ? (j.target ? `Stays home on the back side and blocks ${tgt}, the end the pulling guard leaves.` : 'Stays home on the back side, for anyone coming through the gap the pulling guard leaves.') :`Blocks ${j.target ? tgt : 'the back-side end'}, the man the pullers leave.` })[j.scheme] || `Blocks ${tgt}.`;
+      return ({ zone: `Zone-blocks to the play side: takes ${tgt}.`, reach: `Reach-blocks to the play side: gets outside ${tgt}.`, power: `Blocks down, toward the middle, on ${tgt}.`, kick: `${j.pull ? 'Pulls from the back side and kicks out' : 'Kicks out'} ${tgt}, ${j.target?.y0 >= 2 ? 'the first man outside the end of the line' : 'the end man on the line'}.`, pull: j.hole ? 'Pulls from the back side behind the guard, follows the back through the hole, and blocks whoever\'s left there.' : `Pulls from the back side and leads through the hole for ${tgt}.`, lead: `Leads through the hole for ${tgt}.`, fill: pl.cls === 'ol' ? (j.target ? `Stays home on the back side and blocks ${tgt}, the end the pulling guard leaves.` : 'Stays home on the back side, for anyone coming through the gap the pulling guard leaves.') :`Blocks ${j.target ? tgt : 'the back-side end'}, the man the pullers leave.` })[j.scheme] || `Blocks ${tgt}.`;
     }
     return '';
   }

@@ -304,11 +304,12 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     const [bg, bt] = p > 0 ? ['LG', 'LT'] : ['RG', 'RT'];
     const single = prepare(call('single'), 3), iform = prepare(call('iform'), 3), trips = prepare(call('trips'), 3);
     for (const S of [single, iform, trips]) assert.deepEqual([job(S, bg).scheme, job(S, bg).pull], ['kick', true], `${S.fm.id}: the back-side guard pulls and kicks out`);
-    // From Singleback the back-side tackle pulls with no man of his own: he leads through the hole for the first
-    // defender to show up in it. (Sent at the Mike, who steps the other way with the fake, he got past the line 2-4
-    // yards inside the hole, chasing him.) When he gets past the line, it's through the hole.
+    // From Singleback the back-side tackle pulls with no man of his own: he follows the back through the hole and
+    // blocks whoever's left there (the back is at the line ahead of him about six snaps in seven). (Sent at the Mike,
+    // who steps the other way with the fake, he got past the line 2-4 yards inside the hole, chasing him.) When he gets
+    // past the line, it's through the hole.
     assert.deepEqual([job(single, bt).scheme, job(single, bt).target], ['pull', null], 'from Singleback the back-side tackle pulls, with no man of his own');
-    assert.equal(single.jobText[single.O.find(o => o.label === bt).i], 'Pulls from the back side and leads through the hole for the first defender to show up.');
+    assert.equal(single.jobText[single.O.find(o => o.label === bt).i], 'Pulls from the back side behind the guard, follows the back through the hole, and blocks whoever\'s left there.');
     let through = 0;
     for (const front of ['over', 'under', '34', 'nickel']) for (let s = 1; s <= 6; s++) {
       const c = { ...call('single'), front, coverage: ['c1', 'c2', 'c3', 'c4'][s % 4] }, T = prepare(c, s), tk = T.O.find(o => o.label === bt);
@@ -613,7 +614,7 @@ test('the play-by-play names the run at the handoff, and the blitzers right afte
     const hand = r.events.find(e => e.kind === 'hand');
     if (hand) {
       const want = pl.scheme === 'power' ? (S.FB ? /^Handoff to the running back, behind the pulling guard\.$/ : /^Handoff to the running back, inside the pulling guard's kick-out\.$/)
-        : pl.scheme === 'counter' ? (S.te(-S.p) ? /^Handoff to the running back, back the other way, behind the pulling guard and tackle\.$/ : S.FB ? /^Handoff to the running back, back the other way, behind the pulling guard and the fullback\.$/ : /^Handoff to the running back, back the other way, behind the pulling guard\.$/)
+        : pl.scheme === 'counter' ? (S.FB ? /^Handoff to the running back, back the other way, behind the pulling guard and the fullback\.$/ : /^Handoff to the running back, back the other way, behind the pulling guard\.$/)
           : RUN[pl.scheme];
       assert.match(hand.text, want, `${what}: "${hand.text}"`);
     }

@@ -14,7 +14,7 @@ const RUN_NOTES = {
   iz: 'Inside zone works when there are as many blockers as defenders in the box.',
   oz: 'Outside zone stretches the defense sideways. If the line reaches the edge, the back gets outside; if the defense flows too fast to stop that, a cutback lane opens behind it.',
   power: 'Power brings an extra blocker to the hole, the pulling guard, and wins with numbers at the point of attack. It loses to quick penetration and to an extra defender in the box.',
-  counter: 'Counter is a gap run like Power, with a fake in it: the back steps one way and the ball goes the other, behind the pulling guard (and from I-Form or Singleback a second blocker, turning up through the hole). When the linebackers step with the fake there\'s room behind the pullers; when someone gets into the backfield first, the back, a step slower to the line, loses yards about one time in ten.',
+  counter: 'Counter is a gap run like Power, with a fake in it: the back steps one way and the ball goes the other, behind the pulling guard (from I-Form the fullback leads through the hole too; from Singleback the back-side tackle pulls as well and follows the back through it, for whoever\'s left). When the linebackers step with the fake there\'s room behind the pullers; when someone gets into the backfield first, the back, a step slower to the line, loses yards about one time in ten.',
   draw: 'The draw wants defenders who think pass: rushers running up the field past the back, linebackers dropping into coverage. Against man coverage a defender is waiting on the back, and against an all-out blitz the rushers are already there.',
 };
 
