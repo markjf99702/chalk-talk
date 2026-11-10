@@ -556,6 +556,12 @@ function assignOffense(S) {
     const a = S.reads[k - 1], b = S.reads[k];
     if (a.job.route === 'stick' && (b.job.route === 'flat' || b.job.route === 'bflat') && Math.sign(a.path.at(-1).x) === Math.sign(b.path.at(-1).x)) S.pair = { stick: a, flat: b, k };
   }
+  // Three men out or fewer on the Play-Action Shot (from I-Form, where both backs stay in, or with a man kept in to
+  // block): the one whose route ends nearest the line, where he looks first if they rush as many as he has blockers
+  // (see SIGHT).
+  const outs = S.O.filter(o => o.job.kind === 'route');
+  S.sightRead = play.drop === 'pa' && outs.length && outs.length <= 3 ? outs.reduce((a, b) => (b.path.at(-1).y < a.path.at(-1).y ? b : a)) : null;
+  S.outs = outs.length;
   S.hold = { quick: 2.4, five: 4.1, pa: 4.4, screen: 2.6 }[play.drop];
 }
 
@@ -1047,6 +1053,21 @@ function nearestFree(S, pl, range) {
   return best;
 }
 
+// Three out against as many rushers as he has blockers. On the Play-Action Shot from I-Form both backs stay in to block,
+// so only three go out: the post, the deep crosser and the tight end's flat. Against a Cover 1 blitz the men on the
+// backs come after the quarterback too, seven against seven. Nobody is left free, but the line holds about three
+// seconds (the first rusher free near him at a median 3.05 s, as from Singleback) and the deep routes need about three
+// and a half: reading post, crosser, flat from 2.35 s, he was sacked on one snap in five and threw it away on one in
+// four, 4.1 yards a play, while the flat, open by about 8 yards at 2.35 s and his last read, was thrown once in 100
+// snaps. So once the fake is over and the rush has shown itself (SIGHT seconds after the snap), if as many rush as he has
+// blockers, he looks first to the route that ends nearest the line, at once, and then to his reads in their order.
+// (Reading the flat second instead, or starting his reads at 2.0 s, he was still sacked on one snap in five.) From I-Form
+// against a Cover 1 blitz, over those 300 snaps (three seed sets, every front), he is now sacked on 6% (6, 5 and 7% in
+// the three sets), the flat goes on three snaps in four at a median 1.55 s, and 76% of throws are caught for 6.6 yards a
+// play; against Cover 0, sacked on none of 72 from 13, 9.0 yards a play from 7.1. Every other formation sends four out on
+// the play, so only a man kept in to block brings the rule to it. (A short throw, not a shot: that's the trade.)
+const SIGHT = 1.2;
+
 function qb(S, pl) {
   const t = S.t, play = S.play;
   const hasBall = S.ball.holder === pl.i && S.ball.state === 'held';
@@ -1080,6 +1101,16 @@ function qb(S, pl) {
     else if (t < S.readAt && rd < 1.5 && t > 0.5) hurry(S, pl, false);
     return;
   }
+  // Three out against as many rushers as he has blockers (see SIGHT): from the moment he sees it, he looks first to the
+  // route nearest the line, at once, then to his reads in their order.
+  if (S.sightRead && !S.sight && S.k === undefined && t >= SIGHT) {
+    const rush = S.D.filter(d => d.job.kind === 'rush').length, block = S.O.filter(o => o.job.kind === 'pro' || o.job.kind === 'fake').length;
+    if (rush >= block) {
+      S.sight = { rush, block };
+      S.readAt = Math.min(S.readAt, t);
+      S.reads = [S.sightRead, ...S.reads.filter(r => r !== S.sightRead)];
+    }
+  }
   if (t < S.readAt) {
     if (rd < 1.5 && t > 0.5) hurry(S, pl, false);
     return;
@@ -1097,7 +1128,7 @@ function qb(S, pl) {
       const w = windowFor(S, r);
       // The farther down the field, the more room he wants before he lets it go.
       const need = 0.8 + clamp((w.P.y - 8) * 0.06, 0, 1) + S.R.normal() * 0.3;
-      if (w.w > need) return throwTo(S, r, w.P, w.tf, readNote(S, k), { how: 'read', read: k });
+      if (w.w > need) return throwTo(S, r, w.P, w.tf, S.sight ? sightNote(S, r) : readNote(S, k), S.sight ? { how: 'sight', read: k, first: S.sightRead.i, firstRoute: S.sightRead.job.route, ...S.sight } : { how: 'read', read: k });
     }
     if ((S.kReady !== null && t - S.kReady > S.dwell) || t - S.kAt > 1.1 || !r || r.job.kind !== 'route') {
       if (r && !r.passed) { r.passed = true; S.passed = (S.passed || []).concat(r); }
@@ -1180,12 +1211,20 @@ const passedUp = (S, r) => (S.passed || []).filter(x => x !== r).length;
 
 // Why he threw to read k: the reads before it are counted, not listed, so the caption stays short ("read 4, with the
 // first three covered"); one before it is named ("read 2, after the H was covered").
-const COUNT = ['none', 'one', 'two', 'three', 'four', 'five', 'six'];
+const COUNT = ['none', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'];
 function readNote(S, k) {
   const passed = (S.passed || []).filter(r => r !== S.reads[k]);
   if (k === 0) return 'his first read';
   if (k === 1 && passed.length === 1) return `read 2, after ${name(S, passed[0])} was covered`;
   return `read ${k + 1}, with ${passed.length === k ? 'the first' : `${COUNT[passed.length]} of the first`} ${COUNT[k]} covered`;
+}
+// Why he threw, once he has looked first to the route nearest the line (see SIGHT): to it, "at once, with seven rushing
+// against seven blockers"; to another, after it, by what he passed up, not by its number on the board, which is its
+// place in his reads as drawn.
+function sightNote(S, r) {
+  const passed = (S.passed || []).filter(x => x !== r);
+  if (!passed.length) return `at once, with ${COUNT[S.sight.rush]} rushing against ${COUNT[S.sight.block]} blockers`;
+  return passed.length === 1 ? `after ${name(S, passed[0])} was covered` : `with ${COUNT[passed.length]} covered`;
 }
 
 // Whether a route has got far enough to throw to: so many yards up the field, or to its break. On a five-step drop or
@@ -2131,8 +2170,10 @@ function jobWords(S, pl) {
     if (pl.cls === 'qb') {
       if (S.play.type === 'run') return S.play.scheme === 'draw' ? 'Drops back like it\'s a pass, then hands the ball to the back underneath the rush.' : `Turns and hands the ball to the back, then carries out his fake the other way.`;
       const drop = { quick: 'Takes a quick drop and gets the ball out fast.', five: S.fm.under ? 'Takes a five-step drop.' : 'Takes a three-step drop from the shotgun.', pa: 'Fakes the handoff, then sets up deep.', screen: 'Drops deep to draw the rush, then lofts it to the back.' }[S.play.drop];
-      const order = (S.reads || []).map((r, k) => `${k + 1}. ${r.label} (${ROUTES[r.job.route].name})`).join(', ');
-      return `${drop}${order ? ' His reads: ' + order + '.' : ''}`;
+      const order = (S.reads || []).map((r, k) => `${k + 1}. ${r.label} (${ROUTES[r.job.route].name})`).join(', '), f = S.sightRead;
+      // (Before his reads, so the card still ends with them: see S.sightRead.)
+      const sight = f ? ` With only ${COUNT[S.outs]} out, if they rush as many as he has blockers, he looks first to the ${f.label} (${ROUTES[f.job.route].name}), at once.` : '';
+      return `${drop}${sight}${order ? ' His reads: ' + order + '.' : ''}`;
     }
     if (j.kind === 'carry') return S.play.scheme === 'draw' ? 'Sets up like he is pass-blocking, takes the late handoff, and runs up the middle where the rushers left.'
       : S.play.scheme === 'counter' ? `Takes a step away from the play to pull the linebackers that way, then the handoff back the other way, behind ${pullers(S)}, and reads the blocks for a lane.`

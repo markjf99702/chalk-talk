@@ -122,7 +122,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '841aea635e91' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -983,7 +983,8 @@ test('NFL timing: on five-step and play-action drops he starts reading later, an
   // A read throw (his first read, read 2 and on, or the best left after them) on a five-step drop comes out no sooner
   // than 1.55 s from the shotgun or 1.95 s under center (2.0 and 2.35 s after a play-action fake), half a second later
   // than before; and a route that breaks is a yard out of its break when he lets it go. The quick game and the screen
-  // keep their timing: Slant-Flat's average throw is still out in about a second.
+  // keep their timing: Slant-Flat's average throw is still out in about a second. (So does a look first to the route
+  // nearest the line, with only three out and as many rushing as he has blockers: see the next test.)
   let seed = 1, quick = 0, quickN = 0;
   const READ = /, (his first read|read \d|after nothing else came open)/;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
@@ -1010,6 +1011,50 @@ test('NFL timing: on five-step and play-action drops he starts reading later, an
     assert.ok(past > Math.min(0.9, 0.7 * L), `${JSON.stringify(call)} seed ${seed - 1}: thrown to the ${rcv.label}'s ${rcv.job.route} ${past.toFixed(2)} yards out of his break`);
   }
   assert.ok(quick / quickN < 1.1, `Slant-Flat's throws come out at ${(quick / quickN).toFixed(2)} s on average`);
+});
+
+test('three out against as many rushers as blockers: on the Play-Action Shot from I-Form he looks to the tight end in the flat first, at once', () => {
+  // From I-Form both backs stay in on the Play-Action Shot, so only three go out, and against a Cover 1 blitz the men on
+  // the backs come too: seven rushing against seven blockers. Reading the post, the deep crosser and the flat, in that
+  // order, from 2.35 s, he was sacked on 20% of 300 snaps (three seed sets, every front) and threw it away on 25%, 4.1
+  // yards a play, with the flat, open by about 8 yards at 2.35 s, thrown on two. Now, once the fake is over and he sees
+  // as many coming as he has blockers, he looks first to the route nearest the line, at once: on those 300 snaps, sacked
+  // on 6% (6, 5 and 7% in the three sets), the flat thrown on three in four at a median 1.55 s, 76% of throws caught,
+  // 6.6 yards a play. Every other formation sends four out on it, and no other play has the rule.
+  const card = 'With only three out, if they rush as many as he has blockers, he looks first to the Y (flat), at once.';
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) {
+    if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no fake, no screen)
+    const S = prepare({ formation: fm.id, play: pl.id, front: 'over', coverage: 'c1', pressure: 'blitz' }, 1), mine = fm.id === 'iform' && pl.id === 'pa';
+    assert.equal(S.sightRead?.label, mine ? 'Y' : undefined, `${fm.id} ${pl.id}: the route he looks to first with as many rushing as he has blockers`);
+    assert.equal(S.jobText[S.QB.i].includes(card), mine, `${fm.id} ${pl.id}: the quarterback's card`);
+  }
+  // A man kept in to block makes it three: from Singleback with the Y kept in, the U's flat.
+  assert.equal(prepare({ formation: 'single', play: 'pa', front: 'over', coverage: 'c0', pressure: 'blitz', hot: { Y: 'block' } }, 1).sightRead?.label, 'U');
+  let seed = 9100, n = 0, sacks = 0, first = 0;
+  for (const fr of FRONTS) for (let k = 0; k < 30; k++) {
+    const r = simulate({ formation: 'iform', play: 'pa', front: fr.id, coverage: 'c1', pressure: 'blitz', flip: k % 2 === 1 }, seed++);
+    n++;
+    if (r.result.kind === 'sack') sacks++;
+    const t = r.events.find(e => e.kind === 'throw');
+    if (t?.how !== 'sight' || t.who !== t.first) continue;
+    first++;
+    assert.match(t.text, /^The quarterback throws to the tight end \(Y\) on a flat route, at once, with (seven|eight) rushing against seven blockers\.$/);
+    assert.ok(t.t < 2.35, `thrown at ${t.t} s, when he'd only have started reading`);
+  }
+  assert.ok(sacks / n <= 0.12, `sacked on ${sacks} of ${n} snaps`);
+  assert.ok(first / n > 0.6, `the flat, first and at once, on ${first} of ${n} snaps`);
+  // Rushing four, fewer than his seven blockers, he reads as drawn.
+  for (let k = 0; k < 24; k++) {
+    const r = simulate({ formation: 'iform', play: 'pa', front: FRONTS[k % 4].id, coverage: k % 2 ? 'c1' : 'c3', pressure: 'four', flip: k % 2 === 1 }, seed++);
+    assert.ok(!r.events.some(e => e.how === 'sight'), `rushing four, seed ${seed - 1}`);
+  }
+  // The coach's read picks it from I-Form against those looks, and says why: nobody deep, or one deep with the corners
+  // pressed, where a Cover 1 blitz brings the men on the backs too.
+  for (const code of ['over.c0.blitz.M.0', 'over.c1.blitz.M.0', '34.c1.blitz.M.0']) {
+    const R = coachRead(viewOf({ formation: 'iform', play: 'smash', flip: false }, code, '1and10')), pa = R.picks.find(p => p.set.play === 'pa');
+    assert.ok(pa, `from I-Form against ${code}, no Play-Action Shot in the picks: ${R.picks.map(p => p.label)}`);
+    assert.match(pa.reason, /the quarterback looks first to the Y on the flat, at once/, code);
+  }
 });
 
 test('a choice of blitzer: the Mike, the Will, the nickel back or the strong safety, each where he can be', () => {
@@ -1872,6 +1917,10 @@ test('over many snaps the numbers look like football', () => {
   // or more (from 3.6-6.2%), and the passes as before. With the back's lean, the linebackers' guesses and run blocks won
   // and lost early more often (version 4), 3.77-4.95 yards a carry (mean 4.43, from 4.54; this one 4.95), with 10.9-15.3%
   // of runs losing yards (from 9.9-12.6%), and the passes as before.
+  // With the quarterback looking first to the tight end in the flat on the Play-Action Shot from I-Form when as many
+  // rush as he has blockers (version 4 too), the twelve give 64.8-71.3% complete (mean 67.86%, from 67.66%; seven above
+  // 68%, from six) and sacks on 2.0-4.0% of dropbacks; this one 68.2% (851 of 1,247, from 846 of 1,246), over the 68%
+  // bound, so the bound is 69% (Mark's call, 2026-11-10).
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -1885,7 +1934,9 @@ test('over many snaps the numbers look like football', () => {
   }
   const ypc = run.y / run.n, comp = pass.comp / pass.att, sack = pass.sack / pass.n, int = pass.int / pass.att;
   assert.ok(ypc > 3.3 && ypc < 5.3, `yards a carry ${ypc.toFixed(2)}`);
-  assert.ok(comp > 0.52 && comp < 0.68, `completion rate ${comp.toFixed(3)}`);
+  // (The completion bound is 69% since the quarterback looks first to the tight end in the flat on the Play-Action Shot
+  // from I-Form, when as many rush as he has blockers: Mark set it on 2026-11-10, for that rule. See above.)
+  assert.ok(comp > 0.52 && comp < 0.69, `completion rate ${comp.toFixed(3)}`);
   assert.ok(sack > 0.02 && sack < 0.06, `sack rate ${sack.toFixed(3)}`);
   assert.ok(int > 0.01 && int < 0.05, `interception rate ${int.toFixed(3)}`);
 });

@@ -643,11 +643,24 @@ for (const side of ['O', 'D']) {
     state.seed = 2;
     lineUp(); state.t = board.duration(); finish();
     const stick = document.getElementById('noteNow').textContent;
-    return { out, seen: [...seen].sort(), away, stick };
+    // Three out against as many rushers as blockers: on the Play-Action Shot from I-Form against a Cover 1 blitz he
+    // throws at once to the tight end in the flat (4-3 Over, seed 1), or looks there first and goes on (Nickel, seed 16).
+    const sight = [['over', 1], ['nickel', 16]].map(([front, seed]) => {
+      state.off = { formation: 'iform', play: 'pa', flip: false };
+      state.def = { front, coverage: 'c1', pressure: 'blitz' };
+      state.seed = seed;
+      lineUp(); state.t = board.duration(); finish();
+      return document.getElementById('noteNow').textContent;
+    });
+    return { out, seen: [...seen].sort(), away, stick, sight };
   });
   assert.deepEqual(bad.out, [], 'the This time line in the coach\'s note');
   assert.deepEqual(bad.away, { kind: 'throwaway', now: 'This time: with his first two reads covered, he threw it away rather than take a sack.' });
   assert.equal(bad.stick, 'This time: the strong safety left the stick to go with the running back to the flat, so he threw to the Y on the stick route, and it went for 11 yards.');
+  assert.deepEqual(bad.sight, [
+    'This time: with seven rushing against seven blockers, he threw at once to the tight end (Y) on the flat route, the shortest he had, and it went for 9 yards.',
+    'This time: with seven rushing against seven blockers, he looked first to the tight end (Y) on the flat route, the shortest he had; he was covered, so he threw to the Z on the post route, and it went for 48 yards.',
+  ]);
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
   await p.close();
 }

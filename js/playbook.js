@@ -430,8 +430,8 @@ export const NOTES = {
     c4: 'Quarters corners play off and deep, so there\'s room underneath for both quick routes.',
   },
   pa: {
-    c0: 'With no deep safety, play-action is all-or-nothing: the deep routes are one-on-ones, but the blitz arrives before the fake is over.',
-    c1: 'The free safety has to pick the post or the deep crosser. The fake pulls the underneath defenders up, and the crosser runs behind them.',
+    c0: 'With no deep safety, play-action is all-or-nothing: the deep routes are one-on-ones, but the blitz arrives before the fake is over. From I-Form, with both backs blocking and only three out, the quarterback looks to the tight end in the flat first, at once.',
+    c1: 'The free safety has to pick the post or the deep crosser. The fake pulls the underneath defenders up, and the crosser runs behind them. From I-Form, with both backs blocking and only three out, a blitz brings seven against seven blockers, and the quarterback looks to the tight end in the flat first, at once.',
     c2: 'Two deep safeties sit over the top of the post, but the linebackers bite on the fake and the crosser gets the space they left.',
     c3: 'The lone middle safety can\'t take both the post and the deep crosser, and the linebackers who stepped up for the fake are out of the throwing lane.',
     c4: 'Quarters safeties read the run fake and come up, which is exactly when the post goes behind them, or they stay home and the crosser is underneath.',

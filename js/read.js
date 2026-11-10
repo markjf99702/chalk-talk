@@ -5,7 +5,7 @@
 // could have made that look that way, by how often he makes each one (his mix, below), using the simulator's own
 // numbers for how each play does against each of them (js/read-table.js, made by tools/read-table.mjs).
 import { TABLE } from './read-table.js';
-import { FORMATIONS, PLAYS, FRONTS, COVERAGES, SITUATIONS, needed } from './playbook.js';
+import { FORMATIONS, PLAYS, FRONTS, COVERAGES, SITUATIONS, ROUTES, needed } from './playbook.js';
 import { prepare, cantCall, blitzerFor, SIM_VERSION } from './sim.js';
 
 const byId = (list, id) => list.find(x => x.id === id) || list[0];
@@ -225,7 +225,10 @@ const RUN_WORDS = {
   counter: 'Counter steps one way and goes the other, behind the pulling guard.',
   draw: 'The Draw looks like a pass, and hands it off under rushers running up the field.',
 };
-function reasonFor(id, L, blockers, again = false) {
+// The man the quarterback looks to first on the Play-Action Shot from this formation when as many rush as he has
+// blockers, with only three out (S.sightRead in js/sim.js: from I-Form, the tight end in the flat), or none.
+const sightOf = fm => prepare({ formation: fm.id, play: 'pa', flip: false, motion: 'none', hot: {}, front: 'over', coverage: 'c2', pressure: 'four', blitzer: 'M', disguise: false, sit: '1and10' }, 1).sightRead;
+function reasonFor(id, L, blockers, again = false, fm = null) {
   const pl = byId(PLAYS, id);
   if (pl.type === 'run') {
     const d = blockers - L.box;
@@ -273,10 +276,17 @@ function reasonFor(id, L, blockers, again = false) {
       if (press) return 'Corners pressed: the stick sits down at five yards with the man on him still behind him, an easy throw if a short one.';
       if (c === 'five') return 'The corner sitting short covers a receiver in the flat, so the ball goes to the stick, in front of the linebackers, or to the back coming out of the backfield.';
       return 'The defender between the stick and the flat can\'t take both: the quarterback throws to the one he leaves.';
-    case 'pa':
+    case 'pa': {
+      // With only three out, against everyone coming he takes the short one at once (see SIGHT in js/sim.js). Against
+      // one deep with the corners pressed, man-to-man, a blitz brings the men on the backs too, as many as he has
+      // blockers: from I-Form that's why it's picked there, as often as not.
+      const f = fm && sightOf(fm), first = f && `the quarterback looks first to the ${f.label} on the ${ROUTES[f.job.route].name}, at once`;
+      if (zero && f) return `Nobody deep and everyone else coming, with only three out: ${first}, before they get there.`;
       if (zero) return 'Nobody deep: the deep routes are one-on-ones, if the fake buys time against the blitz.';
+      if (deep === 1 && press && f) return `The one deep safety has to pick the post or the deep crosser. If they blitz, the men on your backs come too, as many as you have blockers, and with only three out ${first}.`;
       return deep === 1 ? 'The one deep safety has to pick the post or the deep crosser, and the linebackers step up for the fake.'
         : 'Linebackers who step up for the fake leave the deep crosser room behind them.';
+    }
     case 'screen':
       return L.walked || zero ? 'Men walked up to come: let them through and flip it to the back behind them, with linemen out in front.'
         : 'Let the rushers through and flip it to the back behind them, with three linemen out in front.';
@@ -360,7 +370,7 @@ function offenseRead(v) {
   const top = rankPlays(fm.id, alike, sit).slice(0, 3), isRun = id => byId(PLAYS, id).type === 'run';
   read.picks = top.map(({ id, rate: r }, n) => ({
     label: byId(PLAYS, id).name, set: { play: id }, rate: r, rateText: times(r), current: id === v.play,
-    reason: reasonFor(id, L, L.blockers, top.slice(0, n).some(x => isRun(x.id))),
+    reason: reasonFor(id, L, L.blockers, top.slice(0, n).some(x => isRun(x.id)), fm),
   }));
   const moving = v.motion === 'across' || v.motion === 'jet', hot = Object.keys(v.hot || {}).length > 0;
   if (moving || hot) read.numbers = `The numbers are for each play as it's drawn${moving ? ', with nobody in motion' : ''}${hot ? ', without your route changes' : ''}.`;

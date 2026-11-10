@@ -1943,7 +1943,7 @@ const DISGUISE_NOTES = {
 
 // This snap in one sentence, from the play-by-play: on a pass, which read he threw to and what came of it, or what got
 // to him first; on a run, the numbers in the box and who made the tackle. The yards are the headline's.
-const READS = ['', 'one', 'two', 'three', 'four', 'five', 'six'];
+const READS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'];
 function thisTime(P) {
   const res = P.result, E = P.events, pl = byId(PLAYS, P.call.play), n = gained(res), by = res.by;
   const yd = v => `${v} yard${v === 1 ? '' : 's'}`;
@@ -1983,6 +1983,9 @@ function thisTime(P) {
     pressure: `with the rush on him, he threw to ${on}`,
     last: `with none of his reads open, he threw to ${on}`,
     stick: t.how === 'stick' && `${nm(P, t.key)} left the stick to go with ${him(t.flat)} to the flat, so he threw to ${on}`, // (only then: the others have no key)
+    // Three out against as many rushers as he had blockers: he looked first to the route nearest the line (see SIGHT in
+    // js/sim.js).
+    sight: t.how === 'sight' && `with ${READS[t.rush]} rushing against ${READS[t.block]} blockers, ${t.who === t.first ? `he threw at once to ${on}, the shortest he had` : `he looked first to ${him(t.first)} on the ${ROUTES[t.firstRoute]?.name || 'short'} route, the shortest he had; ${t.passed > 1 ? `he and ${READS[t.passed - 1]} more were covered` : 'he was covered'}, so he threw to ${on}`}`,
     screen: `he threw the screen to ${who}`,
   }[t.how] || `he threw to ${on}`;
   const end = E.findLast(e => e.kind === 'inc' || e.kind === 'pbu' || e.kind === 'int');
