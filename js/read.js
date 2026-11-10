@@ -188,6 +188,13 @@ export function rankDefenses(formation, sit) {
 const tenths = p => Math.min(9, Math.max(1, Math.round(p * 10)));
 const tens = p => (p >= 0.95 ? 'nearly all' : p < 0.05 ? 'almost none' : `about ${tenths(p)} in 10`);
 const times = p => (p >= 0.95 ? 'nearly every time' : p < 0.05 ? 'almost never' : `about ${tenths(p)} time${tenths(p) === 1 ? '' : 's'} in 10`);
+// Out of 100, for the defense picks' two numbers: the picks are in order of the first less the second, unrounded, and to
+// the nearest 1 in 10 a pick could read worse than the one under it on both (on 3rd & 8 against Gun Ace, Gun Doubles and
+// the Pistol it did: a first pick giving up 15 yards or more about 6 times in 100 read "about 1 in 10", as did the ones
+// under it giving up 9 and 13).
+const hundredths = p => Math.min(99, Math.max(1, Math.round(p * 100)));
+const times100 = p => (p >= 0.995 ? 'nearly every time' : p < 0.005 ? 'almost never' : `about ${hundredths(p)} time${hundredths(p) === 1 ? '' : 's'} in 100`);
+const share100 = p => (p < 0.005 ? 'almost never' : `about ${hundredths(p)} in 100`);
 const COVER_WORDS = {
   c0: 'man-to-man, nobody deep', c1: 'man-to-man, one safety deep', c2: 'two deep halves, the corners in the flats',
   c3: 'three deep thirds', c4: 'four deep quarters',
@@ -398,7 +405,7 @@ function defenseRead(v) {
     const risk = zero ? ' With nobody deep, though, a play that gets through can go a long way.' : '';
     return {
       label: `${byId(FRONTS, front).name}, ${byId(COVERAGES, coverage).name}${zero ? '' : pressure === 'blitz' ? ', blitz' : ', rush four'}`,
-      set, rate: r, long, rateText: `${times(r)}; 15 yards or more ${long < 0.05 ? 'almost never' : `about ${tenths(long)} in 10`}`, current,
+      set, rate: r, long, rateText: `${times100(r)}; 15 yards or more ${share100(long)}`, current,
       reason: `${cap(word(L.box))} in the box against his ${word(blockers)} blockers, ${DEEP_SHORT[L.deep]}, ${rush}: ${why}.${risk}`,
     };
   });

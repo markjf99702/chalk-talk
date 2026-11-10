@@ -2051,7 +2051,7 @@ test('calling the defense, the read counts the long plays a call gives up agains
     const why = `${fm.name}, ${sit.name}`;
     assert.equal(`${D.picks[0].set.front}.${D.picks[0].set.coverage}.${D.picks[0].set.pressure}.M.0`, byBoth.code, `${why}: the first pick isn't the call that holds his plays short most, less his long plays`);
     assert.ok(Math.abs(D.picks[0].rate - byBoth.held) < 1e-9 && Math.abs(D.picks[0].long - byBoth.long) < 1e-9, why);
-    assert.match(D.picks[0].rateText, /^(about \d times? in 10|nearly every time|almost never); 15 yards or more (almost never|about \d in 10)$/, why);
+    assert.match(D.picks[0].rateText, /^(about \d\d? times? in 100|nearly every time|almost never); 15 yards or more (almost never|about \d\d? in 100)$/, why);
     assert.match(D.picksTitle, /and how often he goes 15 yards or more against it:$/, why);
     if (byHeld.code.includes('.c0.')) zeroHeld++;
     if (byBoth.code.includes('.c0.')) zeroNow++;
@@ -2059,4 +2059,28 @@ test('calling the defense, the read counts the long plays a call gives up agains
   }
   assert.ok(zeroNow < zeroHeld, `Cover 0 first for ${zeroNow} formations and downs, and ${zeroHeld} by holding plays short alone`);
   assert.ok(moved > 0, 'counting long plays moved no first pick');
+});
+
+test('calling the defense, no pick reads better than the one above it', () => {
+  // A defense pick gives two numbers, how often it holds his plays short and how often he goes 15 yards or more against
+  // it, and the picks are in order of the first less the second, before rounding. Each to the nearest 1 in 10, on 3rd &
+  // 8 against Gun Ace the first pick, the 4-3 Over in Cover 4 rushing four, read "about 7 times in 10; 15 yards or more
+  // about 1 in 10" and both under it "about 8 times in 10; 15 yards or more about 1 in 10": it's first for giving up far
+  // fewer long plays, about 6 in 100 against 9 and 13. So did Gun Doubles' and the Pistol's. Out of 100, none does.
+  // (read as so many in 100, whether it says in 10 or in 100)
+  const nums = t => {
+    const m = t.match(/^(?:about (\d+) times? in (10|100)|(nearly every time)|almost never); 15 yards or more (?:about (\d+) in (10|100)|almost never)$/);
+    assert.ok(m, t);
+    return [m[3] ? 100 : (+m[1] || 0) * (100 / (+m[2] || 100)), (+m[4] || 0) * (100 / (+m[5] || 100))];
+  };
+  let pairs = 0;
+  for (const fm of FORMATIONS) for (const sit of SITUATIONS) {
+    const D = coachRead({ side: 'D', formation: fm.id, flip: false, sit: sit.id, call: {} });
+    for (let n = 1; n < D.picks.length; n++) {
+      const [h0, l0] = nums(D.picks[n - 1].rateText), [h1, l1] = nums(D.picks[n].rateText);
+      pairs++;
+      assert.ok(!(h1 >= h0 && l1 <= l0 && (h1 > h0 || l1 < l0)), `${fm.name}, ${sit.name}: "${D.picks[n].label}" (${D.picks[n].rateText}) reads better than "${D.picks[n - 1].label}" above it (${D.picks[n - 1].rateText})`);
+    }
+  }
+  assert.ok(pairs >= 60, `${pairs} picks under another`);
 });
