@@ -122,7 +122,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '841aea635e91' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -307,16 +307,19 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     // From Singleback the back-side tackle pulls with no man of his own: he follows the back through the hole and
     // blocks whoever's left there (the back is at the line ahead of him about six snaps in seven). (Sent at the Mike,
     // who steps the other way with the fake, he got past the line 2-4 yards inside the hole, chasing him.) When he gets
-    // past the line, it's through the hole.
+    // past the line, it's through the hole: the one drawn, or the one the back took inside it, leaning to the cutback
+    // (see LEAN in js/sim.js; from Singleback against the 4-3 Over, seed 2, the back went through 2.8 yards inside it
+    // and the tackle after him, 1.9 inside).
     assert.deepEqual([job(single, bt).scheme, job(single, bt).target], ['pull', null], 'from Singleback the back-side tackle pulls, with no man of his own');
     assert.equal(single.jobText[single.O.find(o => o.label === bt).i], 'Pulls from the back side behind the guard, follows the back through the hole, and blocks whoever\'s left there.');
     let through = 0;
     for (const front of ['over', 'under', '34', 'nickel']) for (let s = 1; s <= 6; s++) {
       const c = { ...call('single'), front, coverage: ['c1', 'c2', 'c3', 'c4'][s % 4] }, T = prepare(c, s), tk = T.O.find(o => o.label === bt);
-      const f = simulate(c, s).frames.find(f => f.xy[2 * tk.i + 1] > 0.5);
+      const F = simulate(c, s).frames, f = F.find(f => f.xy[2 * tk.i + 1] > 0.5), b = F.find(f => f.xy[2 * T.RB.i + 1] > 0.5);
       if (!f) continue;
       through++;
-      assert.ok((f.xy[2 * tk.i] - T.aimX) * p > -1.5, `Singleback against the ${front}, seed ${s}: the pulling tackle gets past the line ${((T.aimX - f.xy[2 * tk.i]) * p).toFixed(1)} yards inside the hole`);
+      const hole = Math.min(0, b ? (b.xy[2 * T.RB.i] - T.aimX) * p : 0); // (inside the hole as drawn, where the back took it)
+      assert.ok((f.xy[2 * tk.i] - T.aimX) * p - hole > -1.5, `Singleback against the ${front}, seed ${s}: the pulling tackle gets past the line ${((T.aimX - f.xy[2 * tk.i]) * p).toFixed(1)} yards inside the hole, the back ${(-hole).toFixed(1)}`);
     }
     assert.ok(through >= 3, `the pulling tackle got past the line on ${through} snaps`);
     assert.equal(job(single, 'U').scheme, 'fill', 'and the back-side tight end takes the end they leave');
@@ -343,10 +346,11 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
     // Under center they go with him until 0.9 s, half a yard up the field. From the shotgun, where the back has the ball
     // sooner, only until the handoff: by 0.85 s each has come downhill toward the back, more than a yard.
     assert.ok(lbs.every(d => d.y0 - at(0.85)[2 * d.i + 1] < 0.7), 'under center the linebackers are still stepping with the fake at 0.85 s');
+    // (Not one who guessed wrong, who takes a step away from the play first: see GUESS in js/sim.js.)
     for (const fm of ['pistol', 'ace', 'doubles', 'trips']) {
       const G = prepare(call(fm), 3), g = simulate(call(fm), 3), xy = g.frames.find(f => f.t >= 0.85 - 1e-9).xy;
       assert.ok(g.events.find(e => e.kind === 'hand').t < 0.85, `${fm}: the handoff comes before 0.85 s`);
-      for (const d of G.D.filter(d => d.cls === 'lb' && d.job.kind !== 'rush')) assert.ok(d.y0 - xy[2 * d.i + 1] > 1, `${fm}: once the back has the ball the ${d.label} comes downhill: ${(d.y0 - xy[2 * d.i + 1]).toFixed(2)} yards at 0.85 s`);
+      for (const d of G.D.filter(d => d.cls === 'lb' && d.job.kind !== 'rush' && d.guess >= 0)) assert.ok(d.y0 - xy[2 * d.i + 1] > 1, `${fm}: once the back has the ball the ${d.label} comes downhill: ${(d.y0 - xy[2 * d.i + 1]).toFixed(2)} yards at 0.85 s`);
     }
     // But not a linebacker in the bump, holding the edge: the Sam, when the strong safety blitzes after the Z goes across.
     const bc = { ...call('iform'), coverage: 'c1', pressure: 'blitz', blitzer: 'SS', motion: 'across' };
@@ -364,7 +368,10 @@ test('Counter: the back steps away first and the linebackers go with him; the ba
   // tackle leading through the hole rather than chasing the Mike: 3.4-4.0, 48-56% and 7-10%, and from Singleback 44-50%
   // gaining 4, from 17-25%. From 424242 and 55555 as well, 7-10% losing yards: held under 15%, so the note's "one time
   // in ten" can't drift to one in five unseen. With the guard pulling flat when the man he kicks out is the Sam, 3.7-4.1
-  // yards a carry, 48-56% gaining 4 and 7-10% losing yards, and from Singleback 53-56% gaining 4, from 44-53%.)
+  // yards a carry, 48-56% gaining 4 and 7-10% losing yards, and from Singleback 53-56% gaining 4, from 44-53%. With the
+  // back's lean, the linebackers' guesses and run blocks won and lost early more often (version 4), from these six start
+  // seeds: 3.4-3.9 yards a carry, 45-51% gaining 4 and 8-13% losing yards (from 3.7-4.1, 48-56% and 7-10%); against the
+  // 3-4, 7-13% losing yards, from 0-3%; and from Singleback 39-56% gaining 4, from 53-61%.)
   let n = 0, y = 0, ok = 0, lost = 0, n34 = 0, lost34 = 0, n1 = 0, ok1 = 0;
   for (const fm of FORMATIONS.filter(f => !cantCall(f.id, 'counter'))) for (const front of ['over', 'nickel', '34']) for (const coverage of ['c1', 'c2', 'c3']) for (let k = 0; k < 4; k++) {
     const res = simulate({ formation: fm.id, play: 'counter', front, coverage, pressure: k % 2 ? 'four' : 'blitz', flip: k % 2 === 1 }, 1300 + n++).result;
@@ -1177,7 +1184,7 @@ test('motion: he runs across and is counted on his new side; in man coverage his
   }
 });
 
-test('the bump: when a cornerback goes across with the man in motion, the strong safety takes his place, or the man on the tight end does, and Outside Zone that way does about what it does without the motion', () => {
+test('the bump: when a cornerback goes across with the man in motion, the strong safety takes his place, or the man on the tight end does, and Outside Zone that way does about what it does without the motion, or a few yards more against Cover 0', () => {
   // From I-Form and Singleback the Z goes in motion from the tight end's side, and in man coverage the cornerback on
   // him goes too. The strong safety slides over to the side they left, outside the tight end, at the snap (ahead of a
   // jet as well), and the play-by-play says so. In a zone the corner stays, and from the formations whose H goes in
@@ -1226,9 +1233,14 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
   // more, and 5 more from Singleback against Cover 0: with the corner gone, nobody was left out there and about one run
   // in five went the distance. Over 1,152 snaps a cell from three start seeds (1234, 50000, 900000) it comes within
   // 0.1-3.0 yards, and 0.8-3.3 since a back past the line is run down from behind more often, which takes more off the
-  // runs without the motion; the most from Singleback against Cover 0.)
+  // runs without the motion; the most from Singleback against Cover 0.) Against Cover 0, where a run that gets through
+  // can go the distance, 160 snaps were too few to tell: from four start seeds (this one, 50000, 900000, 2000000) the Z
+  // going across first added 3.0-5.3 yards a carry from I-Form; at 400 snaps, 2.4-2.9. With the back's lean, the
+  // linebackers' guesses and run blocks won and lost early more often (version 4), it adds 3.4-4.9 from I-Form (over
+  // 1,200 snaps from two more start seeds, 4.2 and 4.8, from 1.6 and 3.7), and from Singleback -0.4-3.8 (from
+  // -0.1-3.7): a few yards more against Cover 0 from I-Form, with nobody holding the edge in the cornerback's place.
   seed = 1234;
-  for (const [formation, coverage, k] of [['iform', 'c1', 20], ['single', 'c1', 20], ['iform', 'c0', 40], ['single', 'c0', 40]]) {
+  for (const [formation, coverage, k, most] of [['iform', 'c1', 20, 4], ['single', 'c1', 20, 4], ['iform', 'c0', 100, 6], ['single', 'c0', 100, 4]]) {
     const ypc = {};
     for (const motion of ['none', 'across']) {
       let y = 0, n = 0, s = seed;
@@ -1238,7 +1250,7 @@ test('the bump: when a cornerback goes across with the man in motion, the strong
       ypc[motion] = y / n;
     }
     seed += 1000;
-    assert.ok(Math.abs(ypc.across - ypc.none) < 4, `Outside Zone from ${formation} against Cover ${coverage[1]}: ${ypc.none.toFixed(1)} yards a carry, ${ypc.across.toFixed(1)} with the Z going across first`);
+    assert.ok(Math.abs(ypc.across - ypc.none) < most, `Outside Zone from ${formation} against Cover ${coverage[1]}: ${ypc.none.toFixed(1)} yards a carry, ${ypc.across.toFixed(1)} with the Z going across first`);
   }
   // And in the two Cover 1 calls where the strong safety can't bump, with the man on the tight end bumping instead:
   // the Nickel front with the Mike or the Will blitzing (the strong safety has the back, or from Singleback the other
@@ -1403,20 +1415,27 @@ test('from the Pistol the linebackers can\'t tell which way the run is going, an
   // do from the other shotgun sets, the Will lined up over the slot on the other side got across in time: Inside Zone
   // and Power against the Nickel front succeeded (gained 4 yards or more) 20% and 16% of the time from this test's
   // seeds, and the Will made about half the stops. Now they lean only PISTOL_LEAN of the way toward him (see bite() in
-  // js/sim.js): 34% and 44% (from six start seeds, 34-44% and 33-45%). A back lined up beside the quarterback still
-  // tells them: from Gun Doubles the Will has come 1.7-3.0 yards across a third of a second after the handoff, and from
-  // the Pistol he came 2.6-3.3 before, 1.3-2.3 now.
+  // js/sim.js): 34% and 44% (from six start seeds, 34-44% and 33-45%; with the back's lean, the linebackers' guesses
+  // and run blocks won and lost early more often, version 4, 35% and 41%, and 31-38% and 28-43%). A back lined up beside
+  // the quarterback still tells them: from Gun Doubles the Will has come 1.7-3.0 yards across a third of a second after
+  // the handoff, and from the Pistol he came 2.6-3.3 before, 1.3-2.3 now.
   const drift = (formation, play, coverage, flip, seed) => {
     const r = simulate({ formation, play, front: 'nickel', coverage, pressure: 'four', flip }, seed);
     const w = r.players.findIndex(p => p.label === 'W'), h = r.events.find(e => e.kind === 'hand');
     const f = r.frames.find(f => f.t >= h.t + 0.35 - 1e-6);
     return (f.xy[2 * w] - r.frames[0].xy[2 * w]) * (flip ? -1 : 1); // toward the play side
   };
+  // (A Will who guesses wrong takes a step away from the play first, from either: see GUESS in js/sim.js.)
+  const guess = (formation, play, coverage, flip, seed) => prepare({ formation, play, front: 'nickel', coverage, pressure: 'four', flip }, seed).D.find(d => d.label === 'W').guess;
+  let read = 0;
   for (const play of ['iz', 'power']) for (const coverage of ['c2', 'c3', 'c4']) for (const flip of [false, true]) for (let s = 1; s <= 6; s++) {
     const what = `${play} against ${coverage}${flip ? ', flipped' : ''}, seed ${s}`;
     assert.ok(drift('pistol', play, coverage, flip, s) < 2.5, `from the Pistol, ${what}: the Will has come ${drift('pistol', play, coverage, flip, s).toFixed(1)} yards across`);
+    if (guess('doubles', play, coverage, flip, s) < 0) { assert.ok(drift('doubles', play, coverage, flip, s) < 0, `from Gun Doubles, ${what}: the Will guessed wrong`); continue; }
+    read++;
     assert.ok(drift('doubles', play, coverage, flip, s) > 1.5, `from Gun Doubles, ${what}: the Will has come only ${drift('doubles', play, coverage, flip, s).toFixed(1)} yards across`);
   }
+  assert.ok(read >= 36, `${read} snaps with the Will reading it`);
   let seed = 5100;
   const rate = {};
   for (const play of ['iz', 'power']) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) for (let k = 0; k < 12; k++) {
@@ -1546,10 +1565,13 @@ test('on a run a deep safety is the last line: he keeps the ball carrier in fron
   // within 4 yards in front of the back for a fifth of a second and was within 3, he was going at more than 0.82 of his
   // top speed in 68% of the frames (half of them at 0.95 or more). Now he keeps 4 yards beyond the back until he's
   // within 4 (FIT_DEPTH, FIT_RANGE in js/sim.js) and closes at three quarters of his speed: 2% of those frames, from
-  // bumps. So more runs get past 10 yards: 27 of these 768 before, 50 now (NFL 2023 regular season: one designed run in
-  // ten, from nflverse's play-by-play).
+  // bumps. So more runs get past 10 yards: 27 of these 768 before, 50 after (NFL 2023 regular season: one designed run
+  // in ten, from nflverse's play-by-play). From four start seeds (this one, 1, 100000 and 7777777) that was 37-50, and
+  // with the back's lean, the linebackers' guesses and run blocks won and lost early more often (version 4), 36-57; so
+  // they're snapped three times over, 2,304 runs, and more than one in 20 get 10 yards, as 38 of 768 did: 5.2-6.4% of
+  // them from those seeds before version 4, 6.1-6.4% since.
   let seed = 7000, n = 0, fast = 0, runs = 0, ten = 0;
-  for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (const flip of [false, true]) {
+  for (let pass = 0; pass < 3; pass++) for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (const coverage of ['c1', 'c2', 'c3', 'c4']) for (const flip of [false, true]) {
     if (cantCall(fm.id, play)) continue;
     const call = { formation: fm.id, play, front: fr.id, coverage, pressure: 'four', flip };
     const r = simulate(call, seed), S = prepare(call, seed++);
@@ -1563,9 +1585,9 @@ test('on a run a deep safety is the last line: he keeps the ball carrier in fron
       n++; if (Math.hypot(D1.x - D.x, D1.y - D.y) / (F[k + 1].t - F[k].t) > 0.82 * d.top) fast++;
     }
   }
-  assert.ok(n > 300, `${n} frames of a deep safety closing on the ball carrier`);
+  assert.ok(n > 900, `${n} frames of a deep safety closing on the ball carrier`);
   assert.ok(fast / n < 0.1, `a deep safety closing on the ball carrier was going flat out in ${fast} frames of ${n}`);
-  assert.ok(ten > 38, `${ten} runs of ${runs} got 10 yards`);
+  assert.ok(ten / runs > 0.05, `${ten} runs of ${runs} got 10 yards`);
 });
 
 test('Counter from the shotgun against Cover 1: a run that gets 10 yards doesn\'t go on as far, and it gains 4 yards as often', () => {
@@ -1603,6 +1625,55 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
   assert.ok(yac / n < 10, `${n} catches 15+ yards downfield gain ${(yac / n).toFixed(1)} yards after the catch on average`);
 });
 
+test('one run against one defense comes out differently from snap to snap', () => {
+  // The man nobody blocks decides a run, by where he meets the back, and that spot hardly moved: in 22% of run matchups
+  // (one run from one formation against one call) the back went through the same gap on 9 snaps in 10 or more, and 11%
+  // gained 4 yards 9 times in 10 or more, 12% one time in 10 or less. Now the back leans a little toward the cutback or
+  // the play side each snap, a linebacker sometimes guesses (one in four steps the wrong way first, about one in six
+  // jumps it), and on a run a block is won or lost early more often (LEAN, GUESS and BLOCK_SPREAD in js/sim.js).
+  let lbs = 0, wrong = 0, right = 0;
+  const leans = [];
+  for (let seed = 1; seed <= 400; seed++) {
+    const S = prepare({ formation: 'iform', play: 'iz', front: 'over', coverage: 'c3', pressure: 'four' }, seed);
+    leans.push(S.lean);
+    for (const d of S.D.filter(d => d.cls === 'lb')) { lbs++; if (d.guess < 0) wrong++; if (d.guess > 0) right++; }
+  }
+  const sd = Math.sqrt(leans.reduce((a, x) => a + x * x, 0) / leans.length);
+  assert.ok(wrong / lbs > 0.2 && wrong / lbs < 0.3 && right / lbs > 0.12 && right / lbs < 0.22, `${wrong} of ${lbs} linebackers guess wrong, ${right} jump it`);
+  assert.ok(sd > 0.75 && sd < 1.05, `the back's lean: spread ${sd.toFixed(2)}`);
+  // One who guesses wrong takes a step away from the play before he reads it.
+  let stepped = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const call = { formation: 'iform', play: 'iz', front: 'over', coverage: 'c3', pressure: 'four', flip: seed % 2 === 1 };
+    const S = prepare(call, seed), r = simulate(call, seed), xy = r.frames.find(f => f.t >= 0.6 - 1e-9).xy;
+    for (const d of S.D.filter(d => d.guess < 0 && d.job.kind !== 'rush')) { stepped++; assert.ok((xy[2 * d.i] - d.x0) * S.p < -0.3, `seed ${seed}: the ${d.label} guessed wrong but has gone ${((xy[2 * d.i] - d.x0) * S.p).toFixed(1)} yards toward the play`); }
+  }
+  assert.ok(stepped >= 5, `${stepped} linebackers guessed wrong`);
+  // Sixteen matchups that came out nearly the same every snap, 40 snaps each: before, 15 of them gained 4 yards 9 times
+  // in 10 or more or one time in 10 or less (40 of 40 snaps of Counter from I-Form against the 4-3 Over in Cover 1 went
+  // through the same gap, the D gap on the strong side); now 2, and that Counter goes through it on 29.
+  const cells = ['iform counter over.c1.four', 'ace oz under.c1.four', 'ace power 34.c2.blitz', 'trips power nickel.c2.blitz', 'single oz nickel.c1.blitz', 'pistol power 34.c2.four', 'iform power nickel.c4.blitz', 'doubles power nickel.c2.blitz',
+    'iform oz nickel.c0.blitz', 'iform power under.c1.four', 'single oz over.c3.blitz', 'single oz under.c0.blitz', 'single power over.c3.four', 'iform counter under.c0.blitz', 'single iz under.c0.blitz', 'iform iz nickel.c4.four'];
+  const all = [];
+  let same = 0;
+  for (const c of cells) {
+    const [formation, play, call] = c.split(' '), [front, coverage, pressure] = call.split('.');
+    let ok = 0;
+    const holes = {};
+    for (let k = 0; k < 40; k++) {
+      const P = simulate({ formation, play, front, coverage, pressure, flip: false, motion: 'none', hot: {}, blitzer: 'M', disguise: false, sit: '1and10' }, 9e6 + k), r = P.result;
+      if (r.kind === 'run' && Math.round(r.yards) >= 4) ok++;
+      const h = P.events.find(e => e.kind === 'hole'), key = h ? `${h.gap}/${h.side}` : 'none';
+      holes[key] = (holes[key] || 0) + 1;
+    }
+    all.push(`${c} ${ok}/40`);
+    if (c === cells[0]) same = Math.max(...Object.values(holes));
+  }
+  const sure = all.filter(x => { const n = +x.split(' ').at(-1).split('/')[0]; return n >= 36 || n <= 4; });
+  assert.ok(sure.length <= 5, `still nearly the same every snap: ${sure.join(', ')}`);
+  assert.ok(same < 36, `Counter from I-Form against the 4-3 Over in Cover 1 went through the same gap on ${same} of 40 snaps`);
+});
+
 test('the drills\' notes say what the board shows', () => {
   // Each drill ends with a line in DRILLS (js/playbook.js) on what does best against its call; this holds the board to
   // it. The offense drills face their coverage from the front the drill sets (nickel against 10 and 11 personnel, the
@@ -1619,7 +1690,11 @@ test('the drills\' notes say what the board shows', () => {
   // Slant-Flat and Play-Action Shot 45-54%, the next 46%, and the Draw 1-5% and Power 9-18%,
   // the next 18-22%. Against I-Form's five runs, the 4-3 Over in Cover 1 with a blitz stops 68-73% for 2.4-2.7 yards a
   // run, and in Cover 0 73-80% for 5.2-8.0. (Before Counter, 80-82% and 81-84%, from four start seeds: Counter gets
-  // through it two times in three, its fake pulling the linebackers the wrong way.)
+  // through it two times in three, its fake pulling the linebackers the wrong way.) With the back's lean, the
+  // linebackers' guesses and run blocks won and lost early more often (version 4), from the three start seeds: against
+  // Cover 0, Power 13-17%, Counter 13-21% and the Draw 15-18% (from 1-4%), the next 25-27% (Inside Zone); and against
+  // I-Form's runs, Cover 1 with a blitz stops 61-64% for 2.6-3.5 yards a run and Cover 0 69-78% for 5.6-7.3 (1,000
+  // snaps of each from two more start seeds: 61-63% for 3.3-3.4, and 74-75% for 6.1-6.7).
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1646,7 +1721,7 @@ test('the drills\' notes say what the board shows', () => {
   const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
   assert.deepEqual(top(c0, 'rate', 1), ['screen'], `Cover 0, success: ${say(c0, 'rate')}`);
   for (const id of ['smash', 'slants', 'pa']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.62, `"about half the time each": ${say(c0, 'rate')}`);
-  assert.deepEqual(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate).slice(0, 2).map(([id]) => id).sort(), ['draw', 'power'], `Cover 0, success: ${say(c0, 'rate')}`);
+  assert.deepEqual(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate).slice(0, 3).map(([id]) => id).sort(), ['counter', 'draw', 'power'], `Cover 0, "the Draw, Power and Counter run straight into it": ${say(c0, 'rate')}`);
   const runs = PLAYS.filter(p => p.type === 'run').map(p => p.id);
   const stop = (front, coverage, pressure) => {
     let n = 0, s = 0, y = 0;
@@ -1658,8 +1733,8 @@ test('the drills\' notes say what the board shows', () => {
   };
   const one = stop('over', 'c1', 'blitz'), zero = stop('over', 'c0', 'blitz');
   const both = `Cover 1 and a blitz stops ${Math.round(one.stop * 100)}% for ${one.avg.toFixed(1)} yards a run, Cover 0 ${Math.round(zero.stop * 100)}% for ${zero.avg.toFixed(1)}`;
-  assert.ok(one.stop > 0.62 && one.stop < 0.8, `"about seven runs in ten": ${both}`);
-  assert.ok(Math.abs(zero.stop - one.stop) < 0.1 && zero.avg > one.avg + 2, `"about as many, but the runs that get through go a long way": ${both}`);
+  assert.ok(one.stop > 0.52 && one.stop < 0.72, `"about six runs in ten": ${both}`);
+  assert.ok(zero.stop > one.stop && zero.stop > 0.64 && zero.stop < 0.86 && zero.avg > one.avg + 2, `"more, about three in four, but the runs that get through go a long way": ${both}`);
   const S = prepare({ formation: drill('run').formation, play: 'iz', front: 'over', coverage: 'c1', pressure: 'blitz' }, 5);
   assert.deepEqual([S.box.box, S.box.blockers], [8, 7], '"eight against seven"');
 
@@ -1684,7 +1759,11 @@ test('the drills\' notes say what the board shows', () => {
   // they held 82.5% short on average, from 85.8%, and half of them 83% or more, so the note says about four in five,
   // not nine in ten). On 3rd & 2 every defense held 36% short, and Cover 0
   // from the 4-3 or the 3-4 56-68%; on 4th & 1, 21%, Cover 0 from the 4-3 47-53% (the most of any call), and the 4-3
-  // Over with two safeties deep and four rushing 1-4%.
+  // Over with two safeties deep and four rushing 1-4%. With the run changes of version 4 (see above), from the three
+  // start seeds: the 4-3 Over in Cover 1 with a blitz held 87-94% short on 3rd & 8 (91-92% over 1,000 snaps from two
+  // more); against Cover 0 on 3rd & 2 the Draw, Power and Counter made it 15-32% and on 4th & 1 21-43%, the zone runs
+  // and the screen 57-85% and 74-88%; and the 4-3 Over with two safeties deep and four rushing stopped 4-10% on 4th &
+  // 1 (5-8% over 500 snaps of each from two more).
   const on = (sit, coverage, pressure) => {
     const need = needed(SITUATIONS.find(s => s.id === sit));
     return Object.fromEntries(PLAYS.map(pl => {
@@ -1698,10 +1777,10 @@ test('the drills\' notes say what the board shows', () => {
   };
   const within = (o, ids, lo, hi, what) => { for (const id of ids) assert.ok(o[id].rate >= lo && o[id].rate <= hi, `${what}: ${say(o, 'rate')}`); };
   const among = (o, k, ids, what) => assert.ok(top(o, 'rate', k).every(id => ids.includes(id)), `${what}: ${say(o, 'rate')}`);
-  // (last: no play makes it less often. A tie counts: on 4th & 1 against Cover 0, with the linebackers' step on Counter
-  // ending at the handoff from the shotgun, Counter made it 18 times in 72 here, as often as the Draw; from the three
-  // start seeds, 28-38% of the time to the Draw's 18-24%.)
-  const last = (o, id, what) => assert.ok(Object.values(o).every(v => v.rate >= o[id].rate), `${what}: ${say(o, 'rate')}`);
+  // (below: the first plays all make it less often than the second ones. On a short third or fourth down against Cover
+  // 0 the Draw made it least often, 3-10% on 3rd & 2 and 17-24% on 4th & 1, until the run changes of version 4: now
+  // it's with Power and Counter, see above.)
+  const below = (o, ids, than, what) => assert.ok(Math.max(...ids.map(id => o[id].rate)) < Math.min(...than.map(id => o[id].rate)), `${what}: ${say(o, 'rate')}`);
   for (const id of ['c2', 'c3', 'blitz']) assert.ok(drill(id).long && drill(id).short, `${id} has no note for third down`);
   let o = on('3and8', 'c2', 'four');
   within(o, ['verts', 'slants', 'pa', 'smash', 'mesh'], 0.36, 0.64, 'Cover 2 on 3rd & 8, "about half the time each"');
@@ -1730,13 +1809,15 @@ test('the drills\' notes say what the board shows', () => {
   among(o, 3, ['smash', 'verts', 'pa'], 'Cover 0 on 3rd & 8, "most often"');
   within(o, ['screen'], 0.15, 0.36, 'Cover 0 on 3rd & 8, the screen "about one time in four"');
   o = on('3and2', 'c0', 'blitz');
-  within(o, ['screen', 'oz', 'iz'], 0.55, 0.92, 'Cover 0 on 3rd & 2, "about two times in three or more"');
+  within(o, ['screen', 'oz', 'iz'], 0.52, 0.92, 'Cover 0 on 3rd & 2, "about three times in five or more"');
   among(o, 2, ['screen', 'oz', 'iz'], 'Cover 0 on 3rd & 2, "most often"');
-  last(o, 'draw', 'Cover 0 on 3rd & 2, "the Draw still runs straight into it"');
+  within(o, ['draw', 'power', 'counter'], 0.1, 0.42, 'Cover 0 on 3rd & 2, the Draw, Power and Counter "about one time in four"');
+  below(o, ['draw', 'power', 'counter'], ['screen', 'oz', 'iz'], 'Cover 0 on 3rd & 2, the Draw, Power and Counter "run into the rush"');
   o = on('4and1', 'c0', 'blitz');
   within(o, ['iz', 'oz', 'screen'], 0.68, 0.94, 'Cover 0 on 4th & 1, "about four in five"');
   among(o, 2, ['iz', 'oz', 'screen'], 'Cover 0 on 4th & 1');
-  last(o, 'draw', 'Cover 0 on 4th & 1, "the Draw still runs straight into it"');
+  within(o, ['draw', 'power', 'counter'], 0.18, 0.5, 'Cover 0 on 4th & 1, the Draw, Power and Counter "one in three"');
+  below(o, ['draw', 'power', 'counter'], ['screen', 'oz', 'iz'], 'Cover 0 on 4th & 1, the Draw, Power and Counter "run into the rush"');
   // The run drill: how often I-Form's runs are held short of the first down.
   const held = (sit, front, coverage, pressure, each = 40) => {
     const need = needed(SITUATIONS.find(s => s.id === sit));
@@ -1750,7 +1831,7 @@ test('the drills\' notes say what the board shows', () => {
   const everyone = sit => { let t = 0, n = 0; for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of cv.id === 'c0' ? ['blitz'] : ['four', 'blitz']) { t += held(sit, fr.id, cv.id, pressure, 4); n++; } return t / n; };
   assert.ok(drill('run').long && drill('run').short, 'the run drill has no note for third down');
   const long1 = held('3and8', 'over', 'c1', 'blitz'), longAll = everyone('3and8'), long3 = ['over', '34'].map(fr => held('3and8', fr, 'c3', 'four'));
-  assert.ok(long1 > 0.88, `"the 4-3 Over with Cover 1 and a blitz more than nine in ten": ${long1.toFixed(2)}`);
+  assert.ok(long1 > 0.84, `"the 4-3 Over with Cover 1 and a blitz about nine in ten": ${long1.toFixed(2)}`);
   assert.ok(longAll > 0.72 && longAll < 0.88, `"most calls hold it short about four times in five": every defense ${longAll.toFixed(2)}`);
   assert.ok(long3.every(x => x > 0.5 && x < 0.75 && x < long1), `"Cover 3 rushing four lets the most through, about one in three": ${long3.map(x => x.toFixed(2))}`);
   const shortAll = everyone('3and2'), short0 = ['over', 'under', '34'].map(fr => held('3and2', fr, 'c0', 'blitz'));
@@ -1760,7 +1841,7 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(oneAll > 0.14 && oneAll < 0.28, `"one in five on 4th & 1": ${oneAll.toFixed(2)}`);
   assert.ok(one0.every(x => x > 0.38 && x < 0.62 && x > Math.max(...oneRest) - 0.06), `"from the 4-3, about half on 4th & 1, as many as any call here": ${one0.map(x => x.toFixed(2))} against ${oneRest.map(x => x.toFixed(2))}`);
   const oneDeep = ['c2', 'c4'].map(cv => held('4and1', 'over', cv, 'four'));
-  assert.ok(oneDeep.every(x => x < 0.08), `"the 4-3 Over with two safeties deep and four rushing almost never stops it on 4th & 1": ${oneDeep.map(x => x.toFixed(2))}`);
+  assert.ok(oneDeep.every(x => x < 0.12), `"the 4-3 Over with two safeties deep and four rushing hardly ever stops it on 4th & 1, about one time in 15": ${oneDeep.map(x => x.toFixed(2))}`);
 });
 
 test('over many snaps the numbers look like football', () => {
@@ -1788,7 +1869,9 @@ test('over many snaps the numbers look like football', () => {
   // up in his path as blocked, the twelve give 64.5-71.1% complete (mean 67.7%, down from 68.3%; six above 68%) and sacks
   // on 2.0-4.1% of dropbacks; this one 67.9% (from 67.7%), 3.5% and 4.36. Since a deep safety fits the run from depth
   // (version 3), 4.17-4.97 yards a carry (mean 4.52, from 4.27; this one 4.74), with 5.6-9.1% of runs gaining 10 yards
-  // or more (from 3.6-6.2%), and the passes as before.
+  // or more (from 3.6-6.2%), and the passes as before. With the back's lean, the linebackers' guesses and run blocks won
+  // and lost early more often (version 4), 3.77-4.95 yards a carry (mean 4.43, from 4.54; this one 4.95), with 10.9-15.3%
+  // of runs losing yards (from 9.9-12.6%), and the passes as before.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };

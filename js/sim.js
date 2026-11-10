@@ -9,7 +9,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLI
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
 // sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
 // differently, and says what to set this to.
-export const SIM_VERSION = 3;
+export const SIM_VERSION = 4;
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -94,6 +94,9 @@ export function prepare(call, seed = 1) {
     disguise: !!call.disguise && (cov.id === 'c1' || cov.id === 'c3'), // see the end of buildDefense()
     short: shortYardage(call.sit), // a short third or fourth down, when the defense expects a run (see gunRead())
     ball: { x: 0, y: -0.3, z: 0.3, state: 'snap', holder: -1 }, carrier: null, handT: Infinity, throwT: Infinity,
+    // A second roll of the dice, for what makes one run against one defense come out differently from snap to snap (see
+    // LEAN, GUESS and BLOCK_SPREAD): its own, so that every pass plays exactly as it did before them.
+    RR: rng((seed ^ 0x5BD1E995) >>> 0),
   };
   const no = cantCall(fm.id, play.id);
   if (no) throw new Error(`${fm.name}, ${play.name}: ${no}`);
@@ -129,6 +132,7 @@ export function prepare(call, seed = 1) {
   // Who is in the protection at the snap: blockers, and backs who check for a blitzer before they go out.
   S.protection = S.play.type === 'pass' ? S.O.filter(p => ['pro', 'screenOL', 'fake'].includes(p.job.kind) || (p.job.kind === 'route' && p.job.delay && p.job.route !== 'screen')) : [];
   S.box = boxCount(S);
+  S.lean = S.RR.normal() * LEAN;
   S.jobText = S.P.map(pl => describeJob(S, pl));
   S.overlay = overlay(S);
   return S;
@@ -334,6 +338,9 @@ function buildDefense(S) {
     d.lag = (d.cls === 'lb' ? 0.4 : d.cls === 's' ? 0.5 : d.cls === 'cb' ? 0.6 : 0.2) + R.range(0, 0.3);
     // Deep defenders read the quarterback from a backpedal and turn late on anything thrown underneath them.
     d.react = (d.job.kind === 'man' ? 0.24 : d.job.z?.deep ? 0.36 : 0.2) + R.range(0, 0.16);
+    // On a run, a linebacker guesses: a step the wrong way first, or a jump on it (see GUESS).
+    const g = S.RR();
+    d.guess = d.cls === 'lb' ? (g < GUESS[0] ? -1 : g < GUESS[0] + GUESS[1] ? 1 : 0) : 0;
   }
 }
 
@@ -1337,7 +1344,7 @@ function carry(S, c) {
     }
     const room = EDGE - 0.8 - Math.abs(c.x + dx * 4);
     let score = Math.min(space, 6) + dy * 2.3 + (room < 0 ? room * 2 : 0);
-    if (track) { const [ax, ay] = unit(S.aimX - c.x, 0.6 - c.y); score += 1.6 * (dx * ax + dy * ay); }
+    if (track) { const [ax, ay] = unit(S.aimX - c.x, 0.6 - c.y); score += 1.6 * (dx * ax + dy * ay) - S.lean * dx * S.p; }
     if (c.dir) score += 0.45 * (dx * c.dir[0] + dy * c.dir[1]);
     if (score > best) { best = score; bx = dx; by = dy; }
   }
@@ -1450,6 +1457,11 @@ function defense(S, d) {
   // (Not one in the bump, holding the edge: see holdEdge(). From the shotgun, only until the handoff: see counterRead.)
   if (S.play.scheme === 'counter' && d.cls === 'lb' && j.kind !== 'rush' && !d.holds && t < counterRead(S)) { d.tx = d.x0 - S.p * 1.5; d.ty = d.y0 - 0.6; d.ts = d.top * 0.6; d.want = S.RB; return; }
   if (j.kind === 'man' && j.r === S.RB && S.play.type === 'run' && S.play.scheme !== 'draw') return scrape(S, d, S.RB);
+  // A linebacker's guess on a run (see GUESS): the wrong way, a step away from the play before he reads it; or right, he
+  // reads the handoff as it happens.
+  const guessing = d.guess && S.play.type === 'run' && S.play.scheme !== 'draw' && j.kind !== 'rush';
+  if (guessing && d.guess < 0 && t < d.lag + 0.5) { d.tx = d.x0 - S.p * 2; d.ty = d.y0 - 0.3; d.ts = d.top * 0.7; return; }
+  if (guessing && d.guess > 0 && t < 1.2 && c && c !== S.QB) d.lag = 0;
   if (gunRead(S, d)) return rotate(S, d) || bite(S, d);
   // After a catch or a handoff seen: everyone runs to the ball.
   if (c && c.team === 'O' && (S.caught || (c !== S.QB && runLook(S, t - d.lag)) || (c !== S.QB && c.y > -0.5))) {
@@ -1523,6 +1535,26 @@ function pursue(S, d, c) {
 // with nobody behind him: Counter from the shotgun against Cover 1 cuts back behind linebackers who've come downhill,
 // and a run of its that got 10 yards went on about 17 more.
 const FIT_DEPTH = 4, FIT_RANGE = 4, FIT_PACE = 0.75;
+
+// One run against one defense came out nearly the same every snap. The man nobody blocks decides a run, by where he
+// meets the back, and that spot hardly moved: the linebackers drifted toward where the back was going from the snap, a
+// lineman's block on a defensive lineman broke inside a second about one time in 25, and the back read the same blocks
+// the same way. Of 600 run matchups (one run from one formation against one front and coverage, rushing four or in
+// Cover 0, 48 snaps each on 1st & 10), 10.5% gained 4 yards 9 times in 10 or more and 11.7% one time in 10 or less, and
+// in 22% the back went through the same gap on 9 snaps in 10 or more (24 snaps each). So three things now vary from snap
+// to snap, on runs only (drawn from the play's second roll of the dice, S.RR, so passes play exactly as before):
+// - LEAN: the back's read. Each snap he leans a little toward the cutback or toward the play side (a normal draw with
+//   this spread, weighed against the sideways part of each lane he looks at while he's on his track to the line; see
+//   carry()).
+// - GUESS: a linebacker's guess. One in four takes a step the wrong way first, away from the play, until half a second
+//   after he'd have read it; about one in six jumps it, and reads the handoff as it happens.
+// - BLOCK_SPREAD: how long a block holds on a run is more spread out (the spread of its log, against 0.42 for pass
+//   protection and every block on a pass play), so a block is won or lost early more often (see sampleShed()).
+// With all three, 1.8% and 3.3% of those matchups, and the same gap in 0.6%. Over every formation, run, front, coverage
+// and pressure (12,960 runs from three seed sets), 4.26 yards a carry from 4.39, 47.2% of runs gaining 4 from 48.2%,
+// 6.8% gaining 10 or more from 6.7%, and 11.5% losing yards from 9.2% (NFL 2023 regular season: 9.9%, from nflverse's
+// play-by-play).
+const LEAN = 0.9, GUESS = [0.25, 0.17], BLOCK_SPREAD = 0.6;
 
 // The bump in Cover 1 (see buildDefense()): on a run to the outside or off tackle (not a draw, up the middle after he's
 // dropped) the strong safety holds the edge on the side the cornerback left until the ball carrier gets to the line, at
@@ -1729,7 +1761,7 @@ function sampleShed(S, b, d, pass) {
   else base = b.job.kind === 'convoy' ? 0.6 : b.cls === 'wr' ? 1.3 : d.cls === 'lb' || d.cls === 's' ? 1.6 : 2.1;
   base *= 1 + (b.str - d.str) * 0.45;
   if (!pass && (b.job.scheme === 'power' || b.job.scheme === 'kick' || b.job.scheme === 'pull')) base *= 1.45; // blocking down at an angle
-  return Math.max(0.35, base * Math.exp(R.normal() * 0.42));
+  return Math.max(0.35, base * Math.exp(R.normal() * (!pass && S.play.type === 'run' ? BLOCK_SPREAD : 0.42)));
 }
 
 function engage(S) {

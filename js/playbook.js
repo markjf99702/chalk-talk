@@ -379,16 +379,16 @@ export const DRILLS = [
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
     brief: 'They blitz, every snap. Count who\'s coming and who\'s left to cover.',
-    note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw and Power run straight into it.',
+    note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw, Power and Counter run straight into it.',
     long: 'On 3rd & 8 against an all-out blitz, Smash, Four Verticals and the Play-Action Shot make the first down most often, a little under half the time: their deep routes are one-on-ones with nobody over the top. The RB Screen, the surest 4 yards against it, makes 8 only about one time in four.',
-    short: 'On a short third or fourth down the RB Screen and the zone runs, Inside Zone and Outside Zone, make it most often: with everyone rushing and nobody deep, a back who gets past the rush has room. They make it about two times in three or more on 3rd & 2, and about four in five on 4th & 1. The Draw still runs straight into it.',
+    short: 'On a short third or fourth down the RB Screen and the zone runs, Inside Zone and Outside Zone, make it most often: with everyone rushing and nobody deep, a back who gets past the rush has room. They make it about three times in five or more on 3rd & 2, and about four in five on 4th & 1. The Draw and the gap runs, Power and Counter, run into the rush: they make it about one time in four on 3rd & 2 and one in three on 4th & 1.',
   },
   {
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
     brief: 'They run from I-Form, every snap: any of the five runs, to either side.',
-    note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about seven runs in ten here. The 4-3 Over in Cover 0 stops about as many, but with nobody deep, the runs that get through go a long way.',
-    long: 'On 3rd & 8 a run has to go all 8 yards, and against I-Form most calls hold it short about four times in five: the 4-3 Over with Cover 1 and a blitz more than nine in ten. Cover 3 rushing four lets the most through, about one in three.',
-    short: 'On a short third or fourth down a run needs only a yard or two, and against I-Form it usually gets it: about one run in three is held short on 3rd & 2, one in five on 4th & 1. Cover 0\'s all-out blitz holds about three in five short on 3rd & 2 and, from the 4-3, about half on 4th & 1, as many as any call here. With two safeties deep and four rushing, the 4-3 Over almost never stops it on 4th & 1.',
+    note: 'Against two backs and a tight end, put more defenders in the box than they have blockers: the 4-3 Over with Cover 1 and a blitz has eight against seven, and stops about six runs in ten here. The 4-3 Over in Cover 0 stops more, about three in four, but with nobody deep, the runs that get through go a long way.',
+    long: 'On 3rd & 8 a run has to go all 8 yards, and against I-Form most calls hold it short about four times in five: the 4-3 Over with Cover 1 and a blitz about nine in ten. Cover 3 rushing four lets the most through, about one in three.',
+    short: 'On a short third or fourth down a run needs only a yard or two, and against I-Form it usually gets it: about one run in three is held short on 3rd & 2, one in five on 4th & 1. Cover 0\'s all-out blitz holds about three in five short on 3rd & 2 and, from the 4-3, about half on 4th & 1, as many as any call here. With two safeties deep and four rushing, the 4-3 Over hardly ever stops it on 4th & 1, about one time in 15.',
   },
 ];
 

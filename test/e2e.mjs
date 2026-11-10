@@ -283,20 +283,20 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
   p.on('pageerror', e => problems.push(e.message));
   await p.goto(base);
   for (const [code, head, kicker, win] of [
-    ['O.single.iz.0.over.c3.four.1', 'Gain of 3 yards, 7 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
+    ['O.single.iz.0.over.c3.four.2', 'Gain of 3 yards, 7 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
     ['O.trips.smash.0.nickel.c3.four.65', 'Intercepted', 'A takeaway for the defense', 'D'],
     ['O.trips.smash.0.nickel.c2.four.262', 'Gain of 19 yards and a first down', 'A win for the offense', 'O'],
     ['O.trips.smash.0.nickel.c2.four.10', 'Gain of 20 yards and a first down', 'A big play for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.18', 'Gain of 9 yards, 1 short of the first down', 'A win for the offense', 'O'],
-    ['D.single.iz.0.over.c3.four.8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
-    ['O.single.iz.0.over.c3.four.1.0.none.2and6', 'Gain of 3 yards, 3 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
-    ['O.single.iz.0.over.c3.four.2.0.none.2and6', 'Gain of 4 yards, 2 short of the first down', 'A win for the offense', 'O'],
-    ['O.single.iz.0.over.c3.four.1.0.none.3and2', 'Gain of 3 yards and a first down', 'A win for the offense', 'O'],
-    ['O.single.iz.0.over.c3.four.392.0.none.3and8', 'Gain of 6 yards, 2 short of the first down', 'A win for the defense: short of the first down', 'D'],
-    ['D.single.iz.0.over.c3.four.8.0.none.3and8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.115', 'Gain of 9 yards, 1 short of the first down', 'A win for the offense', 'O'],
+    ['D.single.iz.0.over.c3.four.4', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.2.0.none.2and6', 'Gain of 3 yards, 3 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
+    ['O.single.iz.0.over.c3.four.23.0.none.2and6', 'Gain of 4 yards, 2 short of the first down', 'A win for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.2.0.none.3and2', 'Gain of 3 yards and a first down', 'A win for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.16.0.none.3and8', 'Gain of 6 yards, 2 short of the first down', 'A win for the defense: short of the first down', 'D'],
+    ['D.single.iz.0.over.c3.four.4.0.none.3and8', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
     ['O.trips.smash.0.nickel.c3.four.1.0.none.3and8', 'Incomplete', 'A win for the defense', 'D'],
-    ['O.single.iz.0.over.c3.four.11.0.none.4and1', 'Gain of 1 yard and a first down', 'A win for the offense', 'O'],
-    ['O.single.iz.0.over.c3.four.10.0.none.4and1', 'No gain', 'A win for the defense: a turnover on downs', 'D'],
+    ['O.single.iz.0.over.c3.four.1.0.none.4and1', 'Gain of 1 yard and a first down', 'A win for the offense', 'O'],
+    ['O.single.iz.0.over.c3.four.17.0.none.4and1', 'No gain', 'A win for the defense: a turnover on downs', 'D'],
     ['O.trips.smash.0.nickel.c3.four.1.0.none.4and1', 'Incomplete', 'A win for the defense: a turnover on downs', 'D'],
     ['O.trips.smash.0.nickel.c3.four.65.0.none.4and1', 'Intercepted', 'A takeaway for the defense', 'D'],
   ]) {
@@ -1480,7 +1480,7 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   // Power, where the cut and the miss just after it come 0.1 s apart and the hole opens 0.3 s later: the cut, watched
   // again, stops a frame before the hole, while it's still up. Then the tackler's shed block, which the board leaves
   // out as the play runs.
-  await open('p=O.iform.power.0.over.c3.four.115');
+  await open('p=O.iform.power.0.over.c3.four.55');
   const run = await p.evaluate(() => window.chalkTalk.state.play.events.map(e => ({ t: e.t, kind: e.kind, text: e.text })));
   const cut = run.findIndex(e => e.kind === 'cut'), shed = run.findIndex(e => e.kind === 'shed');
   assert.deepEqual(run.slice(cut, cut + 3).map(e => e.kind), ['cut', 'miss', 'hole'], `the play changed: ${run.map(e => `${e.t} ${e.kind}`).join(', ')}`);
