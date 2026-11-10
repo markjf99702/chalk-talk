@@ -1894,7 +1894,11 @@ function coachNote(P) {
     const parts = [[pro.filter(c => c === 'ol').length, 'lineman', 'linemen'], [pro.filter(c => c === 'te').length, 'tight end', 'tight ends'],
       [pro.filter(c => c === 'rb' || c === 'fb').length, 'back', 'backs']].filter(([n]) => n).map(([n, one, many]) => count(n, one, many));
     const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
-    reads.push(`Rush: ${rushers} rushers against ${pro.length} in protection (${who})${P.cameFree.length ? `; ${P.cameFree.map(i => nm(P, i)).join(' and ')} came unblocked` : ''}.`);
+    // With only three out on the Play-Action Shot, the throw counts the rush he saw (see SIGHT in js/sim.js), the men
+    // covering those kept in to block among it: say they came, or the card had "5 rushers against 7" over "with seven
+    // rushing against seven blockers".
+    const sight = P.events.find(e => e.kind === 'throw' && e.how === 'sight'), more = sight ? sight.rush - rushers : 0;
+    reads.push(`Rush: ${rushers} rushers against ${pro.length} in protection (${who})${more > 0 ? `, and ${more} more came once the men they were covering stayed in to block` : ''}${P.cameFree.length ? `; ${P.cameFree.map(i => nm(P, i)).join(' and ')} came unblocked` : ''}.`);
   } else if (P.unblocked.length) {
     reads.push(`Unblocked by design: ${P.unblocked.map(i => nm(P, i, true)).join(', ')}.`);
   }

@@ -652,7 +652,9 @@ for (const side of ['O', 'D']) {
       lineUp(); state.t = board.duration(); finish();
       return document.getElementById('noteNow').textContent;
     });
-    return { out, seen: [...seen].sort(), away, stick, sight };
+    // and the read under it counts the men covering the backs among the rush, as the line above does
+    const rush = [...document.querySelectorAll('#reads li')].map(li => li.textContent).find(t => t.startsWith('Rush:'));
+    return { out, seen: [...seen].sort(), away, stick, sight, rush };
   });
   assert.deepEqual(bad.out, [], 'the This time line in the coach\'s note');
   assert.deepEqual(bad.away, { kind: 'throwaway', now: 'This time: with his first two reads covered, he threw it away rather than take a sack.' });
@@ -661,6 +663,7 @@ for (const side of ['O', 'D']) {
     'This time: with seven rushing against seven blockers, he threw at once to the tight end (Y) on the flat route, the shortest he had, and it went for 9 yards.',
     'This time: with seven rushing against seven blockers, he looked first to the tight end (Y) on the flat route, the shortest he had; he was covered, so he threw to the Z on the post route, and it went for 48 yards.',
   ]);
+  assert.equal(bad.rush, 'Rush: 5 rushers against 7 in protection (5 linemen and 2 backs), and 2 more came once the men they were covering stayed in to block.');
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
   await p.close();
 }
