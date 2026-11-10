@@ -2185,7 +2185,7 @@ test('calling the defense, the read counts the long plays a call gives up agains
     const why = `${fm.name}, ${sit.name}`;
     assert.equal(`${D.picks[0].set.front}.${D.picks[0].set.coverage}.${D.picks[0].set.pressure}.M.0`, byBoth.code, `${why}: the first pick isn't the call that holds his plays short most, less his long plays`);
     assert.ok(Math.abs(D.picks[0].rate - byBoth.held) < 1e-9 && Math.abs(D.picks[0].long - byBoth.long) < 1e-9, why);
-    assert.match(D.picks[0].rateText, /^(about \d\d? times? in 100|nearly every time|almost never); 15 yards or more (almost never|about \d\d? in 100)$/, why);
+    assert.match(D.picks[0].rateText, /^(about \d\d?\stimes?\sin\s100|nearly every time|almost never); 15 yards or more (almost never|about \d\d?\sin\s100)$/, why);
     assert.match(D.picksTitle, /and how often he goes 15 yards or more against it:$/, why);
     if (byHeld.code.includes('.c0.')) zeroHeld++;
     if (byBoth.code.includes('.c0.')) zeroNow++;
@@ -2203,7 +2203,7 @@ test('calling the defense, no pick reads better than the one above it', () => {
   // fewer long plays, about 6 in 100 against 9 and 13. So did Gun Doubles' and the Pistol's. Out of 100, none does.
   // (read as so many in 100, whether it says in 10 or in 100)
   const nums = t => {
-    const m = t.match(/^(?:about (\d+) times? in (10|100)|(nearly every time)|almost never); 15 yards or more (?:about (\d+) in (10|100)|almost never)$/);
+    const m = t.match(/^(?:about (\d+)\stimes?\sin\s(10|100)|(nearly every time)|almost never); 15 yards or more (?:about (\d+)\sin\s(10|100)|almost never)$/);
     assert.ok(m, t);
     return [m[3] ? 100 : (+m[1] || 0) * (100 / (+m[2] || 100)), (+m[4] || 0) * (100 / (+m[5] || 100))];
   };

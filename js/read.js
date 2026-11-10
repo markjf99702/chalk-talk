@@ -192,9 +192,11 @@ const times = p => (p >= 0.95 ? 'nearly every time' : p < 0.05 ? 'almost never' 
 // the nearest 1 in 10 a pick could read worse than the one under it on both (on 3rd & 8 against Gun Ace, Gun Doubles and
 // the Pistol it did: a first pick giving up 15 yards or more about 6 times in 100 read "about 1 in 10", as did the ones
 // under it giving up 9 and 13).
+// (A number keeps its "in 100" on its line, with no-break spaces: on a phone the line wraps, and "100" alone on the
+// next line read like a number of its own.)
 const hundredths = p => Math.min(99, Math.max(1, Math.round(p * 100)));
-const times100 = p => (p >= 0.995 ? 'nearly every time' : p < 0.005 ? 'almost never' : `about ${hundredths(p)} time${hundredths(p) === 1 ? '' : 's'} in 100`);
-const share100 = p => (p < 0.005 ? 'almost never' : `about ${hundredths(p)} in 100`);
+const times100 = p => (p >= 0.995 ? 'nearly every time' : p < 0.005 ? 'almost never' : `about ${hundredths(p)}\u00a0time${hundredths(p) === 1 ? '' : 's'}\u00a0in\u00a0100`);
+const share100 = p => (p < 0.005 ? 'almost never' : `about ${hundredths(p)}\u00a0in\u00a0100`);
 const COVER_WORDS = {
   c0: 'man-to-man, nobody deep', c1: 'man-to-man, one safety deep', c2: 'two deep halves, the corners in the flats',
   c3: 'three deep thirds', c4: 'four deep quarters',
