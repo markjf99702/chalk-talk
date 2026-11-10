@@ -280,12 +280,13 @@ function reasonFor(id, L, blockers, again = false, fm = null) {
       return 'The defender between the stick and the flat can\'t take both: the quarterback throws to the one he leaves.';
     case 'pa': {
       // With only three out, against everyone coming he takes the short one at once (see SIGHT in js/sim.js). Against
-      // one deep with the corners pressed, man-to-man, a blitz brings the men on the backs too, as many as he has
-      // blockers: from I-Form that's why it's picked there, as often as not.
+      // one deep with the corners pressed, man-to-man, the men on the backs join the rush once the backs stay in to block
+      // (with four rushing too: see cover() in js/sim.js), so a blitz brings as many as he has blockers: from I-Form
+      // that's why it's picked there, as often as not.
       const f = fm && sightOf(fm), first = f && `the quarterback looks first to the ${f.label} on the ${ROUTES[f.job.route].name}, at once`;
       if (zero && f) return `Nobody deep and everyone else coming, with only three out: ${first}, before they get there.`;
       if (zero) return 'Nobody deep: the deep routes are one-on-ones, if the fake buys time against the blitz.';
-      if (deep === 1 && press && f) return `The one deep safety has to pick the post or the deep crosser. If they blitz, the men on your backs come too, as many as you have blockers, and with only three out ${first}.`;
+      if (deep === 1 && press && f) return `The one deep safety has to pick the post or the deep crosser. The men covering your backs join the rush once the backs stay in to block, so a blitz brings as many as you have blockers, and with only three out ${first}.`;
       return deep === 1 ? 'The one deep safety has to pick the post or the deep crosser, and the linebackers step up for the fake.'
         : 'Linebackers who step up for the fake leave the deep crosser room behind them.';
     }

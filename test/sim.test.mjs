@@ -1049,11 +1049,14 @@ test('three out against as many rushers as blockers: on the Play-Action Shot fro
     assert.ok(!r.events.some(e => e.how === 'sight'), `rushing four, seed ${seed - 1}`);
   }
   // The coach's read picks it from I-Form against those looks, and says why: nobody deep, or one deep with the corners
-  // pressed, where a Cover 1 blitz brings the men on the backs too.
+  // pressed, where the men covering the backs join the rush once the backs stay in to block (rushing four as well: see
+  // cover() in js/sim.js), so a blitz brings as many as he has blockers. (It said "If they blitz, the men on your backs
+  // come too", as if they came only on a blitz.)
   for (const code of ['over.c0.blitz.M.0', 'over.c1.blitz.M.0', '34.c1.blitz.M.0']) {
     const R = coachRead(viewOf({ formation: 'iform', play: 'smash', flip: false }, code, '1and10')), pa = R.picks.find(p => p.set.play === 'pa');
     assert.ok(pa, `from I-Form against ${code}, no Play-Action Shot in the picks: ${R.picks.map(p => p.label)}`);
     assert.match(pa.reason, /the quarterback looks first to the Y on the flat, at once/, code);
+    if (code.includes('.c1.')) assert.match(pa.reason, /The men covering your backs join the rush once the backs stay in to block, so a blitz brings as many as you have blockers/, code);
   }
 });
 
