@@ -1131,9 +1131,9 @@ function qb(S, pl) {
   let rn = null, rd = 99;
   for (const d of S.D) if (d.eng < 0 && d.job.kind === 'rush') { const dd = dist(d, pl); if (dd < rd) { rd = dd; rn = d; } }
   if (rn && rd < 3 && t > 0.6) { const [ux] = unit(pl.x - rn.x, pl.y - rn.y); pl.tx = pl.x + ux * 2; pl.ty = pl.y + 0.3; pl.ts = 2; }
-  // A rusher coming with nobody to block him: the hot throw, quick, before he gets there. (Not on the screen, which
-  // lets the rushers come on purpose.)
-  if (play.drop !== 'screen' && t > 0.4) { const b = unblocked(S); if (b && dist(b, pl) < 8 && hot(S, b)) return; }
+  // A rusher coming with nobody to block him: the hot throw, quick, before he gets there, once he's within HOT_AT of
+  // the quarterback. (Not on the screen, which lets the rushers come on purpose.)
+  if (play.drop !== 'screen' && t > 0.4) { const b = unblocked(S); if (b && dist(b, pl) < HOT_AT && hot(S, b)) return; }
   // The screen: he waits for the back to get out behind the rush, then lofts it to him. A rusher about to reach him
   // (within 2 yards) doesn't wait for the drop to finish: once the back has slipped out and turned, the ball goes. (An
   // end lined up tight, as the 3-4's are, gets to him before the drop is over. Within 3 yards it went early on nine
@@ -1238,6 +1238,14 @@ function inPath(o, d, q) {
 
 // The hot throw: to the receiver nearest the spot the blitzer left, if he has a step on his man, or else to anyone
 // open, as soon as he's into his route.
+// HOT_AT: how close the free rusher gets first, in yards. It was 8: against Cover 0 (the RB Screen aside) about 7
+// throws in 10 went hot, 1.2 seconds after the snap on average, the catches made 6 1/2 yards past the line, and passes
+// against it gained 4 yards 49 times in 100. NFL quarterbacks against Cover 0 away from the goal line (outside the opponent's 30) threw 2.1
+// seconds after the snap, and their completions were caught 8 yards past the line (212 throws in the 2023 regular
+// season, from nflverse's play-by-play and participation data). At 4, about half the throws go hot, at 1.5 seconds on
+// average, the catches made 10 yards past the line, and passes against Cover 0 gain 4 yards 55 times in 100, with
+// sacks on 5.1% of dropbacks against it (from 3.3%; the NFL's against Cover 0 outside the 30: 8.8%).
+const HOT_AT = 4;
 function hot(S, b) {
   const outs = S.O.filter(r => r.job.kind === 'route' && S.t >= (r.job.delay || 0) + 0.3);
   if (!outs.length) return false;

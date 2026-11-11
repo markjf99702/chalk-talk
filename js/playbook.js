@@ -379,9 +379,9 @@ export const DRILLS = [
   {
     id: 'blitz', name: 'Beat the blitz', side: 'O', coverage: 'c0', pressure: 'blitz',
     brief: 'They blitz, every snap. Count who\'s coming and who\'s left to cover.',
-    note: 'Against an all-out blitz, the RB Screen succeeds most often here: the rushers run past the back, and nobody is left to tackle him but the corners. Next, about half the time each, come Smash and Slant-Flat, which get the ball out hot before the rush arrives, and the Play-Action Shot, whose deep routes are one-on-ones with nobody deep. The Draw, Power and Counter run straight into it.',
-    long: 'On 3rd & 8 against an all-out blitz, Smash, Four Verticals and the Play-Action Shot make the first down most often, a little under half the time: their deep routes are one-on-ones with nobody over the top. The RB Screen, the surest 4 yards against it, makes 8 only about one time in four.',
-    short: 'On a short third or fourth down the RB Screen and the zone runs, Inside Zone and Outside Zone, make it most often: with everyone rushing and nobody deep, a back who gets past the rush has room. They make it about three times in five or more on 3rd & 2, and about four in five on 4th & 1. The Draw and the gap runs, Power and Counter, run into the rush: they make it about one time in four on 3rd & 2 and one in three on 4th & 1.',
+    note: 'Against an all-out blitz, Stick, Flood and the RB Screen succeed most often here, about two times in three. The quarterback waits until the rusher nobody blocks is nearly on him, then throws hot to a man with a step on his defender: the stick turning in at 5 yards, or one of Flood\'s three receivers on a side. The screen lets the rushers run past the back. Mesh and Slant-Flat come next, about half the time or a little more. The Draw, Power and Counter run straight into it.',
+    long: 'On 3rd & 8 against an all-out blitz, Four Verticals and Flood make the first down most often, about half the time: their deep routes are one-on-ones with nobody over the top. Next, about two times in five, come Mesh, Smash and the Play-Action Shot. Stick, the surest 4 yards against it, makes 8 about one time in three, and the RB Screen about one time in four.',
+    short: 'On a short third or fourth down Stick and the RB Screen make it most often, about four times in five, and on 4th & 1 the zone runs as often: with everyone rushing and nobody deep, a back who gets past the rush has room. On 3rd & 2 Flood, Mesh and Outside Zone make it about seven times in ten. The Draw and the gap runs, Power and Counter, run into the rush: they make it about one time in four on 3rd & 2 and one in three on 4th & 1.',
   },
   {
     id: 'run', name: 'Stop the run against I-Form', side: 'D', formation: 'iform',
@@ -395,21 +395,21 @@ export const DRILLS = [
 // Coach's notes on how a pass concept tends to fare against each coverage. Short and plain.
 export const NOTES = {
   verts: {
-    c0: 'No safety deep against four vertical routes: every one is a footrace with nobody over the top. But Cover 0 sends a rusher the line can\'t block, so the ball usually has to come out hot, before he gets there.',
+    c0: 'No safety deep against four vertical routes: every one is a footrace with nobody over the top. But Cover 0 sends a rusher the line can\'t block, so the ball has to come out before he gets there, often hot.',
     c1: 'One free safety can\'t help on all four. The go routes outside are one-on-ones with the corners in man coverage, and the check-down is there when they\'re covered.',
     c2: 'Each half-field safety has two receivers running at him: the seam inside him and the go route outside, past the corner sitting in the flat. He can\'t stay over both.',
     c3: 'Four vertical routes on three deep defenders should leave a seam open, but the hook defenders carry the seams up the field and the free safety stays over the top of them. The throw has to beat both, and the check-down is often the answer.',
     c4: 'Quarters puts four defenders deep, one for each vertical route. The deep shots are taken away; the check-down underneath is there.',
   },
   smash: {
-    c0: 'Against man with no help, the corner route is a footrace to the sideline. But Cover 0 sends a rusher the line can\'t block, so the ball usually comes out hot, to whoever is nearest the spot he left, before the corner route has made its break.',
+    c0: 'Against man with no help, the corner route is a footrace to the sideline, and that\'s where the ball goes most often. But Cover 0 sends a rusher the line can\'t block: when he\'s nearly there before the corner route comes open, the ball comes out hot, to whoever is nearest the spot he left.',
     c1: 'Man coverage turns Smash into one-on-ones. The corner route, breaking away from the man chasing it toward the sideline, is the one that comes open: the free safety in the middle is a long way from it.',
     c2: 'The Cover 2 corner sits in the flat, so he can\'t carry the corner route, and the half-field safety is a long way from the sideline. Built to beat exactly this.',
     c3: 'The Cover 3 corner bails deep and takes away the corner route, but that leaves the hitch open underneath him.',
     c4: 'Quarters is built to stop this: four defenders deep, so the corner route has a corner and a safety over it. What\'s left is the hitch underneath, open but short.',
   },
   flood: {
-    c0: 'Against man, Flood is three one-on-ones on one side. But Cover 0 sends a rusher the line can\'t block, and the quick throw is to the back in the flat, with his man a step behind.',
+    c0: 'Against man, Flood is three one-on-ones on one side. Cover 0 sends a rusher the line can\'t block, and once he\'s nearly there the ball comes out hot, to whichever man has a step on his: the back in the flat, or a deep route with nobody over the top.',
     c1: 'The free safety can\'t help on routes breaking toward the sideline, and the back\'s flat route is a one-on-one in space against a linebacker: the easy throw.',
     c2: 'The Cover 2 corner is caught between the sail and the flat route under it. When he sinks under the sail, with the safety over the top of it, the back in the flat is open; when he stays in the flat, the sail is open in front of the safety. The ball goes to each about as often.',
     c3: 'Three receivers on one side against two zone defenders there (the corner deep and the curl-flat defender short). Someone is left uncovered. Built to beat exactly this.',
@@ -437,7 +437,7 @@ export const NOTES = {
     c4: 'Quarters safeties read the run fake and come up, which is exactly when the post goes behind them, or they stay home and the crosser is underneath.',
   },
   stick: {
-    c0: 'Against an all-out blitz the ball comes out hot, most often to the back in the flat, but the man covering him is waiting there and tackles him short. Stick\'s throws are all short, and Cover 0 has a man on each of them.',
+    c0: 'Against an all-out blitz the ball comes out hot, before the rusher nobody blocks gets there: most often to the stick, turning in at five yards with his man a step behind him, or to the back in the flat, who has his man waiting for him there and is tackled short more often. With nobody deep, a catch can go a long way.',
     c1: 'In man coverage the stick turns in at five yards and sits down, with the man chasing him still behind him: an easy completion most of the time, though a short one, with the free safety deep.',
     c2: 'The Cover 2 corner sits in the flat, so a receiver running to it is covered. The ball goes most often to the stick, settling in front of the linebackers and behind the corner, and otherwise to the back coming out of the backfield to the flat, who gains more.',
     c3: 'The curl-flat defender has to choose: when he sits on the stick, the flat route outside him is open, and that\'s where the ball goes most of the time; when he goes with the flat, the quarterback comes back to the stick, open where he was. Cover 3\'s corners bail deep, so there\'s room underneath, for short gains.',

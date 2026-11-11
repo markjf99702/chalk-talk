@@ -122,7 +122,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '49ba8d8486d4' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '7f0851b2108c' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -933,7 +933,9 @@ test('with a blitzer coming unblocked the quarterback throws hot, before he gets
   // formation: more than half are hot throws now, every one out within 2.75 seconds and naming a rusher nobody blocked.
   // (Now and then one comes later: over 3,840 such dropbacks from seed 60000, seven came at 2.5 seconds or later, the
   // latest at 2.8, Four Verticals from Singleback against the Nickel front at seed 60991, as it did before the Pistol,
-  // Gun Ace and Empty.)
+  // Gun Ace and Empty.) Since he waits for the free rusher to get within HOT_AT, 4 yards, rather than 8 (version 5: see
+  // js/sim.js), 165 of these 384 are hot throws, from 262, with the rusher 3.8 yards from him at most when he lets it go
+  // (257 of the 262 had him 4 1/2 yards off or more), the latest at 2.7 seconds.
   let seed = 1, n = 0, hotN = 0;
   for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass' && p.drop !== 'screen')) for (const fr of FRONTS) for (const flip of [false, true]) {
     if (cantCall(fm.id, pl.id)) continue; // (Empty has no back: no runs, no fake, no screen)
@@ -945,8 +947,10 @@ test('with a blitzer coming unblocked the quarterback throws hot, before he gets
     assert.ok(t.t < 2.75, `${pl.id} seed ${seed - 1}: a hot throw at ${t.t} s`);
     const S = prepare(r.call, seed - 1), b = S.D.find(d => t.text.includes(`with ${name(S, d)} coming unblocked`));
     assert.ok(b && !r.frames.some(f => f.t <= t.t && f.eng[b.i] >= 0), `${pl.id} seed ${seed - 1}: "${t.text}" names a man nobody blocked`);
+    const f = r.frames.find(f => f.t >= t.t - 1e-9), d = Math.hypot(f.xy[2 * b.i] - f.xy[2 * S.QB.i], f.xy[2 * b.i + 1] - f.xy[2 * S.QB.i + 1]);
+    assert.ok(d < 4, `${pl.id} seed ${seed - 1}: thrown hot with the ${b.label} ${d.toFixed(1)} yards from the quarterback`);
   }
-  assert.ok(hotN / n > 0.4, `${hotN} hot throws in ${n} dropbacks against Cover 0`);
+  assert.ok(hotN / n > 0.3 && hotN / n < 0.55, `${hotN} hot throws in ${n} dropbacks against Cover 0`);
 });
 
 test('Cover 0 looks like Cover 0: the extra blitzer walks up over his gap, and nobody stands deep', () => {
@@ -1831,14 +1835,10 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(c3.slants.rate > 0.72 && c3.slants.rate < 0.88, `"about four times in five": ${say(c3, 'rate')}`);
   for (const id of ['stick', 'draw', 'smash']) assert.ok(c3[id].rate > 0.62 && c3[id].rate < 0.8, `"about seven times in ten": ${say(c3, 'rate')}`);
   const c0 = by(drill('blitz').coverage, drill('blitz').pressure);
-  // (Since the pass spread of version 5 the screen's lead is smaller: 65% to Smash's and Slant-Flat's 53% over 420
-  // snaps a play from start seed 31000000, and at 25 snaps from each formation 52-67% to Smash's 56-59%. So first place
-  // is checked over 75 snaps from each formation, from a start seed of its own: the screen 60%, Smash 54%.)
-  const more = (ids, per) => { let s = 9e6; return Object.fromEntries(ids.map(id => { let n = 0, ok = 0; for (const fm of FORMATIONS.filter(f => !cantCall(f.id, id))) for (let k = 0; k < per; k++) { n++; if (won(simulate({ formation: fm.id, play: id, flip: k % 2 === 1, front: front(fm), coverage: 'c0', pressure: 'blitz' }, s++).result)) ok++; } return [id, ok / n]; })); };
-  const first = more(['screen', 'smash', 'slants', 'pa', 'verts'], 75);
-  assert.ok(Object.entries(first).every(([id, r]) => id === 'screen' || r < first.screen), `Cover 0, success over 75 snaps from each formation: ${Object.entries(first).map(([id, r]) => `${id} ${Math.round(r * 100)}%`).join(', ')}`);
-  assert.ok(top(c0, 'rate', 3).includes('screen') && c0.screen.rate > 0.45 && c0.screen.rate < 0.82, `Cover 0, success: ${say(c0, 'rate')}`);
-  for (const id of ['smash', 'slants', 'pa']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.62, `"about half the time each": ${say(c0, 'rate')}`);
+  assert.ok(top(c0, 'rate', 3).every(id => ['stick', 'flood', 'screen', 'mesh'].includes(id)), `Cover 0, success: ${say(c0, 'rate')}`);
+  for (const id of ['stick', 'flood']) assert.ok(c0[id].rate > 0.58 && c0[id].rate < 0.84, `"about two times in three": ${say(c0, 'rate')}`);
+  assert.ok(c0.screen.rate > 0.45 && c0.screen.rate < 0.82, `the screen "about two times in three": ${say(c0, 'rate')}`);
+  for (const id of ['mesh', 'slants']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.7, `"about half the time or a little more": ${say(c0, 'rate')}`);
   assert.deepEqual(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate).slice(0, 3).map(([id]) => id).sort(), ['counter', 'draw', 'power'], `Cover 0, "the Draw, Power and Counter run straight into it": ${say(c0, 'rate')}`);
   const runs = PLAYS.filter(p => p.type === 'run').map(p => p.id);
   const stop = (front, coverage, pressure) => {
@@ -1929,19 +1929,22 @@ test('the drills\' notes say what the board shows', () => {
   among(o, 3, ['draw', 'iz', 'slants', 'stick'], 'Cover 3 on 4th & 1, "the Draw and Inside Zone make it most often, with Slant-Flat and Stick close behind"');
   within(o, ['slants', 'stick', 'screen'], 0.64, 0.9, 'Cover 3 on 4th & 1, "close behind ... about three times in four"');
   o = on('3and8', 'c0', 'blitz');
-  within(o, ['smash', 'verts', 'pa'], 0.3, 0.58, 'Cover 0 on 3rd & 8, "a little under half the time"');
-  among(o, 3, ['smash', 'verts', 'pa'], 'Cover 0 on 3rd & 8, "most often"');
-  within(o, ['screen'], 0.15, 0.36, 'Cover 0 on 3rd & 8, the screen "about one time in four"');
+  within(o, ['verts', 'flood'], 0.36, 0.62, 'Cover 0 on 3rd & 8, "about half the time"');
+  among(o, 3, ['verts', 'flood', 'mesh', 'smash', 'pa'], 'Cover 0 on 3rd & 8, "most often"');
+  within(o, ['mesh', 'smash', 'pa'], 0.26, 0.56, 'Cover 0 on 3rd & 8, "about two times in five"');
+  within(o, ['stick'], 0.2, 0.48, 'Cover 0 on 3rd & 8, Stick "about one time in three"');
+  within(o, ['screen'], 0.12, 0.38, 'Cover 0 on 3rd & 8, the screen "about one time in four"');
   o = on('3and2', 'c0', 'blitz');
-  within(o, ['screen', 'oz', 'iz'], 0.52, 0.92, 'Cover 0 on 3rd & 2, "about three times in five or more"');
-  among(o, 2, ['screen', 'oz', 'iz'], 'Cover 0 on 3rd & 2, "most often"');
+  within(o, ['stick', 'screen'], 0.62, 0.92, 'Cover 0 on 3rd & 2, "about four times in five"');
+  within(o, ['flood', 'mesh', 'oz'], 0.52, 0.86, 'Cover 0 on 3rd & 2, "about seven times in ten"');
+  among(o, 2, ['stick', 'screen', 'flood', 'mesh', 'oz'], 'Cover 0 on 3rd & 2, "most often"');
   within(o, ['draw', 'power', 'counter'], 0.1, 0.42, 'Cover 0 on 3rd & 2, the Draw, Power and Counter "about one time in four"');
-  below(o, ['draw', 'power', 'counter'], ['screen', 'oz', 'iz'], 'Cover 0 on 3rd & 2, the Draw, Power and Counter "run into the rush"');
+  below(o, ['draw', 'power', 'counter'], ['stick', 'screen', 'oz'], 'Cover 0 on 3rd & 2, the Draw, Power and Counter "run into the rush"');
   o = on('4and1', 'c0', 'blitz');
-  within(o, ['iz', 'oz', 'screen'], 0.68, 0.94, 'Cover 0 on 4th & 1, "about four in five"');
-  among(o, 2, ['iz', 'oz', 'screen'], 'Cover 0 on 4th & 1');
+  within(o, ['stick', 'screen', 'iz', 'oz'], 0.66, 0.94, 'Cover 0 on 4th & 1, "about four in five"');
+  among(o, 2, ['stick', 'screen', 'iz', 'oz'], 'Cover 0 on 4th & 1');
   within(o, ['draw', 'power', 'counter'], 0.18, 0.5, 'Cover 0 on 4th & 1, the Draw, Power and Counter "one in three"');
-  below(o, ['draw', 'power', 'counter'], ['screen', 'oz', 'iz'], 'Cover 0 on 4th & 1, the Draw, Power and Counter "run into the rush"');
+  below(o, ['draw', 'power', 'counter'], ['stick', 'screen', 'iz', 'oz'], 'Cover 0 on 4th & 1, the Draw, Power and Counter "run into the rush"');
   // The run drill: how often I-Form's runs are held short of the first down.
   const held = (sit, front, coverage, pressure, each = 40) => {
     const need = needed(SITUATIONS.find(s => s.id === sit));

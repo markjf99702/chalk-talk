@@ -253,12 +253,12 @@ function reasonFor(id, L, blockers, again = false, fm = null) {
       return c === 'five' ? 'Two deep and the corners sitting short: each deep safety has two vertical routes running at him.'
         : 'Four vertical routes at two deep safeties: when the deep men take them away, the check-down underneath is open.';
     case 'smash':
-      if (zero) return 'Nobody deep: the ball comes out hot, before the extra rusher gets there.';
+      if (zero) return 'Nobody deep: the corner route is a footrace to the sideline, if it comes open before the extra rusher gets there.';
       if (press) return 'Corners pressed in man: the corner route breaks away from the man chasing it, a long way from the deep safety.';
       return c === 'five' ? 'The corners sit about 5 yards off: the corner route goes over them, with the deep safety a long way from the sideline, and the hitch is in front.'
         : 'The corners are off and deep: the hitch underneath them is open, short.';
     case 'flood':
-      if (zero) return 'Nobody deep: the quick throw is to the back in the flat, with his man a step behind.';
+      if (zero) return 'Nobody deep: the ball comes out hot to whichever man has a step on his, the back in the flat or a deep route with nobody over the top.';
       if (press) return 'The deep safety can\'t help on routes breaking to the sideline, and the back\'s flat route is a one-on-one in space.';
       if (c === 'five') return 'The corner sitting short is caught between the sail and the flat route under it.';
       return deep === 1 ? 'Three receivers at three depths on one side, against two defenders there: someone is left over.'
