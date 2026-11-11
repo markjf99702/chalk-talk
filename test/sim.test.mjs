@@ -122,7 +122,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '71169ce2d59f' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '71169ce2d59f', 6: '3726e81fec84' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1668,7 +1668,9 @@ test('Counter from the shotgun against Cover 1: a run that gets 10 yards doesn\'
 test('a deep catch is run down from behind: no long run after every catch 15 yards downfield', () => {
   // 640 snaps of the four plays that throw deep. From four start seeds (31, 1000, 5000, 77777) catches 15+ yards
   // downfield gain 5.9-8.1 yards after the catch on average; before the men chasing a deep catch got him more often,
-  // 10.2-14.6. (NFL 2023 regular season: 5.2, from nflverse play-by-play.)
+  // 10.2-14.6. (NFL 2023 regular season: 5.2, from nflverse play-by-play.) Since the pass spread (version 5), 8.8-10.4;
+  // and since a deep ball past 25 yards is harder to catch and a catch 5 yards out is run down from behind as well
+  // (version 6), 8.3-10.1, with 245-278 such catches, from 259-297: fewer deep balls are caught.
   let seed = 31, n = 0, yac = 0;
   for (const fm of FORMATIONS) for (const play of ['verts', 'smash', 'mesh', 'pa']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
     if (cantCall(fm.id, play)) continue;
@@ -1679,6 +1681,29 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
   }
   assert.ok(n > 40, `${n} deep catches`);
   assert.ok(yac / n < 10, `${n} catches 15+ yards downfield gain ${(yac / n).toFixed(1)} yards after the catch on average`);
+});
+
+test('a deep ball is harder to catch the farther past 25 yards it goes, and a catch 5 yards out is run down from behind too', () => {
+  // On the board's dropbacks, throws 30 yards or more in the air were caught 41-44 times in 100 (three seed sets of the
+  // matchup harness), and a catch 5 to 14 yards out ran on about 6 yards after it, because only a catch 15 yards out
+  // was run down from behind. NFL throws that deep in the 2023 regular season were caught 28 times in 100 (33 on 1st &
+  // 10 away from the goal line), and catches 5 to 14 yards out ran on 3.2 to 3.6 yards (nflverse play-by-play, by air
+  // yards). Every formation's pass plays against every front and coverage, two snaps each, as the ball's last spot in
+  // the air puts the throw: from four start seeds (31, 1000, 5000, 77777) 23-30% of the 30-yard throws are caught (from
+  // 34-49%), and the catches 5 to 14 yards out gain 4.6-4.8 yards after the catch (from 6.3-6.6).
+  let seed = 31, deep = 0, caught = 0, mid = 0, after = 0;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const fr of FRONTS) for (const cv of COVERAGES) for (let k = 0; k < 2; k++) {
+    if (cantCall(fm.id, pl.id)) continue;
+    const r = simulate({ formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: cv.id === 'c0' || k % 2 ? 'blitz' : 'four', flip: k % 2 === 1 }, seed++);
+    const thrown = r.frames.findLastIndex(f => f.air);
+    if (thrown < 0) continue;
+    const air = r.frames[thrown].ball[1];
+    if (air >= 30) { deep++; if (r.result.kind === 'catch') caught++; }
+    if (r.result.kind === 'catch' && air >= 5 && air < 15) { mid++; after += r.result.yards - air; }
+  }
+  assert.ok(deep > 80 && mid > 200, `${deep} throws 30 yards or more in the air, ${mid} catches 5 to 14 yards out`);
+  assert.ok(caught / deep < 0.35, `${caught} of ${deep} throws 30 yards or more in the air caught`);
+  assert.ok(after / mid < 5.3, `catches 5 to 14 yards out gain ${(after / mid).toFixed(1)} yards after the catch on average`);
 });
 
 test('one run against one defense comes out differently from snap to snap', () => {
@@ -1833,6 +1858,11 @@ test('the drills\' notes say what the board shows', () => {
   // 80%, Stick 73%, the Draw 71%, Smash 69%, Flood 66%, and Four Verticals 11.4 yards, the Play-Action Shot 10.5, Flood
   // 10.0. (Stick and Slant-Flat had been 77-84% and 75-79% against Cover 2, and Stick 77-81% against Cover 3, ahead of
   // Slant-Flat's 68-71%.)
+  // Since a deep ball past 25 yards is harder to catch, and a catch 5 yards or more out is run down from behind as a deep
+  // one is (version 6), from the three start seeds: against Cover 2, Four Verticals 14.1-14.7 yards a play, then Smash
+  // 11.6-13.6 and the Play-Action Shot 11.3-12.4 (Mesh 9.9-11.2); against Cover 3, Four Verticals 8.6-11.3, Flood
+  // 9.4-10.5 and the Play-Action Shot 8.8-9.9, each of them first from one seed (Smash 7.5-8.3). Who succeeds most often
+  // is as before.
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1848,14 +1878,14 @@ test('the drills\' notes say what the board shows', () => {
   const say = (o, k) => Object.entries(o).map(([id, v]) => `${id} ${k === 'rate' ? `${Math.round(v.rate * 100)}%` : v.avg.toFixed(1)}`).join(', ');
   const drill = id => DRILLS.find(d => d.id === id);
   const c2 = by(drill('c2').coverage, drill('c2').pressure);
-  assert.deepEqual(top(c2, 'avg', 2), ['pa', 'verts'], `Cover 2, yards a play: ${say(c2, 'avg')}`);
+  assert.deepEqual(top(c2, 'avg', 1), ['verts'], `Cover 2, yards a play: ${say(c2, 'avg')}`);
+  assert.deepEqual(top(c2, 'avg', 3), ['pa', 'smash', 'verts'], `Cover 2, yards a play, "then Smash ... and the Play-Action Shot": ${say(c2, 'avg')}`);
   assert.deepEqual(top(c2, 'rate', 1), ['slants'], `Cover 2, success: ${say(c2, 'rate')}`);
   assert.deepEqual(top(c2, 'rate', 3), ['draw', 'slants', 'stick'], `Cover 2, success: ${say(c2, 'rate')}`);
   assert.ok(c2.slants.rate > 0.74 && c2.slants.rate < 0.9, `"about four times in five": ${say(c2, 'rate')}`);
   for (const id of ['stick', 'draw']) assert.ok(c2[id].rate > 0.64 && c2[id].rate < 0.84, `"about three times in four": ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
-  assert.deepEqual(top(c3, 'avg', 1), ['verts'], `Cover 3, yards a play: ${say(c3, 'avg')}`);
-  assert.ok(['pa', 'flood'].every(id => top(c3, 'avg', 4).includes(id)), `Cover 3, yards a play, "then the Play-Action Shot and Flood": ${say(c3, 'avg')}`);
+  assert.deepEqual(top(c3, 'avg', 3), ['flood', 'pa', 'verts'], `Cover 3, yards a play, "Four Verticals, Flood and the Play-Action Shot ... about as many as each other": ${say(c3, 'avg')}`);
   assert.deepEqual(top(c3, 'rate', 1), ['slants'], `Cover 3, success: ${say(c3, 'rate')}`);
   assert.deepEqual(top(c3, 'rate', 4), ['draw', 'slants', 'smash', 'stick'], `Cover 3, success: ${say(c3, 'rate')}`);
   assert.ok(c3.slants.rate > 0.72 && c3.slants.rate < 0.88, `"about four times in five": ${say(c3, 'rate')}`);
@@ -1913,7 +1943,10 @@ test('the drills\' notes say what the board shows', () => {
   // Draw 63-76%, the zone runs 61-78% and Flood 68-74%. Against Cover 3 on 3rd & 8, Flood 62-63%, first every time,
   // then the Play-Action Shot, Smash, the Draw, Four Verticals and Stick 31-53%, and Slant-Flat 31-39% (from 15-20%); on
   // 3rd & 2 Slant-Flat 79-85%, Stick 74-82%, the Draw 69-79% and Smash 64-77%; on 4th & 1 the Draw 83-86%, Inside Zone
-  // 78-89%, Slant-Flat 77-86%, Stick 73-77% and the screen 72-75%.
+  // 78-89%, Slant-Flat 77-86%, Stick 73-77% and the screen 72-75%. With the deep balls and the run-down of version 6:
+  // against Cover 3 on 3rd & 8, Four Verticals 24-42% (from 31-45%), with Slant-Flat's 31-39%, and the Play-Action Shot,
+  // Smash, the Draw and Stick 33-50%; against Cover 0 on 3rd & 8, Flood 51-52%, first every time, then the Play-Action
+  // Shot 40-50%, Four Verticals 38-44% (from 45-49%), Smash 37-42% and Mesh 30-42%.
   const on = (sit, coverage, pressure) => {
     const need = needed(SITUATIONS.find(s => s.id === sit));
     return Object.fromEntries(PLAYS.map(pl => {
@@ -1945,8 +1978,8 @@ test('the drills\' notes say what the board shows', () => {
   o = on('3and8', 'c3', 'four');
   assert.deepEqual(top(o, 'rate', 1), ['flood'], `Cover 3 on 3rd & 8, "Flood makes the first down most often": ${say(o, 'rate')}`);
   within(o, ['flood'], 0.5, 0.74, 'Cover 3 on 3rd & 8, "about three times in five"');
-  within(o, ['pa', 'smash', 'draw', 'verts', 'stick'], 0.28, 0.6, 'Cover 3 on 3rd & 8, "about two times in five to half the time"');
-  within(o, ['slants'], 0.2, 0.44, 'Cover 3 on 3rd & 8, "about one time in three"');
+  within(o, ['pa', 'smash', 'draw', 'stick'], 0.28, 0.6, 'Cover 3 on 3rd & 8, "about two times in five to half the time"');
+  within(o, ['verts', 'slants'], 0.2, 0.44, 'Cover 3 on 3rd & 8, "about one time in three"');
   o = on('3and2', 'c3', 'four');
   within(o, ['slants', 'stick', 'draw', 'smash'], 0.6, 0.92, 'Cover 3 on 3rd & 2, "about three times in four"');
   among(o, 2, ['slants', 'stick', 'draw', 'smash'], 'Cover 3 on 3rd & 2, "most often"');
@@ -1955,9 +1988,9 @@ test('the drills\' notes say what the board shows', () => {
   among(o, 3, ['draw', 'iz', 'slants', 'stick'], 'Cover 3 on 4th & 1, "the Draw and Inside Zone make it most often, with Slant-Flat and Stick close behind"');
   within(o, ['slants', 'stick', 'screen'], 0.64, 0.9, 'Cover 3 on 4th & 1, "close behind ... about three times in four"');
   o = on('3and8', 'c0', 'blitz');
-  within(o, ['verts', 'flood'], 0.36, 0.62, 'Cover 0 on 3rd & 8, "about half the time"');
-  among(o, 3, ['verts', 'flood', 'mesh', 'smash', 'pa'], 'Cover 0 on 3rd & 8, "most often"');
-  within(o, ['mesh', 'smash', 'pa'], 0.26, 0.56, 'Cover 0 on 3rd & 8, "about two times in five"');
+  assert.deepEqual(top(o, 'rate', 1), ['flood'], `Cover 0 on 3rd & 8, "Flood makes the first down most often": ${say(o, 'rate')}`);
+  within(o, ['flood'], 0.4, 0.62, 'Cover 0 on 3rd & 8, "about half the time"');
+  within(o, ['pa', 'verts', 'smash', 'mesh'], 0.26, 0.56, 'Cover 0 on 3rd & 8, "about two times in five"');
   within(o, ['stick'], 0.2, 0.48, 'Cover 0 on 3rd & 8, Stick "about one time in three"');
   within(o, ['screen'], 0.12, 0.38, 'Cover 0 on 3rd & 8, the screen "about one time in four"');
   o = on('3and2', 'c0', 'blitz');
@@ -2029,6 +2062,9 @@ test('over many snaps the numbers look like football', () => {
   // rush as he has blockers (version 4 too), the twelve give 64.8-71.3% complete (mean 67.86%, from 67.66%; seven above
   // 68%, from six) and sacks on 2.0-4.0% of dropbacks; this one 68.2% (851 of 1,247, from 846 of 1,246), over the 68%
   // bound, so the bound is 69% (Mark's call, 2026-11-10).
+  // Since a deep ball past 25 yards is harder to catch (version 6), the twelve give 62.8-69.4% complete (mean 66.6%, from
+  // 67.8%; two at 69% or more, from four), and the rest as before (3.85-4.79 yards a carry, sacks on 2.8-4.8% of
+  // dropbacks, interceptions on 1.1-2.0% of throws); this one 65.8% (from 67.2%).
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -2061,8 +2097,12 @@ test('the README\'s matchups', () => {
   // crossers 10.9-12.2 yards against Cover 1 and 4.2-5.5 against Cover 3, and runs succeeded 32-33% of the time at even
   // numbers in the box and 19% with two more defenders than blockers; since the shotgun handoff read, the run-down
   // from behind and a tight end on the nickel back (version 2), 50-52% and 25-28%; with Counter among the runs, 52-54%
-  // and 26-27%; with a deep safety fitting the run from depth (version 3), 55-57% and 22-26%. A change to the balance
-  // that undoes one of these has to change the README with it.
+  // and 26-27%; with a deep safety fitting the run from depth (version 3), 55-57% and 22-26%. With the deep balls past
+  // 25 yards harder to catch and catches 5 yards out run down from behind (version 6), Four Verticals 14.0-15.6 against
+  // Cover 2 and 4.1-11.2 against Cover 3 and 4 (from 19.3-20.5 and 6.1-13.0), Smash 13.2-14.4 and 7.6-8.7, Flood
+  // 10.2-10.8 against Cover 3 and 6.7-9.3 against Cover 1 and 2, the crossers 8.0-9.2 against Cover 1 and 5.7-5.9
+  // against Cover 3, and the runs as before, 54-60% and 24-28%. A change to the balance that undoes one of these has to
+  // change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const cell = (play, coverage, each) => {

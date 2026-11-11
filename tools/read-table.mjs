@@ -4,9 +4,9 @@
 // disguised or not), each snapped --snaps times in each of --sets seed sets (40 in each of 6, 240 a cell, as it's made),
 // and how often it was a success at each down and distance the board has: a gain of 1 yard or more (4th & 1), 2
 // (3rd & 2), 4 (1st & 10, 2nd & 6) and 8 (3rd & 8), a run or a catch, as the board counts a success (success() in
-// js/app.js). Made in two halves of 120 snaps (for version 5), the halves picked the same top play for 72% of the looks
+// js/app.js). Made in two halves of 120 snaps (for version 6), the halves picked the same top play for 72% of the looks
 // (each look on each down, calling the offense), and each half's top play was in the other's top three 98 times in 100;
-// where they didn't pick the same, 92 times in 100, a median of 3.3 points and 8.8 or less nine times in ten behind the
+// where they didn't pick the same, 92 times in 100, a median of 3.3 points and 8.9 or less nine times in ten behind the
 // other's own top play by its numbers. The situation changes how a snap plays out only for a handoff from the shotgun
 // on a short third or fourth down (gunRead() in js/sim.js), so those runs are snapped again on 3rd & 2 for the 1- and
 // 2-yard numbers; every other snap is the same on any down.

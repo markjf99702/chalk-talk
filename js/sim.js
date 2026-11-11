@@ -9,7 +9,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLI
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
 // sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
 // differently, and says what to set this to.
-export const SIM_VERSION = 5;
+export const SIM_VERSION = 6;
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -952,8 +952,12 @@ function arrive(S) {
     if (R.chance(pi)) { b.state = 'dead'; ev(S, 'int', `${cap(name(S, near))} jumps the route and intercepts it.`, { who: near.i, how: 'jump' }); return finish(S, 'int', near); }
     if (R.chance(0.7)) { b.state = 'dead'; ev(S, 'pbu', `${cap(name(S, near))} breaks it up.`, { who: near.i }); return finish(S, 'incomplete', near); }
   }
-  // Deep balls are harder to catch: the ball comes over the shoulder and the defender is closing.
-  const pc = (nd > 2.5 ? 0.95 : nd > 1.5 ? 0.88 : nd > 0.8 ? 0.72 : 0.5) - (P.y > 18 ? 0.2 : 0);
+  // Deep balls are harder to catch: the ball comes over the shoulder and the defender is closing. Past 25 yards in the
+  // air, harder the farther it goes, 2 points a yard, up to 30 at 40 yards: without that, a throw 30 yards or more
+  // downfield was caught 41 to 44 times in 100 (three seed sets of the board's dropbacks), and with it 25 to 28. NFL
+  // throws that deep in the 2023 regular season were caught 28 times in 100, and 33 on 1st & 10 away from the goal
+  // line (nflverse play-by-play: air yards 30 or more, sacks and scrambles aside).
+  const pc = (nd > 2.5 ? 0.95 : nd > 1.5 ? 0.88 : nd > 0.8 ? 0.72 : 0.5) - (P.y > 18 ? 0.2 + clamp((P.y - 25) * 0.02, 0, 0.3) : 0);
   if (!R.chance(pc - rd * 0.08)) {
     b.state = 'dead';
     ev(S, 'inc', nd < 1.5 ? `${cap(name(S, near))} gets a hand in, and it falls incomplete.` : `${cap(name(S, r))} drops it.`, { who: (nd < 1.5 ? near : r).i, how: nd < 1.5 ? 'hand' : 'drop' });
@@ -2093,9 +2097,12 @@ function contact(S) {
     let pt = { dl: 0.82, de: 0.84, lb: 0.88, s: 0.85, cb: 0.81 }[d.cls];
     pt += { qb: 0.08, rb: -0.1, wr: -0.04, te: 0.02, fb: 0.03 }[c.cls] || 0;
     // From behind is harder, and a dive from behind harder still. But a man the defenders were running with is run down
-    // from behind more often: a receiver who caught it deep, or a back 3 yards past the line, through the first wave and
-    // with the men he got past chasing him (without it, nine in ten runs that got 15 yards went on for 20 or more).
-    const deep = S.caught && S.catchY >= 15, away = !S.caught && S.play.type === 'run' && c.y > RUNDOWN;
+    // from behind more often: a receiver who caught it 5 yards or more past the line, or a back 3 yards past the line,
+    // through the first wave and with the men he got past chasing him (without it, nine in ten runs that got 15 yards
+    // went on for 20 or more). For a receiver it took a catch 15 yards out, and one caught 5 to 14 yards out ran on
+    // about 6 yards after the catch; from 5 yards, about 4.4 (NFL 2023 regular season, nflverse play-by-play: 3.2 after a
+    // throw 5 to 9 yards in the air, 3.6 after one 10 to 14).
+    const deep = S.caught && S.catchY >= 5, away = !S.caught && S.play.type === 'run' && c.y > RUNDOWN;
     pt += head > 0.3 ? 0.04 : head < -0.4 ? (dd > 1.1 ? (deep || away ? -0.25 : -0.4) : (deep || away ? -0.06 : -0.14)) : 0;
     if (blocked) pt = 0.14;
     if (S.D.some(o => o !== d && o.eng < 0 && dist(o, c) < 1.6)) pt += 0.12;
