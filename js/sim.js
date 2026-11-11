@@ -1554,6 +1554,7 @@ function defense(S, d) {
   if (guessing && d.guess < 0 && t < d.lag + 0.5) { d.tx = d.x0 - S.p * 2; d.ty = d.y0 - 0.3; d.ts = d.top * 0.7; return; }
   if (guessing && d.guess > 0 && t < 1.2 && c && c !== S.QB) d.lag = 0;
   if (gunRead(S, d)) return rotate(S, d) || bite(S, d);
+  if (blitzRead(S, d)) return;
   // After a catch or a handoff seen: everyone runs to the ball.
   if (c && c.team === 'O' && (S.caught || (c !== S.QB && runLook(S, t - d.lag)) || (c !== S.QB && c.y > -0.5))) {
     if (d.holds && !S.caught && S.play.scheme !== 'draw' && c.y < 0 && t < 2) return holdEdge(S, d, c);
@@ -1581,6 +1582,30 @@ const SHORT_READ = 0.35;
 function gunRead(S, d) {
   const c = S.carrier, p = S.play;
   return p.type === 'run' && p.scheme !== 'draw' && !S.fm.under && c === S.RB && c.y < -0.5 && S.t < S.handT + d.lag * (S.short ? SHORT_READ : 1) && d.cls !== 'cb' && d.job.kind !== 'rush';
+}
+
+// A blitz against a run (not the draw, a pass until the handoff). A blitzer (a man rushing who doesn't on every down:
+// not a lineman, nor the 3-4's Jack) goes through his gap and on up the field until he has read the handoff, his lag
+// after it (see the end of buildDefense()), about half a second, rather than turning for the back the moment he has the
+// ball. Cover 0's extra man, walked up over a gap with nobody to cover (see buildDefense()), plays it from there as a
+// linebacker would: downhill toward the back, and after the handoff not past the line while the ball carrier is still
+// behind it. The board's Cover 0 stopped far more runs than the NFL's: 31 in 100 lost yards and only 7 gained 4 to 9,
+// with 8 or 9 men in the box against 6 or 7 blockers and run blocking that never blocks a safety (see assignRun()), so
+// the free and strong safeties, walked up to blitz, came free on 7 runs in 10 and 8 in 10, and between them made
+// two-thirds of the tackles behind the line. (The NFL doesn't chart coverage on runs. Into a box of 9 or more on 1st &
+// 10 in the 2023 regular season, 13 in 100 lost yards and 39 gained 4 or more, of 210 runs, from nflverse's
+// play-by-play and participation data; a box of 9 usually still keeps someone deep.) With this, 22 in 100 lose yards
+// against Cover 0, and of all runs 10.1% lose yards, from 11.5% (the NFL's: 9.9%). (With every rusher reading it late,
+// the extra man too, 18 runs in 100 against Cover 0 went 15 yards or more, and the yards a carry went past what 'over
+// many snaps the numbers look like football', in test/sim.test.mjs, allows.)
+function blitzRead(S, d) {
+  const c = S.carrier, j = d.job;
+  if (S.play.type !== 'run' || S.play.scheme === 'draw' || j.kind !== 'rush' || S.caught) return false;
+  if (d.blitzer && !d.extra && c && c !== S.QB && S.t < S.handT + d.lag) { d.tx = j.gap ?? d.x; d.ty = Math.min(d.y - 1, -2.5); d.ts = d.top; return true; }
+  if (!d.extra) return false;
+  if (c && c !== S.QB) { pursue(S, d, c); if (c.y < 0 && d.y > 0) d.ty = Math.max(d.ty, 0.6); return true; }
+  d.tx = d.x0 + ((S.RB?.x ?? 0) - d.x0) * 0.3; d.ty = Math.max(1, d.y0 - 2.5); d.ts = d.top * 0.75; d.want = S.RB;
+  return true;
 }
 
 // The Pistol: a back straight behind a quarterback in the shotgun (see bite()).

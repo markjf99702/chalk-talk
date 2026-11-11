@@ -122,7 +122,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '7f0851b2108c' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '71169ce2d59f' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1730,6 +1730,32 @@ test('one run against one defense comes out differently from snap to snap', () =
   assert.ok(same < 36, `Counter from I-Form against the 4-3 Over in Cover 1 went through the same gap on ${same} of 40 snaps`);
 });
 
+test('a blitzer on a run goes through his gap until he has read the handoff, and Cover 0\'s extra man plays it from where he walked up', () => {
+  // Everyone rushing turned for the back the moment he had the ball, and Cover 0's extra man, walked up over a gap,
+  // rushed into the backfield with the rest: against Cover 0, 31 runs in 100 lost yards (NFL 2023, into a box of 9 or
+  // more on 1st & 10: 13). Now a blitzer goes on up the field until he has read the handoff, and the extra man plays it
+  // as a linebacker would (blitzRead() in js/sim.js). Inside Zone, Outside Zone, Power and Counter from every formation
+  // that has them, every front, 4 snaps each: against Cover 0, from 30.5% losing yards to 15.6%, a blitzer making the
+  // tackle behind the line on 2.6% of runs, from 17.2%, and the extra man past the line while the ball carrier is still
+  // behind it on 68 of 384, from 209; against Cover 3 with the Will blitzing, the blitzer's tackles behind the line on
+  // 0.8%, from 5.5%.
+  for (const [coverage, blitzer, losses, byBlitzer] of [['c0', 'M', 0.22, 0.08], ['c3', 'W', 1, 0.03]]) {
+    let seed = 3e6, n = 0, loss = 0, by = 0, over = 0;
+    for (const fm of FORMATIONS) for (const play of ['iz', 'oz', 'power', 'counter']) for (const fr of FRONTS) for (let k = 0; k < 4; k++) {
+      if (cantCall(fm.id, play)) continue;
+      const call = { formation: fm.id, play, front: fr.id, coverage, pressure: 'blitz', blitzer, flip: k % 2 === 1 };
+      const S = prepare(call, seed), r = simulate(call, seed++);
+      n++;
+      if (r.result.yards < 0) { loss++; if (S.P[r.result.by]?.blitzer) by++; }
+      const ex = S.D.find(d => d.extra), hand = r.events.find(e => e.kind === 'hand');
+      if (ex && hand && r.frames.some(f => f.t > hand.t && f.c >= 0 && f.xy[2 * f.c + 1] < 0 && f.xy[2 * ex.i + 1] < 0.2)) over++;
+    }
+    const what = `${coverage}, the ${blitzer} blitzing: ${n} runs, ${(100 * loss / n).toFixed(1)}% losing yards, a blitzer's tackle behind the line on ${(100 * by / n).toFixed(1)}%`;
+    assert.ok(loss / n < losses && by / n < byBlitzer, what);
+    if (coverage === 'c0') assert.ok(over / n < 0.3, `${what}; the extra man past the line with the ball carrier still behind it on ${over}`);
+  }
+});
+
 test('one pass against one defense comes out differently from snap to snap', () => {
   // Each receiver ran his route exactly as drawn, each man defender trailed his man by the same third of a second or so,
   // and each zone defender dropped to the same spot, so the same man came open by the same margin every snap: in half
@@ -1839,20 +1865,20 @@ test('the drills\' notes say what the board shows', () => {
   for (const id of ['stick', 'flood']) assert.ok(c0[id].rate > 0.58 && c0[id].rate < 0.84, `"about two times in three": ${say(c0, 'rate')}`);
   assert.ok(c0.screen.rate > 0.45 && c0.screen.rate < 0.82, `the screen "about two times in three": ${say(c0, 'rate')}`);
   for (const id of ['mesh', 'slants']) assert.ok(c0[id].rate > 0.38 && c0[id].rate < 0.7, `"about half the time or a little more": ${say(c0, 'rate')}`);
-  assert.deepEqual(Object.entries(c0).sort((a, b) => a[1].rate - b[1].rate).slice(0, 3).map(([id]) => id).sort(), ['counter', 'draw', 'power'], `Cover 0, "the Draw, Power and Counter run straight into it": ${say(c0, 'rate')}`);
+  for (const id of PLAYS.filter(p => p.type === 'run').map(p => p.id)) assert.ok(c0[id].rate < 0.42, `Cover 0, "every run goes straight into it, about one time in four": ${say(c0, 'rate')}`);
   const runs = PLAYS.filter(p => p.type === 'run').map(p => p.id);
   const stop = (front, coverage, pressure) => {
-    let n = 0, s = 0, y = 0;
+    let n = 0, s = 0, y = 0, through = 0;
     for (const play of runs) for (let k = 0; k < 50; k++) {
       const r = simulate({ formation: drill('run').formation, play, flip: k % 2 === 1, front, coverage, pressure }, seed++).result;
-      n++; y += r.yards; if (!won(r)) s++;
+      n++; y += r.yards; if (!won(r)) s++; else through += r.yards;
     }
-    return { stop: s / n, avg: y / n };
+    return { stop: s / n, avg: y / n, through: through / (n - s) };
   };
   const one = stop('over', 'c1', 'blitz'), zero = stop('over', 'c0', 'blitz');
-  const both = `Cover 1 and a blitz stops ${Math.round(one.stop * 100)}% for ${one.avg.toFixed(1)} yards a run, Cover 0 ${Math.round(zero.stop * 100)}% for ${zero.avg.toFixed(1)}`;
+  const both = `Cover 1 and a blitz stops ${Math.round(one.stop * 100)}% for ${one.avg.toFixed(1)} yards a run (${one.through.toFixed(1)} for the runs that get through), Cover 0 ${Math.round(zero.stop * 100)}% for ${zero.avg.toFixed(1)} (${zero.through.toFixed(1)})`;
   assert.ok(one.stop > 0.52 && one.stop < 0.72, `"about six runs in ten": ${both}`);
-  assert.ok(zero.stop > one.stop && zero.stop > 0.64 && zero.stop < 0.86 && zero.avg > one.avg + 2, `"more, about three in four, but the runs that get through go a long way": ${both}`);
+  assert.ok(zero.stop > one.stop && zero.stop > 0.64 && zero.stop < 0.86 && zero.through > one.through + 4, `"more, about three in four, but the runs that get through go a long way": ${both}`);
   const S = prepare({ formation: drill('run').formation, play: 'iz', front: 'over', coverage: 'c1', pressure: 'blitz' }, 5);
   assert.deepEqual([S.box.box, S.box.blockers], [8, 7], '"eight against seven"');
 
@@ -1938,13 +1964,13 @@ test('the drills\' notes say what the board shows', () => {
   within(o, ['stick', 'screen'], 0.62, 0.92, 'Cover 0 on 3rd & 2, "about four times in five"');
   within(o, ['flood', 'mesh', 'oz'], 0.52, 0.86, 'Cover 0 on 3rd & 2, "about seven times in ten"');
   among(o, 2, ['stick', 'screen', 'flood', 'mesh', 'oz'], 'Cover 0 on 3rd & 2, "most often"');
-  within(o, ['draw', 'power', 'counter'], 0.1, 0.42, 'Cover 0 on 3rd & 2, the Draw, Power and Counter "about one time in four"');
-  below(o, ['draw', 'power', 'counter'], ['stick', 'screen', 'oz'], 'Cover 0 on 3rd & 2, the Draw, Power and Counter "run into the rush"');
+  within(o, ['draw'], 0.08, 0.36, 'Cover 0 on 3rd & 2, the Draw "about one time in five"');
+  below(o, ['draw'], ['stick', 'screen', 'oz'], 'Cover 0 on 3rd & 2, the Draw "runs into the rush"');
   o = on('4and1', 'c0', 'blitz');
   within(o, ['stick', 'screen', 'iz', 'oz'], 0.66, 0.94, 'Cover 0 on 4th & 1, "about four in five"');
   among(o, 2, ['stick', 'screen', 'iz', 'oz'], 'Cover 0 on 4th & 1');
-  within(o, ['draw', 'power', 'counter'], 0.18, 0.5, 'Cover 0 on 4th & 1, the Draw, Power and Counter "one in three"');
-  below(o, ['draw', 'power', 'counter'], ['stick', 'screen', 'iz', 'oz'], 'Cover 0 on 4th & 1, the Draw, Power and Counter "run into the rush"');
+  within(o, ['draw'], 0.18, 0.5, 'Cover 0 on 4th & 1, the Draw "one in three"');
+  below(o, ['draw'], ['stick', 'screen', 'iz', 'oz'], 'Cover 0 on 4th & 1, the Draw "runs into the rush"');
   // The run drill: how often I-Form's runs are held short of the first down.
   const held = (sit, front, coverage, pressure, each = 40) => {
     const need = needed(SITUATIONS.find(s => s.id === sit));
@@ -1963,10 +1989,10 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(long3.every(x => x > 0.5 && x < 0.75 && x < long1), `"Cover 3 rushing four lets the most through, about one in three": ${long3.map(x => x.toFixed(2))}`);
   const shortAll = everyone('3and2'), short0 = ['over', 'under', '34'].map(fr => held('3and2', fr, 'c0', 'blitz'));
   assert.ok(shortAll > 0.28 && shortAll < 0.45, `"about one run in three is held short on 3rd & 2": ${shortAll.toFixed(2)}`);
-  assert.ok(short0.every(x => x > 0.5 && x < 0.75), `"Cover 0 holds about three in five short on 3rd & 2": ${short0.map(x => x.toFixed(2))}`);
+  assert.ok(short0.every(x => x > 0.4 && x < 0.68), `"Cover 0 holds about half short on 3rd & 2": ${short0.map(x => x.toFixed(2))}`);
   const oneAll = everyone('4and1'), one0 = ['over', 'under'].map(fr => held('4and1', fr, 'c0', 'blitz')), oneRest = [['34', 'c1', 'blitz'], ['34', 'c3', 'blitz'], ['over', 'c1', 'blitz'], ['nickel', 'c3', 'four']].map(c => held('4and1', ...c));
   assert.ok(oneAll > 0.14 && oneAll < 0.28, `"one in five on 4th & 1": ${oneAll.toFixed(2)}`);
-  assert.ok(one0.every(x => x > 0.38 && x < 0.62 && x > Math.max(...oneRest) - 0.06), `"from the 4-3, about half on 4th & 1, as many as any call here": ${one0.map(x => x.toFixed(2))} against ${oneRest.map(x => x.toFixed(2))}`);
+  assert.ok(one0.every(x => x > 0.24 && x < 0.5 && x > Math.max(...oneRest) - 0.06), `"from the 4-3, about one in three on 4th & 1, as many as any call here": ${one0.map(x => x.toFixed(2))} against ${oneRest.map(x => x.toFixed(2))}`);
   const oneDeep = ['c2', 'c4'].map(cv => held('4and1', 'over', cv, 'four'));
   assert.ok(oneDeep.every(x => x < 0.12), `"the 4-3 Over with two safeties deep and four rushing hardly ever stops it on 4th & 1, about one time in 15": ${oneDeep.map(x => x.toFixed(2))}`);
 });

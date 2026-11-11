@@ -170,8 +170,9 @@ export function rankPlays(formation, alike, sit) {
 }
 // Each call a defense can pick in its chips (TABLE.base), by how often it stops his plays from a formation short of a
 // success (rate), less how often one of them goes 15 yards or more against it (long), each weighed by how often he runs
-// each play and sends a man in motion first: best first. (By the first alone, Cover 0 came first for 27 of the 35
-// formations and downs: it stops the most plays short, and gives up the most long ones. Counting them, 24.)
+// each play and sends a man in motion first: best first. (By the first alone, with version 5's numbers, Cover 0 comes
+// first for 23 of the 35 formations and downs: it stops the most plays short, and gives up the most long ones.
+// Counting them, 14.)
 export function rankDefenses(formation, sit) {
   const L = lean(sit), plays = playMix(formation, L), m = motionShare(formation, L);
   const mix = (still, moving) => plays.reduce((a, [id, p]) => a + p * ((1 - m) * still(id) + (m ? m * moving(id) : 0)), 0);
