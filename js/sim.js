@@ -9,7 +9,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLI
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
 // sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
 // differently, and says what to set this to.
-export const SIM_VERSION = 4;
+export const SIM_VERSION = 5;
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -133,6 +133,9 @@ export function prepare(call, seed = 1) {
   S.protection = S.play.type === 'pass' ? S.O.filter(p => ['pro', 'screenOL', 'fake'].includes(p.job.kind) || (p.job.kind === 'route' && p.job.delay && p.job.route !== 'screen')) : [];
   S.box = boxCount(S);
   S.lean = S.RR.normal() * LEAN;
+  // A third roll of the dice, for what makes one pass against one defense come out differently from snap to snap (see
+  // PASS_SPREAD): its own too, so that every run plays exactly as it did before it.
+  if (S.play.type === 'pass') passSpread(S, rng((seed ^ 0x2545F491) >>> 0));
   S.jobText = S.P.map(pl => describeJob(S, pl));
   S.overlay = overlay(S);
   return S;
@@ -341,6 +344,47 @@ function buildDefense(S) {
     // On a run, a linebacker guesses: a step the wrong way first, or a jump on it (see GUESS).
     const g = S.RR();
     d.guess = d.cls === 'lb' ? (g < GUESS[0] ? -1 : g < GUESS[0] + GUESS[1] ? 1 : 0) : 0;
+  }
+}
+
+// One pass against one defense came out nearly the same every snap. Each receiver ran his route exactly as drawn, at
+// nearly the same speed, so he made his cut at the same moment; each man defender trailed his man by the same third
+// of a second or so, and each zone defender dropped to the same spot; and the quarterback read them in the same order
+// on the same beat. So the same man came open by the same margin at the same moment, and what was left to chance was
+// mostly the catch and the tackle. Of 1,080 pass matchups (one pass play from one formation against one front and
+// coverage, rushing four or in Cover 0, 48 snaps each on 1st & 10), 6.8% gained 4 yards 9 times in 10 or more and 4.2%
+// one time in 10 or less, and in half of them the ball went to the same man on 9 throws in 10 or more: from Gun
+// Doubles against the 4-3 Over in Cover 1, Stick went to the Y, 2 1/2 to 5 yards clear, on all 48. So on a pass play
+// three things now vary from snap to snap (drawn from the play's third roll of the dice, so runs play exactly as
+// before):
+// - man: how quickly a man defender reacts to his man's cut, in seconds: about manAt, and the log of it spread by
+//   man (one snap in ten he's a step behind, about half a second; one in ten right on his man, about a seventh).
+// - zone: how quickly a zone defender reacts, spread the same way around his own; and spot: where he sets up, a
+//   normal draw with this spread in yards each way from his spot (a deep one only deeper; he still stops backing up
+//   against a quick drop once the quarterback has set up: see zone()).
+// - depth and speed: how deep a route breaks, beyond its first yard (up to about a yard deeper or shorter), and how
+//   fast it's run.
+// (Varying the quarterback's timing as well barely helped and cut the sacks, so he reads as before.) With them, 1.4%
+// and 0.5% of those matchups, and the same man in 20%; Stick from Gun Doubles against that Cover 1 works 38 times in
+// 48, to the Y 40 times and the back 8. Over every formation, pass play, front, coverage and rush (23,328 dropbacks
+// from three seed sets), 68.3% complete from 67.9%, sacks on 3.5% of dropbacks from 3.1%, interceptions on 1.4% of
+// throws from 1.6%, 8.8 yards a dropback from 8.3, and 15 yards or more on 20.7% of dropbacks from 19.4%.
+const PASS_SPREAD = { manAt: 0.28, man: 0.5, zone: 0.4, spot: 1.2, depth: 0.1, speed: 0.03 };
+function passSpread(S, R) {
+  for (const d of S.D) {
+    const a = R.normal(), b = R.normal(), c = R.normal();
+    if (d.job.kind === 'man') d.react = clamp(PASS_SPREAD.manAt * Math.exp(a * PASS_SPREAD.man), 0.1, 0.9);
+    else if (d.job.kind === 'zone') {
+      d.react = clamp(d.react * Math.exp(a * PASS_SPREAD.zone), 0.08, 0.9);
+      d.offSpot = { x: b * PASS_SPREAD.spot, y: (d.job.z.deep ? Math.abs(c) : c) * PASS_SPREAD.spot };
+    }
+  }
+  for (const r of S.O) {
+    const a = R.normal(), b = R.normal();
+    if (r.job.kind !== 'route' || !r.path || r.lead) continue; // (not a man in jet motion, still on his way across)
+    const k = 1 + a * PASS_SPREAD.depth, y0 = r.y;
+    for (const w of r.path) if (w.y > y0 + 1) w.y = y0 + 1 + (w.y - y0 - 1) * k;
+    r.top *= Math.exp(b * PASS_SPREAD.speed);
   }
 }
 
@@ -1723,6 +1767,7 @@ function zone(S, d) {
     const r = mine[0], k = two && two.job.kind === 'route' && two.y > 8 ? 0.2 : 0.55;
     if (r && r.y > z.at[1] - 7) { tx = clamp(r.x * k + tx * (1 - k), zx0 - 1, zx1 + 1); ty = Math.max(z.at[1], r.y + 3.5); }
     else if (S.look && S.look.x > zx0 && S.look.x < zx1) tx = tx * 0.7 + S.look.x * 0.3;
+    if (d.offSpot) { tx += d.offSpot.x; ty += d.offSpot.y; } // (on a pass, a yard or so off: see PASS_SPREAD)
     // A quick drop is the sign of a quick throw: once the quarterback has set up, a deep defender with nobody coming
     // at him stops backing up and sits, ready to drive on the ball.
     if (S.play.drop === 'quick' && t > S.readAt && !(r && r.y > d.y - 6)) ty = Math.min(ty, d.y);
@@ -1774,6 +1819,7 @@ function zone(S, d) {
   }
   if (t < 0.55 && !z.deep) ty = Math.max(ty, d.y); // open and drop first
   d.tx = tx; d.ty = ty;
+  if (d.offSpot && !z.deep) { d.tx += d.offSpot.x; d.ty += d.offSpot.y; }
 }
 
 function breakOnBall(S, d) {

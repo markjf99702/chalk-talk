@@ -270,7 +270,7 @@ function reasonFor(id, L, blockers, again = false, fm = null) {
     case 'slants':
       if (zero) return 'Quick throws beat the blitz: the ball\'s out in about a second, before the rush gets there.';
       if (press) return 'The slant comes open inside the man pressing him; watch for the defender sitting in the short middle.';
-      if (c === 'five') return 'Short and sure: the flat route is open more often, with the corner right there to tackle.';
+      if (c === 'five') return 'Short and sure: the slant inside the corner sitting short, or the flat route in front of him, with the corner right there to tackle.';
       return deep === 1 ? 'The defender between the slant and the flat has to choose, and one of them comes open.'
         : 'The corners play off and deep: room underneath for both quick routes.';
     case 'stick':

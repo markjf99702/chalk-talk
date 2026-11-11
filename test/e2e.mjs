@@ -284,8 +284,8 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
   await p.goto(base);
   for (const [code, head, kicker, win] of [
     ['O.single.iz.0.over.c3.four.2', 'Gain of 3 yards, 7 short of the first down', 'A win for the defense: short of the 4\u00a0yards that make a play a success', 'D'],
-    ['O.trips.smash.0.nickel.c3.four.65', 'Intercepted', 'A takeaway for the defense', 'D'],
-    ['O.trips.smash.0.nickel.c2.four.262', 'Gain of 19 yards and a first down', 'A win for the offense', 'O'],
+    ['O.trips.smash.0.nickel.c3.four.39', 'Intercepted', 'A takeaway for the defense', 'D'],
+    ['O.trips.smash.0.nickel.c2.four.148', 'Gain of 19 yards and a first down', 'A win for the offense', 'O'],
     ['O.trips.smash.0.nickel.c2.four.10', 'Gain of 20 yards and a first down', 'A big play for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.115', 'Gain of 9 yards, 1 short of the first down', 'A win for the offense', 'O'],
     ['D.single.iz.0.over.c3.four.4', 'Gain of 10 yards and a first down', 'A big play for the offense', 'O'],
@@ -298,7 +298,7 @@ assert.equal(short.kicker, 'A win for the defense: short of the 4\u00a0yards tha
     ['O.single.iz.0.over.c3.four.1.0.none.4and1', 'Gain of 1 yard and a first down', 'A win for the offense', 'O'],
     ['O.single.iz.0.over.c3.four.17.0.none.4and1', 'No gain', 'A win for the defense: a turnover on downs', 'D'],
     ['O.trips.smash.0.nickel.c3.four.1.0.none.4and1', 'Incomplete', 'A win for the defense: a turnover on downs', 'D'],
-    ['O.trips.smash.0.nickel.c3.four.65.0.none.4and1', 'Intercepted', 'A takeaway for the defense', 'D'],
+    ['O.trips.smash.0.nickel.c3.four.39.0.none.4and1', 'Intercepted', 'A takeaway for the defense', 'D'],
   ]) {
     await p.evaluate(code => { location.hash = `#p=${code}`; }, code);
     await p.waitForFunction(seed => { const { state } = window.chalkTalk; return state.seed === seed && state.phase === 'playing'; }, +code.split('.')[7], { timeout: 5000 });
@@ -637,15 +637,15 @@ for (const side of ['O', 'D']) {
     state.seed = 2;
     lineUp(); state.t = board.duration(); finish();
     const away = { kind: state.play.result.kind, now: document.getElementById('noteNow').textContent };
-    // On Stick, the man sitting on the stick going with the back to the flat (Gun Doubles against a Cover 3 blitz, seed 2).
+    // On Stick, the man sitting on the stick going with the back to the flat (Gun Doubles against a Cover 3 blitz, seed 11).
     state.off = { formation: 'doubles', play: 'stick', flip: false };
     state.def = { front: 'over', coverage: 'c3', pressure: 'blitz' };
-    state.seed = 2;
+    state.seed = 11;
     lineUp(); state.t = board.duration(); finish();
     const stick = document.getElementById('noteNow').textContent;
     // Three out against as many rushers as blockers: on the Play-Action Shot from I-Form against a Cover 1 blitz he
-    // throws at once to the tight end in the flat (4-3 Over, seed 1), or looks there first and goes on (Nickel, seed 16).
-    const sight = [['over', 1], ['nickel', 16]].map(([front, seed]) => {
+    // throws at once to the tight end in the flat (4-3 Over, seed 4), or looks there first and goes on (Nickel, seed 16).
+    const sight = [['over', 4], ['nickel', 16]].map(([front, seed]) => {
       state.off = { formation: 'iform', play: 'pa', flip: false };
       state.def = { front, coverage: 'c1', pressure: 'blitz' };
       state.seed = seed;
@@ -661,7 +661,7 @@ for (const side of ['O', 'D']) {
   assert.equal(bad.stick, 'This time: the strong safety left the stick to go with the running back to the flat, so he threw to the Y on the stick route, and it went for 11 yards.');
   assert.deepEqual(bad.sight, [
     'This time: with seven rushing against seven blockers, he threw at once to the tight end (Y) on the flat route, the shortest he had, and it went for 9 yards.',
-    'This time: with seven rushing against seven blockers, he looked first to the tight end (Y) on the flat route, the shortest he had; he was covered, so he threw to the Z on the post route, and it went for 48 yards.',
+    'This time: with seven rushing against seven blockers, he looked first to the tight end (Y) on the flat route, the shortest he had; he was covered, so he threw to the Z on the post route, and it went for 42 yards.',
   ]);
   assert.equal(bad.rush, 'Rush: 5 rushers against 7 in protection (5 linemen and 2 backs), and 2 more came once the men they were covering stayed in to block.');
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
@@ -1516,7 +1516,7 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
 
   // A catch with a missed tackle and the tackle in the same frame: watched again, the catch stays on the board, the
   // newest line under it, and the receiver is ringed.
-  await open('p=O.single.slants.0.under.c1.blitz.1065');
+  await open('p=O.single.slants.0.under.c1.blitz.5');
   const quick = await p.evaluate(() => window.chalkTalk.state.play.events.map(e => ({ t: e.t, kind: e.kind, text: e.text, who: e.who })));
   const caught = quick.findIndex(e => e.kind === 'catch');
   assert.deepEqual(quick.slice(caught, caught + 3).map(e => [e.kind, e.t]), [['catch', quick[caught].t], ['miss', quick[caught].t], ['tackle', quick[caught].t]], `the play changed: ${quick.map(e => `${e.t} ${e.kind}`).join(', ')}`);
@@ -1549,7 +1549,7 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
     const a = pts[n], dx = b[0] - a[0], dy = b[1] - a[1], u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
     return Math.hypot(a[0] + u * dx - x, a[1] + u * dy - y);
   }));
-  for (const [link, width] of [['p=O.trips.smash.0.nickel.c2.four.15', 390], ['p=O.doubles.verts.0.nickel.c3.four.3', 390], ['p=D.iform.flood.1.over.c3.four.9', 390], ['p=O.trips.smash.0.nickel.c2.four.15', 1280]]) {
+  for (const [link, width] of [['p=O.trips.smash.0.nickel.c2.four.15', 390], ['p=O.doubles.verts.0.nickel.c3.four.3', 390], ['p=D.iform.flood.1.over.c3.four.10', 390], ['p=O.trips.smash.0.nickel.c2.four.15', 1280]]) {
     await p.setViewportSize({ width, height: width > 900 ? 800 : 844 });
     await p.evaluate(link => { location.hash = link; }, link);
     await p.waitForFunction(() => window.chalkTalk.state.phase === 'playing');
@@ -1786,7 +1786,7 @@ for (const colorScheme of ['light', 'dark']) {
     const show = (off, def, seed) => { state.auto = false; Object.assign(state, { off, def, seed }); lineUp(); return state.play; };
     const out = { kinds: {}, bad: [] };
     // a catch for 30 yards: nothing written before the whistle, "+30" at it, in big writing
-    let P = show({ formation: 'trips', play: 'smash', flip: false }, { front: 'nickel', coverage: 'c2', pressure: 'four' }, 15);
+    let P = show({ formation: 'trips', play: 'smash', flip: false }, { front: 'nickel', coverage: 'c2', pressure: 'four' }, 76);
     out.before = at(P.result.t - 0.1);
     out.after = at(board.duration());
     out.head = (() => { state.t = board.duration(); finish(); return document.getElementById('resHead').textContent; })();
@@ -1895,7 +1895,7 @@ for (const colorScheme of ['light', 'dark']) {
   const got = await p.evaluate(() => {
     const { state, board, lineUp } = window.chalkTalk;
     state.auto = false;
-    Object.assign(state, { off: { formation: 'doubles', play: 'verts', flip: false }, def: { front: 'nickel', coverage: 'c0', pressure: 'blitz' }, seed: 9 });
+    Object.assign(state, { off: { formation: 'doubles', play: 'verts', flip: false }, def: { front: 'nickel', coverage: 'c0', pressure: 'blitz' }, seed: 87 });
     lineUp();
     const spot = board.markSpot;
     let placed = null;
