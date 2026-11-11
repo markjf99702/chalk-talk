@@ -1614,11 +1614,13 @@ for (const [width, height, mobile] of [[700, 600, false], [568, 320, true]]) {
   const c = await p.evaluate(([x, y]) => { const r = window.chalkTalk.board.cv.getBoundingClientRect(); return [r.left + x, r.top + y]; }, zoomed.c);
   await p.mouse.click(c[0], c[1]);
   assert.match(await p.textContent('#whoPos'), /^C · Center/, 'a tap on the center, zoomed in, didn\'t open his card');
-  // the ball stays on the board through the play, on deep passes and long runs, calling either side
+  // the ball stays on the board through the play, on deep passes and long runs, calling either side, and on a throw
+  // away out of bounds, which lands a yard or two past the room the board has outside the sideline (the Play-Action Shot
+  // from Gun Trips against Cover 3, seed 53, 29 yards across, on both sides: it went 5 px off the board)
   const lost = await p.evaluate(() => {
     const { board, state, lineUp, simulate } = window.chalkTalk, out = [];
-    const calls = [['O', 'doubles', 'verts', 'c2'], ['O', 'single', 'oz', 'c0'], ['D', 'trips', 'pa', 'c3'], ['O', 'iform', 'power', 'c1'], ['D', 'single', 'smash', 'c2']];
-    for (const [side, formation, play, coverage] of calls) for (let seed = 1; seed <= 12; seed++) {
+    const calls = [['O', 'doubles', 'verts', 'c2'], ['O', 'single', 'oz', 'c0'], ['D', 'trips', 'pa', 'c3'], ['O', 'iform', 'power', 'c1'], ['D', 'single', 'smash', 'c2'], ['O', 'trips', 'pa', 'c3', 53], ['D', 'trips', 'pa', 'c3', 53]];
+    for (const [side, formation, play, coverage, only] of calls) for (let seed = only ?? 1; seed <= (only ?? 12); seed++) {
       board.flip = side === 'D';
       board.setPlay(simulate({ formation, play, flip: false, front: 'over', coverage, pressure: 'four' }, seed));
       const F = board.play.frames;

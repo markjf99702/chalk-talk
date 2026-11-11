@@ -126,7 +126,11 @@ export class Board {
     if (this.zoomU > 0 && this.zoomTrack) {
       const { i, u } = this.at(t), Z = this.zoomTrack, at = a => a[i] + ((a[i + 1] ?? a[i]) - a[i]) * u;
       const kz = this.k0 * ZOOM, topz = at(Z.y) + this.h * BALL_AT / kz;
-      const oxz = Math.min(0, Math.max(this.w - W_YDS * kz, this.w / 2 - (at(Z.x) + W_YDS / 2) * kz)); // the field across the board
+      let oxz = Math.min(0, Math.max(this.w - W_YDS * kz, this.w / 2 - (at(Z.x) + W_YDS / 2) * kz)); // the field across the board
+      // A ball thrown away out of bounds lands a yard or two past the room the board has outside the sideline: the view
+      // goes on with it, past the edge of the field, so it's on the board till it lands.
+      const bv = oxz + (this.ballAt(t)[0] + W_YDS / 2) * kz;
+      oxz += Math.max(0, 4 - bv) - Math.max(0, bv - (this.w - 4));
       // the view as a box in yards, part way from one camera's to the other's
       const z = this.zoomU, mix = (a, b) => a + (b - a) * z;
       const left = mix(-ox / k, -oxz / kz), tp = mix(top, topz), bt = mix(bottom, topz - this.h / kz);
