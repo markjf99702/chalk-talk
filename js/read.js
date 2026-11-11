@@ -188,8 +188,8 @@ export function rankDefenses(formation, sit) {
 const tenths = p => Math.min(9, Math.max(1, Math.round(p * 10)));
 const tens = p => (p >= 0.95 ? 'nearly all' : p < 0.05 ? 'almost none' : `about ${tenths(p)} in 10`);
 const times = p => (p >= 0.95 ? 'nearly every time' : p < 0.05 ? 'almost never' : `about ${tenths(p)} time${tenths(p) === 1 ? '' : 's'} in 10`);
-// Out of 100, for the defense picks' two numbers: the picks are in order of the first less the second, unrounded, and to
-// the nearest 1 in 10 a pick could read worse than the one under it on both (on 3rd & 8 against Gun Ace, Gun Doubles and
+// Out of 100, for the defense picks' two numbers: the calls rank by the first less the second, unrounded, and to the
+// nearest 1 in 10 a pick could read worse than the one under it on both (on 3rd & 8 against Gun Ace, Gun Doubles and
 // the Pistol it did: a first pick giving up 15 yards or more about 6 times in 100 read "about 1 in 10", as did the ones
 // under it giving up 9 and 13).
 // (A number keeps its "in 100" on its line, with no-break spaces: on a phone the line wraps, and "100" alone on the
@@ -197,6 +197,18 @@ const times = p => (p >= 0.95 ? 'nearly every time' : p < 0.05 ? 'almost never' 
 const hundredths = p => Math.min(99, Math.max(1, Math.round(p * 100)));
 const times100 = p => (p >= 0.995 ? 'nearly every time' : p < 0.005 ? 'almost never' : `about ${hundredths(p)}\u00a0time${hundredths(p) === 1 ? '' : 's'}\u00a0in\u00a0100`);
 const share100 = p => (p < 0.005 ? 'almost never' : `about ${hundredths(p)}\u00a0in\u00a0100`);
+// The three defense picks go in the order of the two numbers the card gives for them, out of 100 (how often each holds
+// his plays short, less how often one goes 15 yards or more against it), and where those come out the same, as they
+// rank before rounding. In the order they rank before rounding alone, a pick could read better than the one above it by
+// a point: with version 5's numbers, on 3rd & 2 against Gun Ace, Nickel in Cover 3 with a blitz (42.1 in 100 held
+// short, 11.4 long) read "about 42 times in 100; 15 yards or more about 11 in 100" under the 4-3 Over in Cover 1
+// rushing four's 41 and 11 (41.4 and 10.6), which ranks a quarter of a point ahead of it before rounding.
+// (Math.round(p * 100) is the number the card gives: "nearly every time" from 99.5 in 100 is 100, and "almost never"
+// under a half is 0.)
+export const byTheNumbers = (a, b) => {
+  const shown = x => Math.round(x.rate * 100) - Math.round(x.long * 100);
+  return shown(b) - shown(a) || b.score - a.score;
+};
 const COVER_WORDS = {
   c0: 'man-to-man, nobody deep', c1: 'man-to-man, one safety deep', c2: 'two deep halves, the corners in the flats',
   c3: 'three deep thirds', c4: 'four deep quarters',
@@ -405,6 +417,7 @@ function defenseRead(v) {
   // aren't one call from three fronts.
   const picks = [];
   for (const x of rankDefenses(fm.id, sit)) if (picks.length < 3 && !picks.some(y => y.code.split('.').slice(1, 3).join() === x.code.split('.').slice(1, 3).join())) picks.push(x);
+  picks.sort(byTheNumbers);
   const leans = !run ? 'a formation that can only throw' : tenths(run) > 5 ? 'a formation that leans run' : tenths(run) < 5 ? 'a formation that leans pass' : 'a formation that runs about half the time';
   read.picks = picks.map(({ call, code, rate: r, long }) => {
     const [front, coverage, pressure] = code.split('.'), L = unkey(TABLE.looks[fm.id][call]), zero = coverage === 'c0';

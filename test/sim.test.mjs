@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { simulate, prepare, name, hotRoutes, cantCall, blitzerFor, SIM_VERSION } from '../js/sim.js';
 import { FORMATIONS, PLAYS, FRONTS, COVERAGES, NOTES, ROUTES, SIDELINE, DRILLS, HOT, BLITZERS, SITUATIONS, needed } from '../js/playbook.js';
 import { rng } from '../js/rng.js';
-import { coachRead, lookOf, lookAlikes, rankPlays, rankDefenses, rate, lean, playMix, motionShare } from '../js/read.js';
+import { coachRead, lookOf, lookAlikes, rankPlays, rankDefenses, byTheNumbers, rate, lean, playMix, motionShare } from '../js/read.js';
 import { TABLE } from '../js/read-table.js';
 
 const KINDS = new Set(['run', 'catch', 'incomplete', 'int', 'sack', 'throwaway']);
@@ -2231,13 +2231,14 @@ test('the coach\'s read picks by the numbers: the top pick does at least as well
       if (group.length === 1) assert.equal(R.picks[0].rate, Math.max(...TABLE.plays[fm.id].map(id => rate(fm.id, id, group[0].call, sit))));
     }
     // Calling the defense: the best call, then the best of each other coverage and rush, so the three aren't one call
-    // from three fronts.
+    // from three fronts, in the order of the numbers the card gives for them.
     const D = coachRead({ side: 'D', formation: fm.id, flip: false, sit: sit.id, call: {} }), all = rankDefenses(fm.id, sit);
     for (let n = 1; n < all.length; n++) assert.ok(all[n - 1].score >= all[n].score);
     const kind = code => code.split('.').slice(1, 3).join(), best = [];
     for (const x of all) if (best.length < 3 && !best.some(y => kind(y.code) === kind(x.code))) best.push(x);
+    best.sort(byTheNumbers);
     assert.deepEqual(D.picks.map(p => `${p.set.front}.${p.set.coverage}.${p.set.pressure}.M.0`), best.map(x => x.code));
-    assert.equal(D.picks[0].rate, all[0].rate);
+    assert.equal(D.picks[0].rate, best[0].rate);
   }
 });
 
@@ -2279,10 +2280,11 @@ test('calling the defense, the read counts the long plays a call gives up agains
 
 test('calling the defense, no pick reads better than the one above it', () => {
   // A defense pick gives two numbers, how often it holds his plays short and how often he goes 15 yards or more against
-  // it, and the picks are in order of the first less the second, before rounding. Each to the nearest 1 in 10, on 3rd &
-  // 8 against Gun Ace the first pick, the 4-3 Over in Cover 4 rushing four, read "about 7 times in 10; 15 yards or more
+  // it, and the calls rank by the first less the second, before rounding. Each to the nearest 1 in 10, on 3rd & 8
+  // against Gun Ace the first pick, the 4-3 Over in Cover 4 rushing four, read "about 7 times in 10; 15 yards or more
   // about 1 in 10" and both under it "about 8 times in 10; 15 yards or more about 1 in 10": it's first for giving up far
-  // fewer long plays, about 6 in 100 against 9 and 13. So did Gun Doubles' and the Pistol's. Out of 100, none does.
+  // fewer long plays, about 6 in 100 against 9 and 13. So did Gun Doubles' and the Pistol's. Out of 100, none does,
+  // since the three go in the order of the numbers as the card gives them (see the next check).
   // (read as so many in 100, whether it says in 10 or in 100)
   const nums = t => {
     const m = t.match(/^(?:about (\d+)\stimes?\sin\s(10|100)|(nearly every time)|almost never); 15 yards or more (?:about (\d+)\sin\s(10|100)|almost never)$/);
@@ -2299,4 +2301,20 @@ test('calling the defense, no pick reads better than the one above it', () => {
     }
   }
   assert.ok(pairs >= 60, `${pairs} picks under another`);
+});
+
+test('calling the defense, the three picks go in the order of the numbers the card gives for them', () => {
+  // The calls rank by how often each holds his plays short less how often one goes 15 yards or more against it, before
+  // rounding, and the card gives both numbers out of 100. With version 5's numbers, on 3rd & 2 against Gun Ace, the 4-3
+  // Over in Cover 1 rushing four (41.4 in 100 held short, 10.6 long) ranks a quarter of a point ahead of Nickel in Cover
+  // 3 with a blitz (42.1 and 11.4), but on the card they read 41 and 11 above 42 and 11: the second looks better on
+  // both. The three picks go in the order of the numbers as given, and as they rank before rounding where those come
+  // out the same (byTheNumbers() in js/read.js).
+  const over = { code: 'over.c1.four.M.0', rate: 0.4144, long: 0.1055, score: 0.4144 - 0.1055 };
+  const nickel = { code: 'nickel.c3.blitz.M.0', rate: 0.4208, long: 0.1144, score: 0.4208 - 0.1144 };
+  assert.ok(over.score > nickel.score);
+  assert.deepEqual([over, nickel].sort(byTheNumbers).map(x => x.code), ['nickel.c3.blitz.M.0', 'over.c1.four.M.0'], '42 and 11 above 41 and 11');
+  // the same numbers on the card: as they rank before rounding
+  const under = { code: 'under.c3.four.M.0', rate: 0.4126, long: 0.1068, score: 0.4126 - 0.1068 };
+  assert.deepEqual([under, over].sort(byTheNumbers).map(x => x.code), ['over.c1.four.M.0', 'under.c3.four.M.0'], '41 and 11 each: the one ahead before rounding first');
 });
