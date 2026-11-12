@@ -1710,9 +1710,10 @@ test('a deep ball is harder to catch the farther past 25 yards it goes, and a ca
 test('a ball caught 15 yards or more downfield has to be gathered before the receiver can run on', () => {
   // A receiver who caught it deep was off at once at his after-the-catch speed, and the man a step behind him, gaining
   // about a yard a second, took 15 to 20 yards to catch him: on the board's dropbacks a catch 15 to 19 yards out ran on
-  // @A yards and one 20 to 29 out @B (three seed sets of the matchup harness; NFL 2023 regular season away from the goal
-  // line: 4.5 and 6.1, from nflverse's play-by-play by air yards). Now for half a second after a catch 15 yards out he
-  // runs at 70% of his speed, the step a back loses breaking a tackle (GATHER, STUMBLE and STUMBLE_PACE in js/sim.js).
+  // 7.7 to 8.4 yards and one 20 to 29 out 10.5 to 11.3 (three seed sets of the matchup harness; NFL 2023 regular
+  // season away from the goal line: 4.5 and 6.1, from nflverse's play-by-play by air yards). Now for half a second after
+  // a catch 15 yards out he runs at 70% of his speed, the step a back loses breaking a tackle (GATHER, STUMBLE and
+  // STUMBLE_PACE in js/sim.js).
   // Every formation's pass plays against every front and coverage, two snaps each, as the ball's last spot in the air
   // puts the throw: from four start seeds (31, 1000, 5000, 77777) the catches 15 to 29 yards out gain 6.4-7.9 yards
   // after the catch (from 9.5-11.0). A catch shorter than 15 yards out plays as before.
@@ -1902,8 +1903,11 @@ test('the drills\' notes say what the board shows', () => {
   // Verticals 8.1-10.1 and the Play-Action Shot 8.5-9.4 (Smash 7.3-8.0), Flood first from two of the three. From 60 snaps
   // a play from each formation (start seed 31000000): against Cover 2, Four Verticals 14.2, Smash 12.3, the Play-Action
   // Shot 10.8, Mesh 10.7 (from 15.4, 13.2, 11.7 and 11.3); against Cover 3, Flood 9.3, Four Verticals 8.2, the
-  // Play-Action Shot 7.9, Smash 7.8 (from 9.3, 8.9, 8.3 and 8.0), so the note puts Flood first. Who succeeds is as
-  // before: a catch 15 yards out is already a success on any down.
+  // Play-Action Shot 7.9, Smash 7.8 (from 9.3, 8.9, 8.3 and 8.0). From 200 snaps a play from each formation, twice
+  // (start seeds 50000000 and 60000000), Cover 3 came out the Play-Action Shot 9.7, Four Verticals 9.6 and Flood 9.6,
+  // then Flood 9.2, Four Verticals 8.9 and the Play-Action Shot 8.8 (Smash 7.6 and 8.3), and from start seeds 123456
+  // and 999 Four Verticals was first: the note still has the three gaining about as many as each other. Who succeeds is
+  // as before: a catch 15 yards out is already a success on any down.
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1926,8 +1930,7 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(c2.slants.rate > 0.74 && c2.slants.rate < 0.9, `"about four times in five": ${say(c2, 'rate')}`);
   for (const id of ['stick', 'draw']) assert.ok(c2[id].rate > 0.64 && c2[id].rate < 0.84, `"about three times in four": ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
-  assert.deepEqual(top(c3, 'avg', 1), ['flood'], `Cover 3, yards a play, "Flood ... gains the most": ${say(c3, 'avg')}`);
-  assert.deepEqual(top(c3, 'avg', 3), ['flood', 'pa', 'verts'], `Cover 3, yards a play, "Behind it come Four Verticals ... and the Play-Action Shot": ${say(c3, 'avg')}`);
+  assert.deepEqual(top(c3, 'avg', 3), ['flood', 'pa', 'verts'], `Cover 3, yards a play, "Four Verticals, Flood and the Play-Action Shot ... about as many as each other": ${say(c3, 'avg')}`);
   assert.deepEqual(top(c3, 'rate', 1), ['slants'], `Cover 3, success: ${say(c3, 'rate')}`);
   assert.deepEqual(top(c3, 'rate', 4), ['draw', 'slants', 'smash', 'stick'], `Cover 3, success: ${say(c3, 'rate')}`);
   assert.ok(c3.slants.rate > 0.72 && c3.slants.rate < 0.88, `"about four times in five": ${say(c3, 'rate')}`);
