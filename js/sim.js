@@ -9,7 +9,7 @@ import { FORMATIONS, PLAYS, FRONTS, COVERAGES, ZONES, ROUTES, SIDELINE, HOT, BLI
 // whatever simulator the site has now, so one made with another version may not play out the way it did for whoever
 // sent it, and says so when it opens (see fromLink() in js/app.js). test/sim.test.mjs fails whenever snaps play out
 // differently, and says what to set this to.
-export const SIM_VERSION = 6;
+export const SIM_VERSION = 7;
 
 export const DT = 0.05;
 const MAX_T = 9;
@@ -934,6 +934,9 @@ function throwTo(S, r, P, tf, why, how = {}) {
   }
 }
 
+// How far downfield a catch has to be gathered before the receiver can run (see arrive()).
+const GATHER = 15;
+
 function arrive(S) {
   const b = S.ball, R = S.R;
   const r = b.target >= 0 ? S.P[b.target] : null;
@@ -969,6 +972,13 @@ function arrive(S) {
   S.caught = true;
   r.job = { kind: 'run' };
   S.catchY = r.y;
+  // A ball caught GATHER yards or more downfield has to be gathered first: for STUMBLE seconds he runs at STUMBLE_PACE
+  // of his speed, the step a back loses breaking a tackle (see carry()), and the man a step behind him can get back.
+  // Without it, on the board's dropbacks (three seed sets, by air yards), a catch 15 to 19 yards out ran on 7.7 to 8.4
+  // yards after the catch and one 20 to 29 out 10.5 to 11.3, and against Cover 0, with nobody deep, 13.7 to 14.6 and
+  // 15.2 to 20.0; now 5.5 to 6.2 and 7.1 to 8.6, and 9.5 to 10.3 and 10.1 to 17.7 against Cover 0. NFL receivers ran on
+  // 4.5 and 6.1 (2023 regular season, outside the opponent's 20; nflverse play-by-play, by air yards).
+  if (r.y >= GATHER) r.stumble = S.t + STUMBLE;
   ev(S, 'catch', `Caught by ${name(S, r)} ${yardText(r.y)}${nd < 1.6 ? ', with ' + name(S, near) + ' right there' : ''}.`, { who: r.i });
   for (const pl of S.O) if (pl !== r && pl.job.kind === 'route') pl.job = { kind: 'convoy' };
 }
@@ -2070,7 +2080,8 @@ const RUNDOWN = 3;
 // was back to full speed a tenth of a second later, and with the men chasing him no faster than he is, a back who got
 // past the one deep safety in Cover 1 or Cover 3 nearly always went a long way: a run that got 10 yards went on 16 more
 // on average against Cover 1 and 12 against Cover 3, and one in six against Cover 1 reached 60 (NFL 2023 designed runs:
-// 6.8, and one in 80; nflverse play-by-play).
+// 6.8, and one in 80; nflverse play-by-play). A receiver who catches it 15 yards out loses the same step gathering the
+// ball (see arrive()).
 const STUMBLE = 0.5, STUMBLE_PACE = 0.7;
 
 function contact(S) {

@@ -661,7 +661,7 @@ for (const side of ['O', 'D']) {
   assert.equal(bad.stick, 'This time: the strong safety left the stick to go with the running back to the flat, so he threw to the Y on the stick route, and it went for 11 yards.');
   assert.deepEqual(bad.sight, [
     'This time: with seven rushing against seven blockers, he threw at once to the tight end (Y) on the flat route, the shortest he had, and it went for 9 yards.',
-    'This time: with seven rushing against seven blockers, he looked first to the tight end (Y) on the flat route, the shortest he had; he was covered, so he threw to the Z on the post route, and it went for 42 yards.',
+    'This time: with seven rushing against seven blockers, he looked first to the tight end (Y) on the flat route, the shortest he had; he was covered, so he threw to the Z on the post route, and it went for 30 yards.',
   ]);
   assert.equal(bad.rush, 'Rush: 5 rushers against 7 in protection (5 linemen and 2 backs), and 2 more came once the men they were covering stayed in to block.');
   assert.ok(['catch', 'incomplete', 'run', 'sack'].every(k => bad.seen.includes(k)), `only these kinds of ending came up: ${bad.seen}`);
@@ -1785,7 +1785,7 @@ for (const colorScheme of ['light', 'dark']) {
     const at = t => { board.t = t; return marker(); };
     const show = (off, def, seed) => { state.auto = false; Object.assign(state, { off, def, seed }); lineUp(); return state.play; };
     const out = { kinds: {}, bad: [] };
-    // a catch for 30 yards: nothing written before the whistle, "+30" at it, in big writing
+    // a catch for 28 yards: nothing written before the whistle, "+28" at it, in big writing
     let P = show({ formation: 'trips', play: 'smash', flip: false }, { front: 'nickel', coverage: 'c2', pressure: 'four' }, 76);
     out.before = at(P.result.t - 0.1);
     out.after = at(board.duration());
@@ -1834,9 +1834,9 @@ for (const colorScheme of ['light', 'dark']) {
     return out;
   });
   assert.deepEqual(seen.before, [], 'something is written at the spot before the whistle');
-  assert.equal(seen.head, 'Gain of 30 yards and a first down');
+  assert.equal(seen.head, 'Gain of 28 yards and a first down');
   assert.equal(seen.after.length, 1);
-  assert.equal(seen.after[0].t, '+30');
+  assert.equal(seen.after[0].t, '+28');
   assert.ok(seen.after[0].size >= 18 * 1.4 - 0.01, `a big play's writing is ${seen.after[0].size} px`);
   assert.equal(seen.throwBefore, 0, 'a throw line before the throw');
   assert.deepEqual(seen.throwAfter, seen.throwWant, 'the throw line isn\'t from his hand to the catch');

@@ -122,7 +122,7 @@ test('the same seed replays the same play', () => {
 // board changed.
 // (Changing which snaps howItPlays() runs changes the print but not the simulator: then replace the current version's
 // print, and leave SIM_VERSION as it is.)
-const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '71169ce2d59f', 6: '3726e81fec84' };
+const PRINTS = { 1: 'eecb1df0fce4', 2: 'dae7b7cbcb44', 3: 'eef3338297b6', 4: '58b13bd04745', 5: '71169ce2d59f', 6: '3726e81fec84', 7: '6317b76e5db7' };
 function howItPlays() {
   const all = createHash('sha256');
   let seed = 0;
@@ -1670,7 +1670,8 @@ test('a deep catch is run down from behind: no long run after every catch 15 yar
   // downfield gain 5.9-8.1 yards after the catch on average; before the men chasing a deep catch got him more often,
   // 10.2-14.6. (NFL 2023 regular season: 5.2, from nflverse play-by-play.) Since the pass spread (version 5), 8.8-10.4;
   // and since a deep ball past 25 yards is harder to catch and a catch 5 yards out is run down from behind as well
-  // (version 6), 8.3-10.1, with 245-278 such catches, from 259-297: fewer deep balls are caught.
+  // (version 6), 8.3-10.1, with 245-278 such catches, from 259-297: fewer deep balls are caught. Since a ball caught 15
+  // yards out has to be gathered before he can run on (version 7), 5.7-7.3, from the same catches.
   let seed = 31, n = 0, yac = 0;
   for (const fm of FORMATIONS) for (const play of ['verts', 'smash', 'mesh', 'pa']) for (const fr of FRONTS) for (const cv of COVERAGES) for (const pressure of ['four', 'blitz']) {
     if (cantCall(fm.id, play)) continue;
@@ -1704,6 +1705,38 @@ test('a deep ball is harder to catch the farther past 25 yards it goes, and a ca
   assert.ok(deep > 80 && mid > 200, `${deep} throws 30 yards or more in the air, ${mid} catches 5 to 14 yards out`);
   assert.ok(caught / deep < 0.35, `${caught} of ${deep} throws 30 yards or more in the air caught`);
   assert.ok(after / mid < 5.3, `catches 5 to 14 yards out gain ${(after / mid).toFixed(1)} yards after the catch on average`);
+});
+
+test('a ball caught 15 yards or more downfield has to be gathered before the receiver can run on', () => {
+  // A receiver who caught it deep was off at once at his after-the-catch speed, and the man a step behind him, gaining
+  // about a yard a second, took 15 to 20 yards to catch him: on the board's dropbacks a catch 15 to 19 yards out ran on
+  // @A yards and one 20 to 29 out @B (three seed sets of the matchup harness; NFL 2023 regular season away from the goal
+  // line: 4.5 and 6.1, from nflverse's play-by-play by air yards). Now for half a second after a catch 15 yards out he
+  // runs at 70% of his speed, the step a back loses breaking a tackle (GATHER, STUMBLE and STUMBLE_PACE in js/sim.js).
+  // Every formation's pass plays against every front and coverage, two snaps each, as the ball's last spot in the air
+  // puts the throw: from four start seeds (31, 1000, 5000, 77777) the catches 15 to 29 yards out gain 6.4-7.9 yards
+  // after the catch (from 9.5-11.0). A catch shorter than 15 yards out plays as before.
+  let seed = 31, deep = 0, after = 0, gathered = 0, short = 0, quick = 0;
+  for (const fm of FORMATIONS) for (const pl of PLAYS.filter(p => p.type === 'pass')) for (const fr of FRONTS) for (const cv of COVERAGES) for (let k = 0; k < 2; k++) {
+    if (cantCall(fm.id, pl.id)) continue;
+    const call = { formation: fm.id, play: pl.id, front: fr.id, coverage: cv.id, pressure: cv.id === 'c0' || k % 2 ? 'blitz' : 'four', flip: k % 2 === 1 };
+    const r = simulate(call, seed++);
+    if (r.result.kind !== 'catch') continue;
+    const air = r.frames[r.frames.findLastIndex(f => f.air)].ball[1];
+    if (air >= 15 && air < 30) { deep++; after += r.result.yards - air; }
+    // His speed from a fifth of a second after the catch to nearly half a second, when nobody has tried to tackle him
+    // in the first half second, against his best: under 70% of it after a catch 15 yards out (a yard and a half and more,
+    // to be clear of the line), and mostly over it after a shorter one.
+    const c = r.result.carrier, ce = r.events.find(e => e.kind === 'catch'), at = t => r.frames.find(f => f.t >= t - 1e-6);
+    if (ce.t + 0.5 > r.result.t || r.events.some(e => e.kind === 'miss' && e.t < ce.t + 0.5)) continue;
+    const y = caughtAt(r), a = at(ce.t + 0.2), b = at(ce.t + 0.45), top = prepare(call, seed - 1).P[c].top;
+    const speed = Math.hypot(b.xy[2 * c] - a.xy[2 * c], b.xy[2 * c + 1] - a.xy[2 * c + 1]) / (b.t - a.t);
+    if (y >= 15.5) { gathered++; assert.ok(speed < 0.7 * top, `seed ${seed - 1}: caught ${y.toFixed(1)} yards out, he runs ${speed.toFixed(1)} yards a second right after, his best ${top.toFixed(1)}`); }
+    else if (y >= 5 && y < 14.5) { short++; if (speed > 0.7 * top) quick++; }
+  }
+  assert.ok(deep > 150 && gathered > 40 && short > 80, `${deep} catches 15 to 29 yards out, ${gathered} deep catches clear of a tackle, ${short} shorter ones`);
+  assert.ok(after / deep < 8.7, `catches 15 to 29 yards out gain ${(after / deep).toFixed(1)} yards after the catch on average`);
+  assert.ok(quick / short > 0.5, `after a catch 5 to 14 yards out, ${quick} of ${short} run on at more than 70% of their speed`);
 });
 
 test('one run against one defense comes out differently from snap to snap', () => {
@@ -1863,6 +1896,14 @@ test('the drills\' notes say what the board shows', () => {
   // 11.6-13.6 and the Play-Action Shot 11.3-12.4 (Mesh 9.9-11.2); against Cover 3, Four Verticals 8.6-11.3, Flood
   // 9.4-10.5 and the Play-Action Shot 8.8-9.9, each of them first from one seed (Smash 7.5-8.3). Who succeeds most often
   // is as before.
+  // Since a ball caught 15 yards out has to be gathered before he can run on (version 7), from the three start seeds:
+  // against Cover 2, Four Verticals 13.4-13.7 yards a play, then Smash 10.4-12.8 and the Play-Action Shot 10.5-11.6
+  // (Mesh 9.4-10.6, a tenth or two ahead of both from start seed 7777777); against Cover 3, Flood 9.2-10.5, Four
+  // Verticals 8.1-10.1 and the Play-Action Shot 8.5-9.4 (Smash 7.3-8.0), Flood first from two of the three. From 60 snaps
+  // a play from each formation (start seed 31000000): against Cover 2, Four Verticals 14.2, Smash 12.3, the Play-Action
+  // Shot 10.8, Mesh 10.7 (from 15.4, 13.2, 11.7 and 11.3); against Cover 3, Flood 9.3, Four Verticals 8.2, the
+  // Play-Action Shot 7.9, Smash 7.8 (from 9.3, 8.9, 8.3 and 8.0), so the note puts Flood first. Who succeeds is as
+  // before: a catch 15 yards out is already a success on any down.
   let seed = 11;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const front = fm => (['10', '11'].includes(fm.personnel) ? 'nickel' : 'over');
@@ -1885,7 +1926,8 @@ test('the drills\' notes say what the board shows', () => {
   assert.ok(c2.slants.rate > 0.74 && c2.slants.rate < 0.9, `"about four times in five": ${say(c2, 'rate')}`);
   for (const id of ['stick', 'draw']) assert.ok(c2[id].rate > 0.64 && c2[id].rate < 0.84, `"about three times in four": ${say(c2, 'rate')}`);
   const c3 = by(drill('c3').coverage, drill('c3').pressure);
-  assert.deepEqual(top(c3, 'avg', 3), ['flood', 'pa', 'verts'], `Cover 3, yards a play, "Four Verticals, Flood and the Play-Action Shot ... about as many as each other": ${say(c3, 'avg')}`);
+  assert.deepEqual(top(c3, 'avg', 1), ['flood'], `Cover 3, yards a play, "Flood ... gains the most": ${say(c3, 'avg')}`);
+  assert.deepEqual(top(c3, 'avg', 3), ['flood', 'pa', 'verts'], `Cover 3, yards a play, "Behind it come Four Verticals ... and the Play-Action Shot": ${say(c3, 'avg')}`);
   assert.deepEqual(top(c3, 'rate', 1), ['slants'], `Cover 3, success: ${say(c3, 'rate')}`);
   assert.deepEqual(top(c3, 'rate', 4), ['draw', 'slants', 'smash', 'stick'], `Cover 3, success: ${say(c3, 'rate')}`);
   assert.ok(c3.slants.rate > 0.72 && c3.slants.rate < 0.88, `"about four times in five": ${say(c3, 'rate')}`);
@@ -2064,7 +2106,8 @@ test('over many snaps the numbers look like football', () => {
   // bound, so the bound is 69% (Mark's call, 2026-11-10).
   // Since a deep ball past 25 yards is harder to catch (version 6), the twelve give 62.8-69.4% complete (mean 66.6%, from
   // 67.8%; two at 69% or more, from four), and the rest as before (3.85-4.79 yards a carry, sacks on 2.8-4.8% of
-  // dropbacks, interceptions on 1.1-2.0% of throws); this one 65.8% (from 67.2%).
+  // dropbacks, interceptions on 1.1-2.0% of throws); this one 65.8% (from 67.2%). Since a ball caught 15 yards out has to
+  // be gathered first (version 7), all as before: it comes after the catch, and on no run.
   let seed = 77;
   const pick = list => list[(seed = (seed * 16807) % 2147483647) % list.length];
   const run = { n: 0, y: 0 }, pass = { n: 0, att: 0, comp: 0, sack: 0, int: 0 };
@@ -2101,8 +2144,10 @@ test('the README\'s matchups', () => {
   // 25 yards harder to catch and catches 5 yards out run down from behind (version 6), Four Verticals 14.0-15.6 against
   // Cover 2 and 4.1-11.2 against Cover 3 and 4 (from 19.3-20.5 and 6.1-13.0), Smash 13.2-14.4 and 7.6-8.7, Flood
   // 10.2-10.8 against Cover 3 and 6.7-9.3 against Cover 1 and 2, the crossers 8.0-9.2 against Cover 1 and 5.7-5.9
-  // against Cover 3, and the runs as before, 54-60% and 24-28%. A change to the balance that undoes one of these has to
-  // change the README with it.
+  // against Cover 3, and the runs as before, 54-60% and 24-28%. Since a ball caught 15 yards out has to be gathered
+  // first (version 7), Four Verticals 13.1-14.6 against Cover 2 and 3.8-10.4 against Cover 3 and 4, Smash 12.0-13.0 and
+  // 7.5-8.4, Flood 10.2-10.8 against Cover 3 and 6.6-9.1 against Cover 1 and 2, and the crossers and the runs as before.
+  // A change to the balance that undoes one of these has to change the README with it.
   let seed = 2718;
   const won = r => (r.kind === 'run' || r.kind === 'catch') && Math.round(r.yards) >= 4;
   const cell = (play, coverage, each) => {

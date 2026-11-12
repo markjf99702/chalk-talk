@@ -1,4 +1,4 @@
-// Made by tools/read-table.mjs for the simulator's version 6, 240 snaps a cell (40 in each of
+// Made by tools/read-table.mjs for the simulator's version 7, 240 snaps a cell (40 in each of
 // 6 seed sets): how often each play from each formation is a success against each call the other coach can
 // make, for the coach's read (js/read.js). Don't edit it: run the tool again (test/sim.test.mjs says when).
 // calls: the other coach's calls on defense, front.coverage.pressure.blitzer.disguised. base: the ones a defense can
@@ -10,7 +10,7 @@
 // formation that has one. long: for each formation, its plays one after another, and for each play the base calls one
 // after another, two characters each: how often it went 15 yards or more, a run or a catch, on a short third or fourth
 // down (3rd & 2 and 4th & 1) and on any other. longMotion: the same with a man in motion.
-export const TABLE = {"sim":6,
+export const TABLE = {"sim":7,
   "snaps":240,
   "sets":[1000000,2000000,3000000,4000000,5000000,6000000],
   "alpha":"!#$%&()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~",
